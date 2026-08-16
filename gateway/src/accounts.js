@@ -1,0 +1,203 @@
+/**
+ * Who has an account here.
+ *
+ * An account is an email address that has proved it can receive mail, and
+ * nothing else — there are no passwords in this deployment. Registration and
+ * sign-in are the same act: whoever completes a code challenge for an address
+ * either gets the account that address already has, or gets one created for
+ * them, subject to whatever `invites.js` requires of a new one.
+ *
+ * Unlike everything else the gateway stores, an account has no expiry: it ends
+ * when an administrator ends it.
+ */
+
+import { randomUUID } from 'node:crypto'
+import process from 'node:process'
+
+/**
+ * Addresses that administer this deployment, named by the operator rather than
+ * assigned by registration order — "the first person to sign up is in charge"
+ * is a race the sign-up page cannot arbitrate.
+ *
+ * Held in the environment rather than the database because it is a property of
+ * the deployment: an operator with shell access can restore their own admission
+ * by editing it, where a flag in a table they have just locked themselves out of
+ * would need a manual `UPDATE` to fix.
+ */
+const ADMIN_EMAILS = new Set(
+  (process.env.GATEWAY_ADMINS ?? '')
+    .split(',')
+    .map((entry) => normalizeEmail(entry))
+    .filter((entry) => entry !== ''),
+)
+
+/**
+ * One account.
+ * @typedef {object} Account
+ * @property {string} email - the address, normalized; the identity everything else keys on.
+ * @property {string} id - a stable opaque id, so a tenant's durable state is not named by their address.
+ * @property {boolean} admin - whether this address administers the deployment.
+ * @property {boolean} disabled - whether an administrator has suspended it.
+ * @property {number} createdAt - epoch milliseconds of registration.
+ * @property {number} lastSeenAt - epoch milliseconds of the most recent sign-in.
+ */
+
+/**
+ * Whether an address administers this deployment.
+ *
+ * Also what exempts it from needing an invite. An operator naming themselves in
+ * `GATEWAY_ADMINS` has to be able to sign in before anything exists to mint a
+ * code with — otherwise the first administrator of a fresh deployment has to
+ * reach into the database to let themselves in.
+ *
+ * @param {string} email - the normalized address.
+ * @returns {boolean} whether it is an administrator's.
+ */
+export function isAdminEmail(email) {
+  return ADMIN_EMAILS.has(email)
+}
+
+/**
+ * Reduce an address to the form everything keys on.
+ *
+ * Case only: the local part of an address is case-sensitive by the letter of
+ * the spec, but no provider that matters treats it that way, and two accounts
+ * differing only in case would be two sandboxes for one person. Nothing else is
+ * stripped — dots and `+` tags are provider-specific, and collapsing them would
+ * merge addresses their owners consider distinct.
+ *
+ * @param {string} email - the address as typed.
+ * @returns {string} the normalized address.
+ */
+export function normalizeEmail(email) {
+  return email.trim().toLowerCase()
+}
+
+/**
+ * Whether a string is an address this deployment will mail a code to.
+ *
+ * Deliberately shallow. The only test that settles whether an address exists is
+ * whether the code arrives, which is the next step anyway; this rejects what is
+ * obviously not an address so the mail provider is not asked about it.
+ *
+ * @param {string} email - the normalized address.
+ * @returns {boolean} whether it is worth sending to.
+ */
+export function isEmailAddress(email) {
+  return /^[^\s@]+@[^\s@.]+\.[^\s@]+$/.test(email) && email.length <= 254
+}
+
+/**
+ * Turn one database row into an account.
+ * @param {object} row - the row as read.
+ * @returns {Account} the account.
+ */
+function toAccount(row) {
+  return {
+    email: row.email,
+    id: row.id,
+    // Derived on every read, so changing `GATEWAY_ADMINS` takes effect at once
+    // rather than only for accounts registered afterwards.
+    admin: ADMIN_EMAILS.has(row.email),
+    disabled: row.disabled,
+    createdAt: row.created_at.getTime(),
+    lastSeenAt: row.last_seen_at.getTime(),
+  }
+}
+
+export class Accounts {
+  /**
+   * @param {import('pg').Pool} pool - the connected database pool.
+   */
+  constructor(pool) {
+    this.pool = pool
+  }
+
+  /**
+   * Read one account.
+   * @param {string} email - the normalized address.
+   * @returns {Promise<Account | undefined>} the account, or undefined when the address has never registered.
+   */
+  async read(email) {
+    const { rows } = await this.pool.query('SELECT * FROM accounts WHERE email = $1', [email])
+    return rows.length === 0 ? undefined : toAccount(rows[0])
+  }
+
+  /**
+   * Return the account for an address, registering it if it has none.
+   *
+   * The caller must already have established that the address's owner is the one
+   * asking, and that a new account is allowed — this records a decision rather
+   * than making one.
+   *
+   * One statement rather than a read and a write: two requests for an
+   * unregistered address arrive together often enough — a double-submitted form
+   * is enough — and the second would otherwise find no account and insert a
+   * duplicate, which the unique index would refuse and the caller would see as a
+   * failed sign-in.
+   *
+   * @param {string} email - the normalized, verified address.
+   * @returns {Promise<Account>} the existing or newly created account.
+   */
+  async admit(email) {
+    const { rows } = await this.pool.query(
+      `INSERT INTO accounts (id, email) VALUES ($1, $2)
+       ON CONFLICT (email) DO UPDATE SET last_seen_at = now()
+       RETURNING *`,
+      [randomUUID(), email],
+    )
+    return toAccount(rows[0])
+  }
+
+  /**
+   * Whether an address has an account, without registering one.
+   * @param {string} email - the normalized address.
+   * @returns {Promise<boolean>} whether it is registered.
+   */
+  async exists(email) {
+    const { rowCount } = await this.pool.query('SELECT 1 FROM accounts WHERE email = $1', [email])
+    return rowCount > 0
+  }
+
+  /**
+   * Suspend or restore an account.
+   *
+   * A disabled account keeps its record and its durable state; it simply cannot
+   * sign in or hold a session. Restoring it gives everything back, which is what
+   * makes this the reversible half of the administrator's two options.
+   *
+   * @param {string} email - the normalized address.
+   * @param {boolean} disabled - whether to suspend it.
+   * @returns {Promise<Account | undefined>} the updated account, or undefined when there is none.
+   */
+  async setDisabled(email, disabled) {
+    const { rows } = await this.pool.query(
+      'UPDATE accounts SET disabled = $2 WHERE email = $1 RETURNING *',
+      [email, disabled],
+    )
+    return rows.length === 0 ? undefined : toAccount(rows[0])
+  }
+
+  /**
+   * Erase an account.
+   *
+   * Its refresh tokens go with it, by cascade rather than by a second call that
+   * could be interrupted. The caller is still responsible for its sandbox, which
+   * this store knows nothing about.
+   *
+   * @param {string} email - the normalized address.
+   * @returns {Promise<void>} resolves once the address is unregistered.
+   */
+  async erase(email) {
+    await this.pool.query('DELETE FROM accounts WHERE email = $1', [email])
+  }
+
+  /**
+   * Every account, newest registration first.
+   * @returns {Promise<Account[]>} the accounts.
+   */
+  async list() {
+    const { rows } = await this.pool.query('SELECT * FROM accounts ORDER BY created_at DESC')
+    return rows.map(toAccount)
+  }
+}

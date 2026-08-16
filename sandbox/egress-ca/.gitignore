@@ -1,0 +1,7 @@
+# CubeEgress terminates TLS to inject the model credential, so a sandbox has to
+# trust that installation's root. Every installation generates its own, so the
+# certificate is dropped in here by the operator and never committed:
+#
+#   docker cp cube-egress:/etc/cube/ca/cube-root-ca.crt sandbox/egress-ca/
+*.crt
+!.gitignore

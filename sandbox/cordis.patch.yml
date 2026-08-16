@@ -1,0 +1,46 @@
+# Patch layer for the sandbox composition.
+#
+# Applied over the web profile by the sandbox entrypoint. It exists to add what
+# this deployment needs and strip what a shared multi-tenant deployment must not
+# offer a tenant.
+
+# The tunnel that carries this sandbox's /api traffic to the gateway. It runs
+# inside dsh rather than beside it: as a plugin, `inject` states when the
+# surface it forwards to exists, where a separate process could only probe for
+# it — and dialled too early twice before that probe was right.
+#
+# Named rather than loaded by path, like every other entry here. A path-loaded
+# plugin mounts its host half and contributes no client half, because the
+# client-module registry resolves a plugin's package.json from the config tree's
+# baseUrl and scans only what it can resolve by name. This one contributes no
+# client half either way, but naming it keeps one rule for both of ours.
+#
+# `insert` rather than a bare entry: a patch layer targets existing ids, so a
+# new plugin has to be inserted explicitly.
+- insert:
+    - id: gateway-tunnel
+      name: dsh-gateway-tunnel
+
+# The deployment's sign-out control. dsh has no notion of the gateway's
+# sessions, so nothing in its own composition offers a way to end one.
+#
+# Installed into the profile's node_modules by the image build, because the
+# client-module registry resolves a plugin's package.json from the config
+# tree's baseUrl — the profile directory — and only scans packages it can
+# resolve by name. A path-loaded entry mounts its host half and contributes no
+# client half at all.
+- insert:
+    - id: gateway-logout
+      name: dsh-gateway-logout
+
+# The client hot-reload channel. Its SSE endpoint, /plugins/events, is the one
+# frontend path that is not a static artifact — the browser opens it and keeps
+# it open, expecting a live host to push rebuild notices.
+#
+# This deployment serves every client bundle from the web deployment, harvested
+# at build time, and nothing rebuilds them while a tenant is signed in. Leaving
+# the row on advertises a channel that no longer has a rebuilder behind it, and
+# routing it to a sandbox to satisfy the browser would put a frontend path back
+# on a per-tenant component — the one thing the split exists to prevent.
+- id: client-hmr
+  disabled: true

@@ -1,0 +1,15 @@
+{
+  "name": "dsh-gateway-tunnel",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Carries one sandbox's /api traffic to the gateway, as a plugin inside dsh rather than a process beside it.",
+  "exports": {
+    ".": "./index.js",
+    "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "dsh-tunnel-protocol": "file:../tunnel-protocol",
+    "ws": "^8.21.0"
+  }
+}

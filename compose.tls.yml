@@ -1,0 +1,42 @@
+# Overlay for a deployment reached by a real domain name:
+# `docker compose -f compose.yml -f compose.tls.yml up -d`.
+#
+# Without it the front door still serves TLS, with the self-signed certificate
+# the web container generates for itself. That is enough to make the page a
+# secure context — which is all the application needs — but every visitor meets
+# a browser warning. This overlay replaces it with a certificate a browser
+# trusts, and keeps it renewed.
+#
+# Issued over DNS-01, which proves control of the domain by writing a TXT record
+# rather than by answering on a port. That is the only challenge available here:
+# HTTP-01 needs port 80 and TLS-ALPN-01 needs port 443, and this deployment is
+# reached on neither. Ports do not otherwise matter — a certificate names a
+# host, so it is equally valid on 8443.
+
+services:
+  acme:
+    image: neilpang/acme.sh
+    # Foreground cron. acme.sh checks daily and renews when the certificate
+    # enters its renewal window, so nothing external has to schedule this.
+    command: daemon
+    environment:
+      # DNSPod hosts the domain. These are the API credentials acme.sh writes
+      # the challenge record with, and they are all it can do — the token is
+      # scoped to DNS.
+      DP_Id: ${DP_ID:?set to the DNSPod API token id}
+      DP_Key: ${DP_KEY:?set to the DNSPod API token secret}
+    volumes:
+      # Account key, certificates, and the renewal configuration — including the
+      # reload command installed alongside the certificate.
+      - acme-data:/acme.sh
+      # The same volume nginx reads its certificate from, so a renewal lands
+      # where the front door will pick it up.
+      - web-tls:/tls
+      # Only to signal nginx after a renewal. A certificate written but never
+      # reloaded is served as the expired one until something restarts the
+      # container.
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
+
+volumes:
+  acme-data:

@@ -1,0 +1,166 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "DshCloud Architecture",
+    "subtitle": "Authenticated multi-tenant DSH with outbound sandbox tunnels",
+    "output": "dshcloud-architecture.html",
+    "animation": "none",
+    "viewBox": [1160, 660]
+  },
+  "components": [
+    {
+      "id": "browser",
+      "type": "external",
+      "label": "Browser",
+      "sublabel": "tenant session",
+      "pos": [30, 252],
+      "size": [120, 64]
+    },
+    {
+      "id": "web",
+      "type": "frontend",
+      "label": "Web / nginx",
+      "sublabel": "frontend + plugins",
+      "pos": [220, 250],
+      "size": [150, 68]
+    },
+    {
+      "id": "gateway",
+      "type": "backend",
+      "label": "Gateway",
+      "sublabel": "auth + tenant routing",
+      "tag": "SESSION GATE",
+      "pos": [440, 250],
+      "size": [180, 68]
+    },
+    {
+      "id": "postgres",
+      "type": "database",
+      "label": "PostgreSQL",
+      "sublabel": "accounts + sessions",
+      "pos": [455, 430],
+      "size": [150, 64]
+    },
+    {
+      "id": "dsh",
+      "type": "backend",
+      "label": "DSH + Tunnel Plugin",
+      "sublabel": "127.0.0.1:3080",
+      "tag": "ONE / USER",
+      "pos": [770, 248],
+      "size": [190, 72]
+    },
+    {
+      "id": "volume",
+      "type": "database",
+      "label": "Tenant Volume",
+      "sublabel": "workspace + history",
+      "pos": [790, 430],
+      "size": [150, 64]
+    },
+    {
+      "id": "egress",
+      "type": "security",
+      "label": "CubeEgress",
+      "sublabel": "credential injection",
+      "tag": "CUBE MODE",
+      "pos": [770, 70],
+      "size": [190, 64]
+    },
+    {
+      "id": "model",
+      "type": "external",
+      "label": "Model API",
+      "sublabel": "provider endpoint",
+      "pos": [1010, 70],
+      "size": [120, 64]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "DshCloud control plane",
+      "wraps": ["web", "gateway", "postgres"]
+    },
+    {
+      "kind": "security-group",
+      "label": "Per-tenant sandbox",
+      "wraps": ["dsh", "volume"]
+    }
+  ],
+  "connections": [
+    {
+      "from": "browser",
+      "to": "web",
+      "label": "HTTPS",
+      "variant": "emphasis",
+      "route": "straight"
+    },
+    {
+      "from": "web",
+      "to": "gateway",
+      "label": "auth_request + /api",
+      "variant": "security",
+      "route": "straight",
+      "labelAt": [405, 332]
+    },
+    {
+      "from": "gateway",
+      "to": "dsh",
+      "label": "tenant /api",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "bottom",
+      "via": [[530, 360], [865, 360]],
+      "labelAt": [697, 378]
+    },
+    {
+      "from": "dsh",
+      "to": "gateway",
+      "label": "dial-out WebSocket",
+      "variant": "dashed",
+      "fromSide": "top",
+      "toSide": "top",
+      "via": [[865, 190], [530, 190]],
+      "labelAt": [697, 176]
+    },
+    {
+      "from": "gateway",
+      "to": "postgres",
+      "label": "accounts + sessions",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "straight",
+      "labelAt": [450, 396]
+    },
+    {
+      "from": "dsh",
+      "to": "volume",
+      "label": "workspace + history",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "straight",
+      "labelAt": [947, 396]
+    },
+    {
+      "from": "dsh",
+      "to": "egress",
+      "label": "placeholder key",
+      "variant": "security",
+      "fromSide": "top",
+      "toSide": "bottom",
+      "route": "straight",
+      "labelAt": [800, 160]
+    },
+    {
+      "from": "egress",
+      "to": "model",
+      "label": "inject key",
+      "variant": "security",
+      "route": "straight",
+      "labelAt": [985, 148]
+    }
+  ],
+  "cards": []
+}

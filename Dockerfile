@@ -1,0 +1,235 @@
+# syntax=docker/dockerfile:1
+#
+# The three images this deployment runs, from one context.
+#
+# DSH itself is installed from npm rather than built here. It is a dependency of
+# this project, not part of it: nothing in this repository patches the harness,
+# and what a tenant runs is the `dsh` the registry publishes. Upgrading is a
+# version bump plus the acceptance run.
+#
+# Stages:
+#   deps     one npm install, shared by everything below
+#   sandbox  one tenant's dsh, beside the tunnel plugin
+#   shell    boot the composition once and save what it serves
+#   web      nginx over the frontend build and that shell
+#   gateway  the authenticating front door; no harness code at all
+
+# ------------------------------------------------------------------- deps ----
+FROM node:24-slim AS deps
+
+ARG APT_MIRROR=
+RUN if [ -n "$APT_MIRROR" ]; then \
+      sed -i "s|deb.debian.org|$APT_MIRROR|g" /etc/apt/sources.list.d/debian.sources 2>/dev/null \
+      || sed -i "s|deb.debian.org|$APT_MIRROR|g" /etc/apt/sources.list; \
+    fi
+
+# node-pty ships no linux/arm64 prebuild and dsh's terminal sessions need it, so
+# the toolchain is here and stays out of the runtime images below.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends git ca-certificates python3 make g++ \
+  && rm -rf /var/lib/apt/lists/*
+
+# The harness version this deployment runs. A build argument rather than a
+# lockfile entry, so a deployment can move between published versions without
+# editing a file that also pins this project's own dependencies.
+ARG DSH_VERSION=0.1.0-rc.6
+
+# An npm registry to install from. Empty uses the public one; a deployment far
+# from it names a mirror rather than waiting out ~200 packages.
+ARG NPM_REGISTRY=
+RUN if [ -n "$NPM_REGISTRY" ]; then npm config set registry "$NPM_REGISTRY"; fi
+
+WORKDIR /app
+# `dsh-web-frontend` is named outright. cordis resolves plugins by package name
+# at load time, so which packages a composition needs is not derivable from the
+# dependency graph — and the frontend is not reachable from `dsh` through it.
+RUN npm install --omit=dev --no-audit --no-fund \
+      "@deepseek-ai/dsh@${DSH_VERSION}" \
+      "@deepseek-ai/dsh-web-frontend"
+
+
+# ---------------------------------------------------------------- sandbox ----
+FROM node:24-slim AS sandbox
+
+ARG APT_MIRROR=
+RUN if [ -n "$APT_MIRROR" ]; then \
+      sed -i "s|deb.debian.org|$APT_MIRROR|g" /etc/apt/sources.list.d/debian.sources 2>/dev/null \
+      || sed -i "s|deb.debian.org|$APT_MIRROR|g" /etc/apt/sources.list; \
+    fi
+
+# What a tenant's agent reaches for, and nothing that built the tree it runs.
+#
+# The base already has grep, sed, awk, find, xargs, diff, tar, and gzip, so what
+# is added is what an agent asks for and does not find: `rg` because it is the
+# search it actually reaches for, `jq` for JSON, `curl` for anything over the
+# network, `less` because git's pager is unusable without it, `patch` for
+# applying a diff, `make` because repositories are entered through it, and
+# `file`, `unzip`, `xz-utils` for reading what it downloads. Measured at 26 MB
+# together, against a template that a tenant waits on once per sandbox.
+#
+# Left out on the same test: `wget` (curl covers it), `tree` (find does),
+# `rsync` (nothing here copies between hosts), `openssh-client` (clones go over
+# https), a compiler (heavy, and node-pty arrives prebuilt from `deps`), and
+# editors or `htop` — an agent edits through its tools, not through a TUI.
+#
+# `tzdata` is here so the timezone below resolves to something on a slim base.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends \
+       git ca-certificates procps python3 tzdata \
+       curl jq ripgrep less patch make file unzip xz-utils \
+  && rm -rf /var/lib/apt/lists/*
+
+ENV NODE_ENV=production
+
+# The clock a tenant's agent reads. Containers default to UTC, so a sandbox
+# would date every file and every log an hour count away from the person using
+# it.
+ARG TZ=UTC
+ENV TZ=${TZ}
+RUN ln -snf "/usr/share/zoneinfo/$TZ" /etc/localtime && echo "$TZ" > /etc/timezone
+
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/package.json ./package.json
+COPY sandbox/entrypoint.sh sandbox/cordis.patch.yml ./sandbox/
+RUN chmod +x /app/sandbox/entrypoint.sh
+
+# The entry a tenant's backend runs: the same `lib/bin.js` the npm package ships
+# as `dsh`, named explicitly so the entrypoint does not depend on PATH.
+ENV DSH_BIN=/app/node_modules/@deepseek-ai/dsh/lib/bin.js
+
+# The tenant's workspace is also their home, so the in-app directory picker
+# opens on it rather than on an empty /root.
+ENV DSH_HOME=/root/.dsh
+ENV HOME=/workspace
+
+# The container is the sandbox. Asking a tenant to approve each file write and
+# each command would be guarding the inside of a box that exists to be written
+# in — and the approval prompt has nowhere to go in a headless container. The
+# boundary that matters is the container itself, plus the gateway in front of it.
+ENV DSH_PERMISSION_MODE=danger-full-access
+
+# The CubeEgress root, when the operator has dropped one in. It is what makes
+# credential injection possible: CubeEgress terminates TLS to rewrite the
+# `Authorization` header, so a sandbox that does not trust its root gets a
+# certificate error rather than a model answer. The directory always exists and
+# is usually empty, because every installation's root is its own.
+COPY sandbox/egress-ca/ /usr/local/share/ca-certificates/
+RUN find /usr/local/share/ca-certificates -type f ! -name '*.crt' -delete \
+    && update-ca-certificates
+
+# Node verifies against its own bundled roots and ignores the system store, so
+# installing the root above is not enough on its own — the harness is a Node
+# process.
+ENV NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt
+
+# Warm the web profile at build time; it otherwise initializes on first boot,
+# putting that work on the path of the tenant's first request. It also creates
+# the profile directory the two plugins below are installed into.
+RUN node "$DSH_BIN" web --dump-config > /dev/null 2>&1 || true
+
+# This project's own halves of the composition, installed into the profile
+# rather than into /app.
+#
+# That is where they have to be: the client-module registry resolves a plugin's
+# package.json from the config tree's baseUrl — this directory — and Node
+# resolves their own dependencies by walking up from here, which never reaches
+# /app/node_modules. Installed rather than copied in, so `ws` and the shared
+# frame protocol land beside them.
+#
+# `packages/` comes over whole: the tunnel plugin depends on the frame protocol
+# as `file:../tunnel-protocol`, which only resolves if its sibling arrives at
+# the same depth.
+COPY packages /src/packages
+# `--install-links` because the default for a local path is a symlink back to
+# it, and Node then resolves the plugin's own dependencies from where the link
+# points rather than from the profile — which left the frame protocol
+# unresolvable and the tunnel plugin dead on its first import. Copies put the
+# plugin and everything it needs under the profile, where the registry looks.
+RUN npm install --omit=dev --no-audit --no-fund --install-links \
+      --prefix /root/.dsh/profiles/web \
+      /src/packages/dsh-gateway-tunnel /src/packages/dsh-gateway-logout \
+  && rm -rf /root/.npm /src
+
+# Project the environment above into a file the entrypoint sources.
+#
+# Under CubeSandbox the backend is started through envd, and envd gives the
+# processes it starts a clean environment rather than the image's — so every
+# `ENV` above silently stopped reaching the backend when the start moved there.
+#
+# Written from the values rather than restated, so this cannot drift from the
+# `ENV` lines that remain the single home for them. It must stay the last thing
+# after them.
+RUN for name in DSH_BIN DSH_HOME HOME DSH_PERMISSION_MODE NODE_ENV NODE_EXTRA_CA_CERTS TZ; do \
+      printf 'export %s=%s\n' "$name" "$(printenv "$name")"; \
+    done > /app/sandbox/env.sh
+
+# envd is what makes this image usable as a CubeSandbox template: the only
+# endpoint CubeMaster and CubeProxy speak to inside a sandbox, and the one the
+# gateway starts this tenant's backend through.
+#
+# No CMD, deliberately. A CubeSandbox template is a *snapshot* of this image
+# running, restored for every tenant, so whatever a CMD started would be frozen
+# into it — started before any tenant exists, and identical in every sandbox
+# restored from it. `entrypoint.sh` needs an identity that only exists at
+# creation, so the gateway starts it through envd instead. The Docker simulation
+# has no envd and overrides both the entrypoint and the command.
+COPY --from=ghcr.io/tencentcloud/cubesandbox-base:2026.16 /usr/bin/envd /usr/bin/envd
+COPY --from=ghcr.io/tencentcloud/cubesandbox-base:2026.16 /usr/local/bin/cube-entrypoint.sh /usr/local/bin/cube-entrypoint.sh
+
+RUN mkdir -p /workspace
+WORKDIR /workspace
+EXPOSE 49983
+ENTRYPOINT ["/usr/local/bin/cube-entrypoint.sh"]
+
+# ------------------------------------------------------------------ shell ----
+# Boot the composition once and save what it serves: index.html carrying the
+# boot manifest, and every client bundle that manifest names.
+#
+# Derived from `sandbox`, and that is load-bearing. The composition adapts to
+# its environment — a host with a native directory dialog composes
+# `directory-picker-native` where a Linux container composes
+# `directory-picker-browse`, and the bundle revisions differ too. Harvesting
+# anywhere but the image the sandboxes run would ship a frontend whose plugin
+# set does not match the backend it talks to.
+FROM sandbox AS shell
+WORKDIR /app
+COPY web/harvest-shell.mjs sandbox/harvest.patch.yml ./web/
+RUN node web/harvest-shell.mjs /shell
+
+# -------------------------------------------------------------------- web ----
+# The whole frontend: hashed assets from the published build, plus the composed
+# shell. Nothing here is per-tenant, so the interface loads and renders whether
+# or not the caller's sandbox is running — only `/api` needs one.
+FROM nginx:alpine AS web
+# For the self-signed certificate the entrypoint generates when none is mounted.
+RUN apk add --no-cache openssl
+COPY --from=deps /app/node_modules/@deepseek-ai/dsh-web-frontend/dist /usr/share/nginx/html
+COPY --from=shell /shell /usr/share/nginx/html
+COPY web/nginx.conf /etc/nginx/conf.d/default.conf
+# Not under conf.d: everything matching conf.d/*.conf is included at the http
+# level, and this is a fragment of a server block.
+COPY web/site.inc /etc/nginx/site.inc
+COPY web/entrypoint.sh /docker-entrypoint-dsh.sh
+EXPOSE 80 443
+ENTRYPOINT ["/docker-entrypoint-dsh.sh"]
+
+# ---------------------------------------------------------------- gateway ----
+# Deliberately node:24-alpine and not the deps stage: the gateway authenticates
+# every tenant and holds the Docker socket, so it carries no harness code and
+# none of the build toolchain.
+FROM node:24-alpine AS gateway
+ARG NPM_REGISTRY=
+RUN if [ -n "$NPM_REGISTRY" ]; then npm config set registry "$NPM_REGISTRY"; fi
+ENV NODE_ENV=production
+WORKDIR /app
+# `/packages/tunnel-protocol`, because the gateway declares it as
+# `file:../packages/tunnel-protocol` relative to this WORKDIR. One copy of the
+# frame protocol, depended on by both ends rather than duplicated into each.
+COPY packages/tunnel-protocol /packages/tunnel-protocol
+COPY gateway/package.json ./
+RUN npm install --omit=dev --no-audit --no-fund && rm -rf /root/.npm
+COPY gateway ./gateway
+ENV PORT=8080
+EXPOSE 8080
+CMD ["node", "gateway/src/server.js"]

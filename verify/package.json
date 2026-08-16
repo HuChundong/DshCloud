@@ -1,0 +1,7 @@
+{
+  "name": "dsh-cloud-verify",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Where the browser suites install Playwright, inside the container that runs them."
+}

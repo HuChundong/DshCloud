@@ -1,0 +1,17 @@
+{
+  "name": "dsh-cloud",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Multi-tenant cloud deployment for DSH.",
+  "scripts": {
+    "lint": "oxlint",
+    "verify": "verify/verify.sh"
+  },
+  "devDependencies": {
+    "oxlint": "^1.42.0"
+  },
+  "engines": {
+    "node": "^22.19 || >=24"
+  }
+}

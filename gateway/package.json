@@ -1,0 +1,14 @@
+{
+  "name": "dsh-cloud-gateway",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The authenticating front door: sessions, accounts, and one sandbox per tenant.",
+  "main": "src/server.js",
+  "dependencies": {
+    "dsh-tunnel-protocol": "file:../packages/tunnel-protocol",
+    "jose": "^6.1.0",
+    "pg": "^8.16.0",
+    "ws": "^8.21.0"
+  }
+}

@@ -1,0 +1,30 @@
+# Patch layer for the build-time shell harvest.
+#
+# The sandbox composition minus its tunnel: the harvest has no gateway to dial
+# and no sandbox identity to present, and the tunnel plugin fails loud without
+# them. The tunnel contributes no client half, so leaving it out cannot change
+# the boot manifest this harvest exists to capture.
+
+# The deployment's sign-out control. dsh has no notion of the gateway's
+# sessions, so nothing in its own composition offers a way to end one.
+#
+# Installed into the profile's node_modules by the image build, because the
+# client-module registry resolves a plugin's package.json from the config
+# tree's baseUrl — the profile directory — and only scans packages it can
+# resolve by name. A path-loaded entry mounts its host half and contributes no
+# client half at all.
+- insert:
+    - id: gateway-logout
+      name: dsh-gateway-logout
+
+# The client hot-reload channel. Its SSE endpoint, /plugins/events, is the one
+# frontend path that is not a static artifact — the browser opens it and keeps
+# it open, expecting a live host to push rebuild notices.
+#
+# This deployment serves every client bundle from the web deployment, harvested
+# at build time, and nothing rebuilds them while a tenant is signed in. Leaving
+# the row on advertises a channel that no longer has a rebuilder behind it, and
+# routing it to a sandbox to satisfy the browser would put a frontend path back
+# on a per-tenant component — the one thing the split exists to prevent.
+- id: client-hmr
+  disabled: true

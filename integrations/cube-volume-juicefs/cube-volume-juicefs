@@ -1,0 +1,419 @@
+#!/usr/bin/env bash
+# cube-volume-juicefs — CubeSandbox VolumePlugin backed by JuiceFS over S3.
+#
+# Follows the shipped Tencent COS example's contract exactly — four hooks, one
+# subprocess per call, a single JSON line on stdout, a per-volume lock, and the
+# node-local refcount rules. What differs is what a volume *is*.
+#
+# Why JuiceFS and not an S3 mount
+# ------------------------------
+# The obvious implementation mounts each volume's prefix with s3fs or `rclone
+# mount`. Both were tried and both are unusable, for a reason that is not about
+# speed: they map filesystem calls onto object calls, and S3 has no hard link.
+# The harness replaces its session log atomically by linking a temporary file
+# over the real one, so every turn ended immediately with
+# `EIO: i/o error, link '…session.jsonl.zstd.tmp' -> '…session.jsonl.zstd'`
+# and no assistant message at all.
+#
+# JuiceFS is a filesystem that happens to keep its data in an object store: the
+# metadata lives in a transactional database, so links, atomic rename, and file
+# locks all mean what they mean. The object store holds blocks and never has to
+# answer a POSIX question it cannot.
+#
+# Why one mount and many binds
+# ---------------------------
+# Attach is on the path of a tenant's first request, and a sandbox restores from
+# a snapshot in under half a second — so anything that copies, downloads, or
+# starts a process there is the slowest thing in the system. An earlier version
+# fetched a disk image per attach and took eight seconds.
+#
+# So one JuiceFS client is mounted once per node and every volume is a bind
+# mount of one directory inside it. A bind mount is a syscall: attach costs
+# microseconds and no bytes move. A sandbox sees only its own directory.
+#
+# Config file beside this script (mode 600), or $CUBE_JUICEFS_CONFIG. `META` is
+# required; everything else has a default, and volume-juicefs.conf.example
+# documents each one:
+#   META=postgres://user:pass@127.0.0.1:5432/juicefs?sslmode=disable
+#   SHARED_MOUNT   VOLUME_CAPACITY_GB
+#   CACHE_DIR      CACHE_SIZE_MB       WRITEBACK
+#   BUFFER_SIZE_MB ATTR_CACHE ENTRY_CACHE DIR_ENTRY_CACHE OPEN_CACHE
+#   MOUNT_OPTS
+#
+# The deployment-wide ceiling is not here: it is the `--capacity` the filesystem
+# was formatted with, enforced by JuiceFS itself.
+#
+# What costs what
+# ---------------
+# Measured on one node, per small-file create, against a local disk at 0.06ms:
+#
+#   38ms  as shipped, everything default
+#   17ms  WRITEBACK=on — no longer waiting for an object upload on every close
+#    8ms  and `synchronous_commit=off` on the metadata database, which the
+#         install sets there because it belongs to the database, not to this
+#    3ms  and Redis as the metadata engine instead of Postgres
+#
+# Metadata reads are already cached: a repeated `stat` costs 0.007ms against
+# 1.0ms cold. The timeouts below extend that window; they do not create it.
+#
+# The engine is `META`, so Redis needs no change here — but it is a different
+# filesystem, reached by `juicefs dump` and `juicefs load`, not a setting.
+#
+# Overridable so the hooks can be exercised without root, which is otherwise
+# impossible for anything that writes under /run:
+#   CUBE_JUICEFS_CONFIG    config file      (default beside this script)
+#   CUBE_JUICEFS_LOCK_DIR  attach/detach locks (default /run/cube-volume-juicefs)
+#
+# Dependencies on every node: juicefs, jq. `install-deps.sh --check-only`
+# reports what is missing; the hooks check too, because a node that is missing
+# one fails at the moment a tenant needs it otherwise.
+#
+# Platforms: JuiceFS ships amd64 and arm64 builds, so an arm64 node is not the
+# dead end it is for the COS example, whose cosfs has no arm64 package.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG_FILE="${CUBE_JUICEFS_CONFIG:-${SCRIPT_DIR}/volume-juicefs.conf}"
+LOCK_DIR="${CUBE_JUICEFS_LOCK_DIR:-/run/cube-volume-juicefs}"
+
+# Where the one JuiceFS client is mounted, and how large each volume may grow.
+# The config file overrides these by assigning over them when it is sourced.
+SHARED_MOUNT="/data/cube-shared/juicefs"
+VOLUME_CAPACITY_GB="5"
+MOUNT_OPTS=""
+
+# The client's local read cache.
+#
+# Given a default rather than left to JuiceFS, whose own default is `$HOME` of
+# whoever mounted — root, here, because Cubelet runs the hook — with a 100 GiB
+# ceiling. That puts an unbounded-looking cache in root's home on whatever
+# filesystem `/` happens to be, which is not a place an operator chose.
+#
+# The size bounds the read cache only — writes staged by WRITEBACK share the
+# directory but are bounded by JuiceFS's own free-space floor, not by this.
+CACHE_DIR="/var/cache/cube-volume-juicefs"
+CACHE_SIZE_MB="4096"
+
+# Upload written blocks in the background instead of waiting for the object
+# store on every close.
+#
+# Off by default: it buys the largest single speed-up here — measured 38ms to
+# 17ms per small-file create — by acknowledging a write once it is staged on
+# local disk, so a node lost before its upload drains takes that data with it
+# while the metadata still lists the file. Worth turning on for a workspace,
+# not for something that must not lose a write.
+WRITEBACK="off"
+
+# Read/write buffering, and how long the kernel may trust cached metadata.
+#
+# Empty means "leave JuiceFS's own default". The metadata timeouts are safe to
+# raise where one directory has one writer — a tenant's volume is attached to
+# their single sandbox — and unsafe where two nodes write the same directory,
+# since a raised timeout is exactly how long a stale attribute survives.
+BUFFER_SIZE_MB=""
+ATTR_CACHE=""
+ENTRY_CACHE=""
+DIR_ENTRY_CACHE=""
+OPEN_CACHE=""
+
+# Cubelet passes --volume-base-dir on attach; this is the documented default.
+# A host_path outside it is rejected by Cubelet.
+VOLUME_BASE_DIR="/data/cube-shared/volume"
+
+log() { echo "[cube-volume-juicefs] $*" >&2; }
+
+# Quote one string as a JSON scalar, without jq.
+#
+# jq is a dependency this script checks for, so the one path that must not need
+# it is the path that reports it missing.
+json_string() {
+    local s="$1"
+    s="${s//\\/\\\\}"
+    s="${s//\"/\\\"}"
+    s="${s//$'\n'/ }"
+    s="${s//$'\r'/ }"
+    s="${s//$'\t'/ }"
+    printf '"%s"' "$s"
+}
+
+ok_json()  { printf '{"error":""}\n'; }
+err_json() { printf '{"error":%s}\n' "$(json_string "$1")"; }
+
+# Fail the hook the way the caller reads failure: one JSON line on stdout, the
+# detail on stderr, and a non-zero status. Reporting only on stderr leaves the
+# caller parsing an empty stdout, which it cannot distinguish from a crash.
+die() { log "ERROR: $*"; err_json "$*"; exit 1; }
+
+volume_mountpoint() { echo "${VOLUME_BASE_DIR%/}/jfs-$1"; }
+volume_dir()        { echo "${SHARED_MOUNT%/}/volumes/$1"; }
+volume_path()       { echo "/volumes/$1"; }
+
+# Named commands, checked before they are needed. A hook that discovers a
+# missing dependency mid-operation reports it as whatever failed next, which is
+# how a node with no `juicefs` reads as an unexplained EIO.
+require_commands() {
+    local missing=()
+    for cmd in juicefs jq; do
+        command -v "$cmd" > /dev/null 2>&1 || missing+=("$cmd")
+    done
+    [[ ${#missing[@]} -eq 0 ]] || die "missing on this node: ${missing[*]} (run install-deps.sh)"
+}
+
+load_config() {
+    require_commands
+    [[ -f "$CONFIG_FILE" ]] || die "config file not found: $CONFIG_FILE"
+    # shellcheck source=/dev/null
+    source "$CONFIG_FILE"
+    [[ -n "${META:-}" ]] || die "config: META is empty (the JuiceFS metadata URL)"
+    # Emptied rather than omitted. Both are paths this script builds others from,
+    # so an empty one would quietly relocate every volume to the filesystem root
+    # instead of failing.
+    [[ -n "$SHARED_MOUNT" ]] || die "config: SHARED_MOUNT is empty; omit it to take the default"
+    [[ -n "$VOLUME_CAPACITY_GB" ]] || die "config: VOLUME_CAPACITY_GB is empty; omit it to take the default"
+    [[ -n "$CACHE_DIR" ]] || die "config: CACHE_DIR is empty; omit it to take the default"
+    [[ "$CACHE_SIZE_MB" =~ ^[0-9]+$ ]] || die "config: CACHE_SIZE_MB must be a whole number of MiB, got ${CACHE_SIZE_MB}"
+    case "$WRITEBACK" in
+        on|off) ;;
+        *) die "config: WRITEBACK must be on or off, got ${WRITEBACK}" ;;
+    esac
+    # The cache is a local disk holding copies of what is already in the object
+    # store. Putting it inside the JuiceFS mount would have the client cache
+    # itself, and the volume tree is what tenants own.
+    case "${CACHE_DIR%/}/" in
+        "${SHARED_MOUNT%/}/"*) die "config: CACHE_DIR must not be inside SHARED_MOUNT" ;;
+    esac
+}
+
+# The tuning flags this node mounts with, as one array.
+#
+# A flag is passed only where the operator asked for it, so anything left unset
+# keeps whatever JuiceFS itself defaults to rather than this script's opinion of
+# it. `CACHE_DIR` and `CACHE_SIZE_MB` are the exception and always passed, for
+# the reason given where they are declared.
+mount_flags() {
+    MOUNT_FLAGS=(-o allow_other --cache-dir "$CACHE_DIR" --cache-size "$CACHE_SIZE_MB")
+    [[ "$WRITEBACK" == on ]] && MOUNT_FLAGS+=(--writeback)
+    [[ -n "$BUFFER_SIZE_MB" ]] && MOUNT_FLAGS+=(--buffer-size "$BUFFER_SIZE_MB")
+    [[ -n "$ATTR_CACHE" ]] && MOUNT_FLAGS+=(--attr-cache "$ATTR_CACHE")
+    [[ -n "$ENTRY_CACHE" ]] && MOUNT_FLAGS+=(--entry-cache "$ENTRY_CACHE")
+    [[ -n "$DIR_ENTRY_CACHE" ]] && MOUNT_FLAGS+=(--dir-entry-cache "$DIR_ENTRY_CACHE")
+    [[ -n "$OPEN_CACHE" ]] && MOUNT_FLAGS+=(--open-cache "$OPEN_CACHE")
+    return 0
+}
+
+# Mount the node's single JuiceFS client if it is not already up.
+#
+# Idempotent and locked, because two sandboxes starting together both reach
+# here. Everything else in this plugin assumes it has run.
+ensure_shared_mount() {
+    mkdir -p "$LOCK_DIR" "$SHARED_MOUNT" "$CACHE_DIR"
+    exec 201>"${LOCK_DIR}/shared.lock"
+    flock -x 201
+
+    # `mountpoint` is not enough. A JuiceFS client that has lost its metadata
+    # database keeps its mount in the table and answers EIO to every call, so
+    # the check has to be a read that would fail — and the repair has to be an
+    # unmount, since mounting over a dead mount does nothing.
+    if mountpoint -q "$SHARED_MOUNT" 2>/dev/null; then
+        if ls "$SHARED_MOUNT" > /dev/null 2>&1; then
+            flock -u 201
+            return 0
+        fi
+        log "the shared mount is unusable; replacing it"
+        umount -l "$SHARED_MOUNT" 2>/dev/null || true
+    fi
+
+    mount_flags
+    log "mounting the shared JuiceFS client at ${SHARED_MOUNT} (${MOUNT_FLAGS[*]})"
+    local out rc=0
+    set +e
+    # `-d` daemonises: the hook is one subprocess per call and must return.
+    # `allow_other` because the sandboxes that read this are not this process.
+    # `MOUNT_OPTS` stays the escape hatch for flags this config does not name —
+    # upload concurrency, prefetch, and the rest.
+    # shellcheck disable=SC2086
+    out="$(juicefs mount -d "${MOUNT_FLAGS[@]}" $MOUNT_OPTS "$META" "$SHARED_MOUNT" 2>&1)"
+    rc=$?
+    set -e
+
+    local waited=0
+    while [[ "$waited" -lt 100 ]] && ! mountpoint -q "$SHARED_MOUNT" 2>/dev/null; do
+        sleep 0.1
+        waited=$((waited + 1))
+    done
+
+    flock -u 201
+    if [[ "$rc" -ne 0 ]] || ! mountpoint -q "$SHARED_MOUNT" 2>/dev/null; then
+        log "ERROR: mounting JuiceFS failed: ${out}"
+        return 1
+    fi
+    log "shared mount ready"
+}
+
+volume_lock_acquire() {
+    mkdir -p "$LOCK_DIR"
+    exec 200>"${LOCK_DIR}/$1.lock"
+    flock -x 200
+}
+volume_lock_release() { flock -u 200; }
+
+# ---------------------------------------------------------------------------
+# CubeMaster hooks
+# ---------------------------------------------------------------------------
+
+# Input:  --volume-id <id> --name <name>
+# Output: {"token":"","private_data":"/volumes/<id>","error":""}
+do_create() {
+    local volume_id="$1" name="$2"
+    log "create volumeID=${volume_id} name=${name}"
+    load_config
+    ensure_shared_mount || { err_json "JuiceFS is not mounted on this node"; exit 1; }
+
+    mkdir -p "$(volume_dir "$volume_id")"
+
+    # A ceiling per volume, so one tenant cannot spend the whole filesystem.
+    # Advisory failures are logged rather than fatal: the directory exists and
+    # is usable, and a deployment-wide ceiling still applies.
+    local out rc=0
+    set +e
+    out="$(juicefs quota set "$META" --path "$(volume_path "$volume_id")" \
+        --capacity "$VOLUME_CAPACITY_GB" 2>&1)"
+    rc=$?
+    set -e
+    [[ "$rc" -ne 0 ]] && log "WARNING: setting the quota for ${volume_id} failed: ${out}"
+
+    jq -cn --arg pd "$(volume_path "$volume_id")" '{ token: "", private_data: $pd, error: "" }'
+}
+
+# Input:  --volume-id <id>
+# Output: {"error":""}
+do_destroy() {
+    local volume_id="$1"
+    log "destroy volumeID=${volume_id}"
+    load_config
+    ensure_shared_mount || { err_json "JuiceFS is not mounted on this node"; exit 1; }
+
+    juicefs quota delete "$META" --path "$(volume_path "$volume_id")" > /dev/null 2>&1 || true
+    rm -rf "$(volume_dir "$volume_id")"
+    ok_json
+}
+
+# ---------------------------------------------------------------------------
+# Cubelet hooks
+# ---------------------------------------------------------------------------
+
+# Input:  --sandbox-id --namespace --volume-id --ref-count --volume-base-dir [--private-data]
+# Output: {"host_path":"…","metadata":{…},"error":""}
+do_attach() {
+    local sandbox_id="$1" volume_id="$2" ref_count="$3" private_data="${4:-}"
+    log "attach sandbox=${sandbox_id} volumeID=${volume_id} refcount_before=${ref_count} private_data=${private_data}"
+    load_config
+    ensure_shared_mount || { err_json "JuiceFS is not mounted on this node"; exit 1; }
+
+    volume_lock_acquire "$volume_id"
+    trap 'volume_lock_release' EXIT
+
+    local mnt dir
+    mnt="$(volume_mountpoint "$volume_id")"
+    dir="$(volume_dir "$volume_id")"
+
+    # A bind made from a JuiceFS client that has since been replaced answers
+    # ENOTCONN to everything, and the sandbox handed one cannot even create its
+    # workspace. Left in place it is permanent: the mount table still lists it,
+    # so nothing here would ever rebuild it.
+    #
+    # Read from the mount table rather than asked of the path, because every
+    # question about the path itself is one of the calls that fails — including
+    # `mountpoint`, which reports such a bind as *not* mounted, and `mkdir -p`,
+    # which under `set -e` ended the hook before it could repair anything. So
+    # this runs before the `mkdir` below, and detects with a read the kernel
+    # answers from memory plus one call that would fail.
+    if grep -qF " ${mnt} " /proc/self/mounts && ! ls "$mnt" > /dev/null 2>&1; then
+        log "the bind for ${volume_id} is stale; replacing it"
+        umount -l "$mnt" 2>/dev/null || true
+    fi
+
+    # A volume created on another node exists in the shared filesystem but not
+    # necessarily as a directory this node has seen; making it is idempotent.
+    mkdir -p "$dir" "$mnt"
+
+    if ! mountpoint -q "$mnt" 2>/dev/null; then
+        local out rc=0
+        set +e
+        # The bind is the whole of attach: one syscall, no bytes moved. It is
+        # what keeps a sandbox's start time the platform's rather than this
+        # plugin's.
+        out="$(mount --bind "$dir" "$mnt" 2>&1)"
+        rc=$?
+        set -e
+        if [[ "$rc" -ne 0 ]] || ! mountpoint -q "$mnt" 2>/dev/null; then
+            log "ERROR: bind-mounting ${dir} failed: ${out}"
+            rmdir "$mnt" 2>/dev/null || true
+            err_json "bind mount failed for volume ${volume_id}"
+            exit 1
+        fi
+    fi
+
+    jq -cn --arg path "$mnt" --arg vid "$volume_id" \
+        '{ host_path: $path, metadata: { mount_dir: $path, volume_id: $vid }, error: "" }'
+}
+
+# Input:  --sandbox-id --namespace --volume-id --ref-count --metadata
+# Output: {"error":""}
+do_detach() {
+    local sandbox_id="$1" volume_id="$2" ref_count="$3" metadata_json="$4"
+    log "detach sandbox=${sandbox_id} volumeID=${volume_id} refcount_after=${ref_count}"
+
+    if [[ "$ref_count" -gt 0 ]]; then
+        log "still in use (refcount_after=${ref_count}); leaving mounted"
+        ok_json
+        return
+    fi
+
+    load_config
+    volume_lock_acquire "$volume_id"
+    trap 'volume_lock_release' EXIT
+
+    local mnt
+    mnt="$(printf '%s' "$metadata_json" | jq -r '.mount_dir // empty' 2>/dev/null)"
+    [[ -n "$mnt" ]] || mnt="$(volume_mountpoint "$volume_id")"
+
+    # Only the bind goes. The data is in the shared filesystem and stays there
+    # until the volume is destroyed — the tenant's files are not this node's.
+    if mountpoint -q "$mnt" 2>/dev/null; then
+        umount "$mnt" 2>/dev/null || umount -l "$mnt" 2>/dev/null || true
+    fi
+    [[ -d "$mnt" ]] && { rmdir "$mnt" 2>/dev/null || log "could not remove ${mnt}"; }
+
+    ok_json
+}
+
+OP="" VOLUME_ID="" NAME="" SANDBOX_ID="" REF_COUNT="0" METADATA="{}" PRIVATE_DATA=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --op)             OP="$2";           shift 2 ;;
+        --volume-id)      VOLUME_ID="$2";    shift 2 ;;
+        --name)           NAME="$2";         shift 2 ;;
+        --sandbox-id)     SANDBOX_ID="$2";   shift 2 ;;
+        # Accepted and discarded. `create` is not given a namespace, so a
+        # volume's storage cannot be scoped by one; CubeMaster allocates volume
+        # ids that are already unique across namespaces.
+        --namespace)      shift 2 ;;
+        --ref-count)      REF_COUNT="$2";    shift 2 ;;
+        --volume-base-dir) [[ -n "${2:-}" ]] && VOLUME_BASE_DIR="$2"; shift 2 ;;
+        --private-data)   PRIVATE_DATA="$2"; shift 2 ;;
+        --metadata)       METADATA="$2";     shift 2 ;;
+        *) die "unknown argument: $1" ;;
+    esac
+done
+
+[[ -n "$OP" ]] || die "--op is required"
+
+case "$OP" in
+    create)  do_create  "$VOLUME_ID" "$NAME" ;;
+    destroy) do_destroy "$VOLUME_ID" ;;
+    attach)  do_attach  "$SANDBOX_ID" "$VOLUME_ID" "$REF_COUNT" "$PRIVATE_DATA" ;;
+    detach)  do_detach  "$SANDBOX_ID" "$VOLUME_ID" "$REF_COUNT" "$METADATA" ;;
+    *)       err_json "unknown op: ${OP}"; exit 1 ;;
+esac

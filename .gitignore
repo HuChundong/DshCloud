@@ -1,0 +1,8 @@
+node_modules/
+# A deployment's filled-in copies, whatever suffix names the environment.
+# `.env.example` is the tracked template.
+.env
+.env.*
+!.env.example
+# Every installation of CubeEgress generates its own root; none is ours to ship.
+sandbox/egress-ca/*.crt

@@ -1,0 +1,41 @@
+# Overlay for a host running CubeSandbox: `docker compose -f compose.yml -f compose.cube.yml up -d`.
+#
+# Two pieces of wiring the Docker simulation never needed, because there the
+# sandbox and the gateway shared a compose network.
+#
+# A CubeSandbox sandbox is a machine on Cube's own network (10.100.0.0/18, with
+# the host at 10.100.0.1), so the gateway has to be reachable at a host address
+# for the tunnel to be dialled at all — hence a published port and a tunnel URL
+# that names the host rather than a compose service. And the gateway itself has
+# to reach Cube's API, which listens on the host, so it needs a route out of its
+# own container.
+
+services:
+  gateway:
+    # Reachable from Cube's sandbox network. Bound to all interfaces because
+    # 10.100.0.1 is one of them; the trust boundary is the token every dial-in
+    # presents, not the address it comes from.
+    ports:
+      - "${TUNNEL_PORT:-8090}:8080"
+    extra_hosts:
+      # The Cube API listens on the host; inside this container 127.0.0.1 is
+      # the container itself.
+      - "host.docker.internal:host-gateway"
+    environment:
+      SANDBOX_RUNTIME: cube
+      CUBE_API_URL: ${CUBE_API_URL:-http://host.docker.internal:3000}
+      CUBE_API_KEY: ${CUBE_API_KEY:-e2b_000000}
+      CUBE_TEMPLATE_ID: ${CUBE_TEMPLATE_ID:-dsh-sandbox}
+      # Starting a tenant's backend is a call *into* their sandbox, which is
+      # CubeProxy's job rather than the API's: it routes on a virtual
+      # `<port>-<sandboxID>.<domain>` hostname that is not in DNS here, so the
+      # node running it has to be named outright.
+      CUBE_PROXY_NODE_IP: ${CUBE_PROXY_NODE_IP:?set to the CubeProxy node address}
+      CUBE_PROXY_PORT_HTTP: ${CUBE_PROXY_PORT_HTTP:-30080}
+      GATEWAY_TUNNEL_URL: ${GATEWAY_TUNNEL_URL:-ws://10.100.0.1:8090/_tunnel}
+      # What a tenant keeps when their sandbox is reclaimed: one CubeSandbox
+      # volume each, created through Cube's API and attached by the `juicefs`
+      # driver in integrations/cube-volume-juicefs/. `off` makes sandboxes ephemeral.
+      SANDBOX_VOLUMES: ${SANDBOX_VOLUMES:-on}
+      SANDBOX_VOLUME_DRIVER: ${SANDBOX_VOLUME_DRIVER:-juicefs}
+      SANDBOX_VOLUME_MOUNT: ${SANDBOX_VOLUME_MOUNT:-/persist}

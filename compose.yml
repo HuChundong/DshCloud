@@ -1,0 +1,160 @@
+# Local multi-tenant deployment, built from this checkout.
+#
+# Every image is a target of Dockerfile with the repository root as its
+# build context, so the harness these containers run is the one in the working
+# tree rather than a published release.
+#
+# Only the gateway publishes a port. The web container is reached by proxy and
+# sandboxes are reached only by the tunnels they dial, so neither is addressable
+# from the host — the same reachability the real deployment will have.
+
+name: dsh-multitenant
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: web
+      args:
+        APT_MIRROR: ${APT_MIRROR:-}
+        NPM_REGISTRY: ${NPM_REGISTRY:-}
+        TZ: ${SANDBOX_TZ:-UTC}
+    image: dsh-web:latest
+    # The user-facing entry: static bytes are answered here from disk, and only
+    # the session-bearing surface is proxied to the gateway.
+    #
+    # Two ports for one site. Browsers must use the TLS one: the client plugins
+    # call `crypto.randomUUID`, which a page served over plain HTTP to anything
+    # but localhost does not have. The plain port stays for tooling that has no
+    # reason to care.
+    #
+    # `TLS_BIND` names the interface to publish on. It exists because a host
+    # already running something on the TLS port — CubeSandbox's own proxy binds
+    # 8443 on its sandbox network — leaves that port free on every other
+    # interface, and binding the one that is actually used is better than
+    # moving to a port nobody expects.
+    ports:
+      - "${GATEWAY_PORT:-8080}:80"
+      - "${TLS_BIND:-0.0.0.0}:${GATEWAY_TLS_PORT:-8443}:443"
+    environment:
+      # Every address this deployment is reached by. A browser rejects outright
+      # — with no warning to click through — a certificate that does not name
+      # the address in the URL bar.
+      TLS_SAN: ${TLS_SAN:-DNS:localhost,IP:127.0.0.1}
+    volumes:
+      # Keeps the generated certificate across a recreate, so returning
+      # browsers do not meet a new one every time. Mount a real certificate
+      # here to replace it.
+      - web-tls:/etc/nginx/tls
+    depends_on: [gateway]
+    networks: [dsh-net]
+    restart: unless-stopped
+
+  # The deployment's one store: accounts, invites, refresh tokens, and the
+  # sign-in codes that are outstanding right now. The gateway keeps no disk state
+  # of its own, and none of this may be lost — losing an account is losing a
+  # tenant's workspace with it, since the workspace is named by the account's id.
+  postgres:
+    image: ${POSTGRES_IMAGE:-postgres:16-alpine}
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-dsh}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set a database password}
+      POSTGRES_DB: ${POSTGRES_DB:-dsh}
+    # Published on loopback only. The JuiceFS clients that hold tenant volumes
+    # run on the host rather than in this network, and their metadata is here —
+    # a filesystem whose metadata it cannot reach answers EIO to everything.
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    # The gateway applies its schema on boot and fails if it cannot, so waiting
+    # for the database to accept connections turns a restart race into a slower
+    # start rather than a crash loop.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dsh} -d ${POSTGRES_DB:-dsh}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [dsh-net]
+    restart: unless-stopped
+
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: gateway
+      args:
+        NPM_REGISTRY: ${NPM_REGISTRY:-}
+    image: dsh-gateway:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Which runtime provides a tenant's machine. `cube` is CubeSandbox, the
+      # real one; `docker` is the simulation a laptop can run.
+      SANDBOX_RUNTIME: ${SANDBOX_RUNTIME:-docker}
+      SANDBOX_IMAGE: dsh-sandbox:latest
+      SANDBOX_NETWORK: ${COMPOSE_NETWORK:-dsh-multitenant_dsh-net}
+      CUBE_API_URL: ${CUBE_API_URL:-http://127.0.0.1:3000}
+      CUBE_API_KEY: ${CUBE_API_KEY:-e2b_000000}
+      CUBE_TEMPLATE_ID: ${CUBE_TEMPLATE_ID:-dsh-sandbox}
+      GATEWAY_TUNNEL_URL: ws://gateway:8080/_tunnel
+      # Signs the access tokens. Changing it invalidates every one in
+      # circulation, which signs everyone out until their browser refreshes.
+      SESSION_SECRET: ${SESSION_SECRET}
+      # The addresses that reach the user console — named by the operator,
+      # because "whoever registers first is in charge" is a race the sign-up
+      # page cannot arbitrate.
+      GATEWAY_ADMINS: ${GATEWAY_ADMINS:-}
+      # Mailing the sign-in code is the whole of authentication here, so a
+      # deployment without a credential refuses to start.
+      RESEND_API_KEY: ${RESEND_API_KEY:?set to a Resend API key; without it nobody can sign in}
+      # Must be at a domain verified with Resend. Its shared sender works
+      # without verification but only delivers to the Resend account's owner.
+      EMAIL_FROM: ${EMAIL_FROM:-onboarding@resend.dev}
+      EMAIL_PRODUCT_NAME: ${EMAIL_PRODUCT_NAME:-DSH}
+      REFRESH_TTL_SECONDS: ${REFRESH_TTL_SECONDS:-2592000}
+      # Whether an invite is needed to register. `open` lets anyone who can
+      # receive mail in, which is what a deployment on a reachable address
+      # should not be.
+      REGISTRATION: ${REGISTRATION:-invite}
+      DATABASE_URL: postgres://${POSTGRES_USER:-dsh}:${POSTGRES_PASSWORD:?set a database password}@postgres:5432/${POSTGRES_DB:-dsh}
+      # Optional. Left unset, the login page shows this checkout's own version,
+      # which is what the images were built from.
+      DSH_VERSION: ${DSH_VERSION:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL}
+      SANDBOX_IDLE_TTL_MS: ${SANDBOX_IDLE_TTL_MS:-1800000}
+    volumes:
+      # The gateway starts one container per tenant, so it needs the Engine
+      # socket. This is host-root-equivalent access: it is why the gateway holds
+      # no tenant code and does nothing an authenticated request can steer
+      # beyond starting that tenant's own sandbox.
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks: [dsh-net]
+    restart: unless-stopped
+
+  # Built, never run by compose: the gateway starts one of these per tenant
+  # through the Engine API. The `build` profile keeps `compose up` from
+  # launching an ownerless sandbox.
+  sandbox:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: sandbox
+      args:
+        APT_MIRROR: ${APT_MIRROR:-}
+        NPM_REGISTRY: ${NPM_REGISTRY:-}
+        TZ: ${SANDBOX_TZ:-UTC}
+    image: dsh-sandbox:latest
+    profiles: [build]
+    networks: [dsh-net]
+
+volumes:
+  postgres-data:
+  web-tls:
+
+networks:
+  dsh-net:
+    name: ${COMPOSE_NETWORK:-dsh-multitenant_dsh-net}

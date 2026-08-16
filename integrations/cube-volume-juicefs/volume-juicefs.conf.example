@@ -1,0 +1,57 @@
+# Where the JuiceFS filesystem's metadata lives, and the shape of each volume.
+# Install beside the plugin in each component's plugin directory, mode 600.
+#
+# The S3 credentials are not here: they were given to `juicefs format` and live
+# in the filesystem's own metadata, so a node that can reach the database can
+# reach the data.
+#
+# The deployment-wide ceiling is not here either — it is the `--capacity` the
+# filesystem was formatted with.
+
+META=postgres://user:password@127.0.0.1:5432/juicefs?sslmode=disable
+
+# Where this node keeps its single JuiceFS client mounted. Every volume is a
+# bind mount of one directory inside it.
+SHARED_MOUNT=/data/cube-shared/juicefs
+
+# How much one volume may hold, in GiB. One figure for every tenant: CubeSandbox
+# passes a plugin nothing but a volume id and a name, so there is no capacity to
+# receive per volume and nowhere for a per-tenant one to come from.
+VOLUME_CAPACITY_GB=5
+
+# ── Performance ───────────────────────────────────────────────────────────────
+#
+# These are read when the node's shared client mounts. Changing one takes effect
+# on the next mount, so an already-mounted node has to be drained and remounted.
+
+# The local read cache. Defaulted here rather than left to JuiceFS, whose own
+# default is the mounting user's home directory — root's, since Cubelet runs the
+# hook — with a 100 GiB ceiling on whatever filesystem that lands on.
+#
+# The size bounds the read cache only. Writes staged by WRITEBACK share the
+# directory and are bounded by JuiceFS's free-space floor instead.
+CACHE_DIR=/var/cache/cube-volume-juicefs
+CACHE_SIZE_MB=4096
+
+# Acknowledge a write once it is staged on local disk and upload in the
+# background. Measured on one node: 38ms to 17ms per small-file create.
+#
+# The cost is what "staged" means. A node lost before its backlog drains takes
+# that data with it while the metadata still lists the file, so this suits a
+# workspace and not something that must not lose a write.
+WRITEBACK=off
+
+# Left empty to keep JuiceFS's own defaults. The metadata timeouts (seconds) are
+# safe to raise where one directory has one writer, which is the case here — a
+# volume is attached to its tenant's single sandbox — and unsafe across two
+# nodes writing one directory, where the timeout is how long a stale attribute
+# survives.
+BUFFER_SIZE_MB=
+ATTR_CACHE=
+ENTRY_CACHE=
+DIR_ENTRY_CACHE=
+OPEN_CACHE=
+
+# Anything this config does not name — upload concurrency, prefetch, and the
+# rest — appended to the mount command as written.
+MOUNT_OPTS=

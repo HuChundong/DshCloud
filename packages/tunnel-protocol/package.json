@@ -1,0 +1,11 @@
+{
+  "name": "dsh-tunnel-protocol",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The frame protocol both ends of the sandbox tunnel speak.",
+  "exports": {
+    ".": "./protocol.js",
+    "./package.json": "./package.json"
+  }
+}
