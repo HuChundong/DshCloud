@@ -4,6 +4,8 @@
 
 English | [中文](README.zh.md)
 
+Project introduction: [Read the WeChat Official Account article](https://mp.weixin.qq.com/s/lDd3rK6syoCB7TANxwCRsQ)
+
 > [!IMPORTANT]
 > **Independent project notice:** DshCloud is an independently developed,
 > unofficial project. **DshCloud and DSH are not products of the same company

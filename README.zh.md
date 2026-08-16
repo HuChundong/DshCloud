@@ -4,6 +4,8 @@
 
 [English](README.md) | 中文
 
+项目介绍：[微信公众号文章](https://mp.weixin.qq.com/s/lDd3rK6syoCB7TANxwCRsQ)
+
 > [!IMPORTANT]
 > **独立项目声明：** DshCloud 是独立开发维护的非官方项目。**DshCloud 与 DSH
 > 不是同一家公司或组织的产品。** 本仓库不隶属于、不代表，也未获得 DeepSeek AI、
