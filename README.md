@@ -101,8 +101,13 @@ packages/               the npm packages this repository owns
 integrations/           stands alone; could leave without changing a line here
   cube-volume-juicefs/    a CubeSandbox VolumePlugin backed by JuiceFS over S3
 
-verify/                 the acceptance suite
+verify/                 the acceptance suite — needs a deployment
+scripts/                repository gates — need only the tree or the images
 ```
+
+[AGENTS.md](AGENTS.md) is the development contract: DSH stays an unpatched
+dependency, everything added to it is a cordis plugin, and each directory above
+admits only what belongs in it.
 
 `SANDBOX_RUNTIME` selects the runtime: `cube` for
 [CubeSandbox](https://github.com/TencentCloud/CubeSandbox), where each tenant

@@ -1,0 +1,101 @@
+name: CI
+
+# The acceptance suite is deliberately absent. It needs a deployment, a
+# CubeSandbox installation, and real model tokens, so it runs against a
+# deployment rather than in CI — see AGENTS.md. What is here is everything that
+# can be decided from the tree and the images alone.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static:
+    name: lint and documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: JavaScript
+        run: npx --yes oxlint@1.42.0
+
+      # Preinstalled on GitHub's Linux images. Every shell file, found by
+      # extension or by shebang, because the volume plugin is installed under a
+      # bare name and an extension-only rule would miss the file with the most
+      # shell in it.
+      - name: Shell
+        run: |
+          mapfile -t files < <(
+            git ls-files | while read -r f; do
+              case "$f" in
+                *.sh|*.bash) echo "$f" ;;
+                *.*) ;;
+                *) head -c 64 "$f" | grep -qE '^#!.*\b(ba)?sh\b' && echo "$f" ;;
+              esac
+            done
+          )
+          printf 'checking %d shell file(s)\n' "${#files[@]}"
+          shellcheck -- "${files[@]}"
+
+      - name: Documentation
+        run: node scripts/check-docs.mjs
+
+      # Interpolation errors and malformed overlays surface here rather than on
+      # a deployment host. The values are placeholders: `config` resolves the
+      # files, it does not start anything.
+      - name: Compose files
+        run: |
+          # Placeholders derived from the files rather than listed here, so a
+          # newly required variable cannot fail this step for the wrong reason.
+          grep -hoE '\$\{[A-Z_]+:\?' compose*.yml \
+            | sed 's/.*{//;s/:?//' | sort -u \
+            | while read -r name; do echo "$name=ci-placeholder"; done > .env
+          docker compose -f compose.yml config -q
+          docker compose -f compose.yml -f compose.cube.yml config -q
+          docker compose -f compose.yml -f compose.cube.yml -f compose.tls.yml config -q
+          rm -f .env
+
+      # A filled-in environment file is the one thing here that would carry real
+      # credentials, and `.env.example` is the only member of that family that
+      # belongs in the tree.
+      - name: Secrets
+        run: |
+          if git ls-files | grep -E '(^|/)\.env($|\.)' | grep -v '\.env\.example$'; then
+            echo 'an environment file other than .env.example is tracked' >&2
+            exit 1
+          fi
+          if git grep -nIE '(\bre_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9]{20,}|-----BEGIN [A-Z ]*PRIVATE KEY)' \
+             -- . ':!*.example' ':!docs/*'; then
+            echo 'something shaped like a credential is tracked' >&2
+            exit 1
+          fi
+
+  images:
+    name: images resolve what they are asked for
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Every image, because the sandbox and the web image share the one npm
+      # install and the gateway is the only one that must not carry it.
+      - name: Build
+        run: |
+          grep -hoE '\$\{[A-Z_]+:\?' compose*.yml \
+            | sed 's/.*{//;s/:?//' | sort -u \
+            | while read -r name; do echo "$name=ci-placeholder"; done > .env
+          docker compose -f compose.yml --profile build build
+
+      # The questions a build cannot answer: what resolves, and what loads.
+      - name: Resolve
+        run: scripts/check-images.sh

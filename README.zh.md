@@ -84,8 +84,12 @@ packages/               本仓库拥有的 npm 包
 integrations/           独立存在，抽走不需要改这里一行
   cube-volume-juicefs/    基于 JuiceFS over S3 的 CubeSandbox VolumePlugin
 
-verify/                 验收套件
+verify/                 验收套件——需要一套真实部署
+scripts/                仓库门禁——只需要代码树或构建出的镜像
 ```
+
+[AGENTS.zh.md](AGENTS.zh.md) 是开发约定：DSH 保持为不打补丁的依赖，加给它的一切都是
+cordis 插件，上面每个目录只收该收的东西。
 
 `SANDBOX_RUNTIME` 选择运行时：`cube` 是
 [CubeSandbox](https://github.com/TencentCloud/CubeSandbox)，每个租户拿到一台微虚机；

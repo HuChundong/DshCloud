@@ -6,6 +6,8 @@
   "description": "Multi-tenant cloud deployment for DSH.",
   "scripts": {
     "lint": "oxlint",
+    "check:docs": "node scripts/check-docs.mjs",
+    "check:images": "scripts/check-images.sh",
     "verify": "verify/verify.sh"
   },
   "devDependencies": {
