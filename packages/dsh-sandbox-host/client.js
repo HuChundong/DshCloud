@@ -374,6 +374,10 @@ window.__ModuleLoader__.load({
       const [dragging, setDragging] = React.useState(false)
       const running = useSession((state) => state.running) ?? false
       const [seat, setSeat] = React.useState(null)
+      // A node React owns and never moves: the anchor the placement below walks
+      // up from, so the composer card is found by structure rather than by a
+      // document-wide query.
+      const anchor = React.useRef(null)
       // Cards belong to the session they were uploaded from; the store is one
       // module-level list shared by every scope that mounts this.
       const mine = rows.filter((row) => row.sessionId === sessionId)
@@ -390,27 +394,47 @@ window.__ModuleLoader__.load({
       // longer there, and it throws again on every retry. A portal inverts it:
       // React renders into a container it does not own the position of, and
       // this side owns nothing React renders.
-      React.useEffect(() => {
+      const held = React.useRef(null)
+      held.current ??= (() => {
         const container = document.createElement('div')
         container.dataset.dshSandboxHost = 'attachments'
-        const place = () => {
-          const scroll = document.querySelector('textarea')?.parentElement?.parentElement
-          if (scroll === undefined || scroll === null) return
-          // Parent only, never adjacency: two mounted session scopes would each
-          // demand the slot immediately before the textarea and shove the other
-          // out of it forever.
-          if (container.parentElement === scroll.parentElement) return
-          scroll.before(container)
-          setSeat(container)
+        return container
+      })()
+
+      // Placed after every render, which costs one `isConnected` read in the
+      // case that matters and a walk only when the composer has been rebuilt.
+      //
+      // The first cut watched `document.body` for childList instead. That is a
+      // callback on every React commit anywhere in the page — every token of a
+      // streaming reply — each one running a document-wide
+      // `querySelector('textarea')`. It is also unnecessary: this component
+      // re-renders on the same commit that rebuilds the composer, because the
+      // input state it reads changes with it.
+      React.useLayoutEffect(() => {
+        const container = held.current
+        // The whole cost in the common case. Everything below runs once, and
+        // again only when the composer has been rebuilt under it.
+        if (container.isConnected) return
+        const dock = anchor.current
+        if (dock === null) return
+        // The textarea belonging to THIS composer, found by walking up from a
+        // node React keeps in the dock row rather than by a document-wide
+        // query — so another textarea elsewhere on the page cannot claim it.
+        // The walk stops at the first ancestor that contains one, which is the
+        // input bar; the card is that textarea's own scroll region's parent.
+        let scope = dock.parentElement
+        let input = null
+        while (scope !== null && input === null) {
+          input = scope.querySelector('textarea')
+          if (input === null) scope = scope.parentElement
         }
-        place()
-        const observer = new MutationObserver(place)
-        observer.observe(document.body, { subtree: true, childList: true })
-        return () => {
-          observer.disconnect()
-          container.remove()
-        }
-      }, [])
+        const scroll = input?.parentElement?.parentElement
+        if (scroll === undefined || scroll === null || scroll.parentElement === null) return
+        scroll.before(container)
+        setSeat(container)
+      })
+
+      React.useEffect(() => () => { held.current?.remove() }, [])
 
       // The turn claims the notices, so the cards have nothing left to say.
       const wasRunning = React.useRef(running)
@@ -518,7 +542,12 @@ window.__ModuleLoader__.load({
           }),
         )
 
-      return seat === null ? null : ReactDom.createPortal(body, seat)
+      return React.createElement(
+        React.Fragment,
+        null,
+        React.createElement('div', { ref: anchor, style: { display: 'none' } }),
+        seat === null ? null : ReactDom.createPortal(body, seat),
+      )
     }
 
     // ------------------------------------------------------- the + splicing --
@@ -641,13 +670,16 @@ window.__ModuleLoader__.load({
         soon()
         const observer = new MutationObserver(soon)
         observer.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['aria-expanded'] })
+        // No scroll listener. A capture-phase one catches every scrollable in
+        // the page — the transcript under a streaming reply included — and this
+        // measure forces a document-wide query per event. It also buys nothing:
+        // the composer is sticky at the bottom of its scrollport, so the panel
+        // this mirrors does not move when the conversation scrolls.
         window.addEventListener('resize', measure)
-        window.addEventListener('scroll', measure, true)
         return () => {
           observer.disconnect()
           watched.observer?.disconnect()
           window.removeEventListener('resize', measure)
-          window.removeEventListener('scroll', measure, true)
         }
       }, [])
 
