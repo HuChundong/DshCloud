@@ -116,6 +116,12 @@ ENV PATH=/opt/agent-python/bin:$PATH
 # so a tenant's own `pip install` reaches the same mirror this build did. A
 # deployment far from PyPI that only mirrored the build would leave every
 # tenant waiting on the default index.
+#
+# Name one the build host can reach rather than one that is merely nearby. A
+# university mirror answered 403 to this deployment's machine while the cloud
+# mirror beside it answered in 0.1s, and what pip reports for a refused index
+# is "no matching distribution found for pandas" — a sentence about the package,
+# for a problem with the index.
 ARG PIP_INDEX_URL=
 RUN if [ -n "$PIP_INDEX_URL" ]; then \
       printf '[global]\nindex-url = %s\n' "$PIP_INDEX_URL" > /etc/pip.conf; \
