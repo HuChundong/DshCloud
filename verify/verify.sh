@@ -73,12 +73,19 @@ mint_invite() {  # mint_invite -> one unused code
 }
 
 login() {  # login <email> <cookiejar> -> status of the final step
-  curl -s -o /dev/null -c "$2" -X POST "$GATEWAY/login" --data-urlencode "email=$1"
   local code invite
-  code=$(code_for "$1")
-  # Carried on every sign-in, not only a first one: only the server knows which
-  # this is, and an invite an existing account does not need is simply not spent.
+  # Minted before the code is asked for, not after. A code only goes out to an
+  # address the deployment already knows or a request that carries a usable
+  # invite — otherwise the form would be a way to mail anyone. This is the flow
+  # a new tenant follows: the invite comes first, and the code follows it.
+  #
+  # Carried on both steps, and on every sign-in rather than only a first one:
+  # only the server knows which this is, and an invite an existing account does
+  # not need is simply not spent.
   invite=$(mint_invite)
+  curl -s -o /dev/null -c "$2" -X POST "$GATEWAY/login" \
+    --data-urlencode "email=$1" --data-urlencode "invite=$invite"
+  code=$(code_for "$1")
   curl -s -o /dev/null -w '%{http_code}' -b "$2" -c "$2" \
     -X POST "$GATEWAY/login" --data-urlencode "email=$1" --data-urlencode "code=$code" \
     --data-urlencode "invite=$invite"
