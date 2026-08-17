@@ -224,7 +224,10 @@ harness 很清楚容器里没有桌面：`host.describe().canOpenPath` 会去问
 后来逼出 `dsh-sandbox-host` 与 `dsh-tenant-account` 拆分的原因。
 
 真正够不着的是 chat view 的 `openFile`：它由拥有该视图的包注入，不是对外开放的插槽，插件
-只能整个替换视图。那属于上游 issue，并在此记为一条限制。
+只能整个替换视图。已报到上游的
+[discussion 2729](https://github.com/deepseek-ai/deepseek-harness/discussions/2729)——dsh 关闭了
+issue，其 CONTRIBUTING 指定 Discussions 是报 bug 的地方，并声明目前不接受外部 PR，所以
+一份报告就是本项目能做的全部。
 
 ## 共享的 `/api` 通道只接受一个 interceptor
 

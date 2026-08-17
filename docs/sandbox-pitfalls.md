@@ -289,8 +289,11 @@ forced the split into `dsh-sandbox-host` and `dsh-tenant-account`.
 
 What is genuinely out of reach is the chat view's `openFile`: it is injected by
 the package that owns the view, not offered as a slot, so a plugin can only
-replace the whole view. That is an upstream issue and a limitation recorded
-here.
+replace the whole view. Reported upstream at
+[discussion 2729](https://github.com/deepseek-ai/deepseek-harness/discussions/2729) — dsh has issues
+disabled and its CONTRIBUTING names Discussions as where bugs go, and says
+external pull requests are not being accepted, so a report is the whole of what
+this project can do about it.
 
 ## The shared `/api` channel takes exactly one interceptor
 
