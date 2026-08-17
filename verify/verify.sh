@@ -438,6 +438,23 @@ if [ -n "$ADMIN" ]; then
   # not an administrator, so her row carries the button this drives.
   "${BROWSER_RUN[@]}" -e "PROBE_EMAIL=$ADMIN" -e "PROBE_CODE=$ADMIN_CODE" "$BROWSER_IMAGE" \
     sh -c "$BROWSER_INSTALL && node verify-dialog.mjs" || NODE_FAIL=1
+
+  echo
+  echo '=== 16. An action leaves the address bar alone ==='
+  # A session minted here rather than signed in for: this drives the console
+  # repeatedly, and asking for a code each time spends real mail.
+  ADMIN_COOKIES=$(docker compose exec -T gateway node -e "
+    const { connect } = await import('/app/gateway/src/db.js')
+    const { Tokens } = await import('/app/gateway/src/tokens.js')
+    const { Accounts } = await import('/app/gateway/src/accounts.js')
+    const pool = await connect()
+    const account = await new Accounts(pool).read('$ADMIN')
+    const tokens = new Tokens(process.env.SESSION_SECRET, pool)
+    console.log(\`dsh_gw_access=\${await tokens.issueAccess(account)}; dsh_gw_refresh=\${await tokens.issueRefresh(account)}\`)
+    await pool.end()
+  " 2>/dev/null | tr -d '\r' | tail -1)
+  "${BROWSER_RUN[@]}" -e "PROBE_COOKIES=$ADMIN_COOKIES" "$BROWSER_IMAGE" \
+    sh -c "$BROWSER_INSTALL && node verify-console-url.mjs" || NODE_FAIL=1
 fi
 
 # The browser suite runs where Chromium is, which is not where the database is, so its
