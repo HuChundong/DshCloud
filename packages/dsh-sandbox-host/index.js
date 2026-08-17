@@ -29,6 +29,8 @@
  */
 
 import { readFile } from 'node:fs/promises'
+import { randomUUID } from 'node:crypto'
+import path from 'node:path'
 import process from 'node:process'
 import { createUploads } from './uploads.js'
 
@@ -92,6 +94,50 @@ export function apply(ctx, config) {
   }
 
   /**
+   * How the agent is told a file arrived.
+   *
+   * Not through the draft. A path typed into the composer is what a LOCAL host
+   * gives an agent, and copying that here means the person reads a path they
+   * did not write, in a box that already shows them a card for the same file.
+   * dsh has a better seat for exactly this: the agent inbox takes injected
+   * context — the same channel approval notices and attached snapshots ride —
+   * and a `plugin`-sourced message on `next-step` is invisible until the next
+   * turn claims it, then renders as a context row rather than as words the
+   * person appears to have said.
+   *
+   * Built by hand rather than through `createUserMessage`, because that lives
+   * in `@deepseek-ai/dsh-llm` under `/app/node_modules`, which Node cannot
+   * reach from this plugin's home in the profile. The factory is
+   * `{...input, id: randomUUID()}` frozen; this is the same object.
+   *
+   * @param {string} sessionId - the session the upload belongs to.
+   * @param {{path: string, name: string, bytes: number}} file - the published file.
+   * @returns {string|undefined} the message id, when one was injected.
+   */
+  const announce = (sessionId, file) => {
+    const agent = ctx.get('agents')?.get(sessionId)
+    if (agent === undefined) return undefined
+    const message = Object.freeze({
+      id: randomUUID(),
+      role: 'user',
+      content: Object.freeze([Object.freeze({
+        type: 'text',
+        text: `The user attached a file. It is in this sandbox at ${file.path} `
+          + `(${String(file.bytes)} bytes, originally named ${file.name}). `
+          + 'Read it when the request refers to it; do not assume its contents.',
+      })]),
+      source: Object.freeze({
+        kind: 'plugin',
+        plugin: 'sandbox-host',
+        form: 'notice',
+        summary: `附件 ${file.name}`,
+      }),
+    })
+    agent.inbox.append('next-step', message)
+    return message.id
+  }
+
+  /**
    * One decoded call on this channel.
    * @param {string} endpoint - channel-relative endpoint.
    * @param {unknown} payload - the caller's payload.
@@ -104,10 +150,21 @@ export function apply(ctx, config) {
         return { ok: true, value: await uploads.begin(body.name, body.size) }
       case 'upload.chunk':
         return { ok: true, value: await uploads.chunk(body.id, body.data) }
-      case 'upload.commit':
-        return { ok: true, value: await uploads.commit(body.id) }
+      case 'upload.commit': {
+        const file = await uploads.commit(body.id)
+        // A sandbox with no session yet still gets the file; it just has
+        // nobody to tell, and the card in the browser is the whole receipt.
+        const messageId = body.sessionId === undefined ? undefined : announce(String(body.sessionId), file)
+        return { ok: true, value: { ...file, name: path.basename(file.path), messageId } }
+      }
       case 'upload.abort':
         return { ok: true, value: await uploads.abort(body.id) }
+      case 'upload.retract': {
+        // Taking the card off the message has to take the notice with it, or
+        // the agent is told about a file the person changed their mind about.
+        const agent = ctx.get('agents')?.get(String(body.sessionId))
+        return { ok: true, value: { removed: agent?.inbox.remove(String(body.messageId)) === true } }
+      }
       case 'document.read':
         return await readDocument()
       default:

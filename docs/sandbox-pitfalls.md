@@ -344,6 +344,56 @@ not against the ones the plugin performs at startup. And a failure that
 resembles a normal event is the kind that lasts: "restarts with the gateway"
 needed no explanation, so it never got one.
 
+## The composer has seats around it, not inside it
+
+An attachment feature needs three things the composer does not offer, and each
+one sits next to something it does offer.
+
+- **The `+` menu takes exactly one source.** `inputTriggers.registerSource` is
+  the documented way to add a group, and `+` calls
+  `toggleSource('command', …)`, which seeds the menu with that one name. A
+  registered source therefore appears when the person types `/` and never under
+  `+` — which is where a person looks for "add something to this message".
+- **The card position is a prop, not a slot.** dsh's image thumbnails render
+  through `accessory` on the composer bar's owner props, inside the card above
+  the textarea. Every input region a plugin can take is outside the card.
+- **A user message can only be replaced whole.** `conversation.chat.node` key
+  `user` can be shadowed, but `UserMessageNodeView` delegates to
+  `UserStyleBubble` and `MessageIconActions`, neither exported — so drawing an
+  attachment as a chip in the sent message means reimplementing the transcript's
+  most common row.
+
+Two of the three are answered here by forgery: a second panel drawn above the
+real `+` menu, and the card's DOM node moved into the composer after render.
+Both key on ARIA roles (`[role=listbox]`, `aria-expanded`, the textarea) rather
+than on hashed CSS-module names, and both copy the real element's *computed*
+style instead of restating it, so a theme change or an upstream restyle carries
+across. Neither survives a change to the composer's shape, and both go away the
+day the seats exist.
+
+The third was not forged. Reported with the others at
+[discussion 2729](https://github.com/deepseek-ai/deepseek-harness/discussions/2729).
+
+## Writing into the draft is not the same as telling the agent
+
+The first cut of the upload wrote the committed path into the composer draft,
+reasoning that a path is exactly what a person on a local host would have typed.
+It reads wrong: the person watches a path they did not write appear in a box
+that is already showing them a card for the same file, and the path is then
+theirs to accidentally edit or half-delete.
+
+The seat that was wanted already existed. `agent.inbox.append('next-step', …)`
+takes an injected message whose `source.kind` is not `user`, which the queue
+projects as `context` — invisible until the turn claims it, then rendered as a
+context row rather than as words the person appears to have said.
+`agent-instructions` and `goal-round-driver` both use it. `inbox.remove(id)` is
+the retraction, so taking the card off the message takes the notice with it.
+
+What made this hard to see: the draft is the only part of the composer a plugin
+can write, so it looks like the only way to reach the model. The inbox is on the
+other side of the same session, and reaching it needs nothing but the session id
+the client already has.
+
 ## What generalizes
 
 - **A snapshot cannot hold what is only knowable later.** Everything
@@ -366,6 +416,9 @@ needed no explanation, so it never got one.
   for weeks.
 - **A public method is not necessarily an available one.** `rpc.intercept` is
   documented, exported, and already taken.
+- **The seat you can reach is not always the seat you want.** The draft is the
+  only writable part of the composer, which is why it took two tries to look for
+  the agent inbox.
 - **Read `inject` against every use of `ctx`, not the ones at startup.** A
   service used on one rare path is one the happy path cannot prove.
 - **A failure that looks like a normal event is the kind that lasts.** "The

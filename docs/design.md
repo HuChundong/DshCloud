@@ -349,12 +349,30 @@ priority is the cell's shadowing rank, and the lowest renders.
 
 On a local host nobody uploads anything: the person names a path and the agent
 reads it. Here the path they can name is on the wrong machine, so the deployment
-has to produce one — which is exactly what the upload does. The committed path
-goes into the composer draft, and from there it is an ordinary message about an
-ordinary file. Nothing new reaches the model: no content block, no provider
+has to produce one.
+
+The path never appears in the composer. Writing it there was the first cut, and
+it was wrong twice over: the person reads a path they did not type, in a box
+that is already showing them a card for the same file. dsh has a better seat for
+it — the agent inbox takes injected context, the same channel approval notices
+and attached snapshots ride. A commit appends a `plugin`-sourced message to
+`next-step`, which is invisible until the next turn claims it and then renders
+as a context row rather than as words the person appears to have said. Taking
+the card off the message retracts that notice, so the agent is never told about
+a file somebody changed their mind about.
+
+Nothing new reaches the model beyond that text: no content block, no provider
 contract, no agreement with the harness about what an attachment is. (dsh's own
 attachment plane is images only, and says so — generic files are deferred
 upstream pending a lifecycle and provider contract.)
+
+The card itself is rendered where dsh renders its own image thumbnails: inside
+the composer card, above the textarea. No slot reaches there — that position is
+the `accessory` prop on the composer bar — so the node is moved into place after
+render, and the `+` menu's "附件" group is a second panel drawn above the real
+one. Both are forgeries, both key on ARIA roles rather than hashed class names,
+and both are reported upstream; see
+[sandbox-pitfalls](sandbox-pitfalls.md).
 
 The endpoints live on `/files`, a channel of dsh's own RPC registry, and not on
 `/api`. `/api` accepts exactly one interceptor and dsh's `typert-gateway` holds

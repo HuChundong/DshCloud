@@ -1,14 +1,16 @@
 /**
  * The sandbox adaptation layer, browser half.
  *
- * Three surfaces, all of which exist because the backend is not on this
- * machine:
+ * Four surfaces, all of which exist because the backend is not on this machine:
  *
- * - an attach control in the composer, because a path the person can type is
- *   not a path this backend has;
+ * - an "附件" group in the trigger menu, so a file has a way in at all;
+ * - the same group spliced onto the `+` menu, which cannot host it properly
+ *   (see the note on PlusAttachmentGroup);
+ * - attachment cards above the composer, bound to the draft the way dsh's own
+ *   image rail is bound to it;
  * - a Configuration page in Settings, because the shipped control hands the
- *   document to a desktop that is not there;
- * - and nothing at all in the Settings header, where that control used to be.
+ *   settings document to a desktop that is not there — and nothing at all in
+ *   the Settings header, where that control used to be.
  *
  * One file, deliberately: the client-module registry serves a plugin's `client`
  * export verbatim — nothing resolves through node_modules and there is no build
@@ -22,19 +24,19 @@ window.__ModuleLoader__.load({
   factory: (require) => {
     const React = require('react')
 
-    /**
-     * The client context, handed to components that need to call the host.
-     *
-     * Slot components receive the framework's own props; the plugin context is
-     * not among them, and all three seats below need it for one thing —
-     * `connection.rpc.call`.
-     */
-    const ClientContext = React.createContext(undefined)
-
     // ---------------------------------------------------------------- wire --
 
     /** The channel the host half owns. One path segment; see its module note. */
     const CHANNEL = '/files'
+
+    /**
+     * The plugin context, captured at mount.
+     *
+     * A module-level holder rather than React context, because two of the three
+     * callers are not components: the trigger source's `onPick` runs inside the
+     * input pipeline, and the upload chain outlives whatever rendered it.
+     */
+    let plugin
 
     /**
      * Read one Blob as base64, without holding a second copy as a JS string of
@@ -55,15 +57,13 @@ window.__ModuleLoader__.load({
     })
 
     /**
-     * One call on the file channel, with the envelope's error turned into a
-     * thrown one.
-     * @param {object} ctx - the client context, for `connection.rpc`.
+     * One call on the file channel, with the envelope's error thrown.
      * @param {string} endpoint - channel-relative endpoint.
      * @param {object} payload - the request payload.
      * @returns {Promise<object>} the value the host returned.
      */
-    const call = async (ctx, endpoint, payload) => {
-      const result = await ctx.connection.rpc.call(CHANNEL, endpoint, payload)
+    const call = async (endpoint, payload) => {
+      const result = await plugin.connection.rpc.call(CHANNEL, endpoint, payload)
       if (result.ok) return result.value
       throw new Error(result.error.message)
     }
@@ -75,37 +75,62 @@ window.__ModuleLoader__.load({
      * arrival order, and the tunnel is one socket anyway — parallelism here
      * would buy nothing and would need sequence numbers to be correct.
      *
-     * @param {object} ctx - the client context.
      * @param {File} file - the browser's file.
      * @param {(sent: number) => void} onProgress - bytes accepted so far.
      * @returns {Promise<{path: string, name: string, bytes: number}>} the published file.
      */
-    const upload = async (ctx, file, onProgress) => {
-      const { id, chunkBytes } = await call(ctx, 'upload.begin', { name: file.name, size: file.size })
+    const upload = async (file, onProgress) => {
+      const { id, chunkBytes } = await call('upload.begin', { name: file.name, size: file.size })
       try {
         for (let offset = 0; offset < file.size; offset += chunkBytes) {
           const data = await toBase64(file.slice(offset, offset + chunkBytes))
-          const { received } = await call(ctx, 'upload.chunk', { id, data })
+          const { received } = await call('upload.chunk', { id, data })
           onProgress(received)
         }
-        return await call(ctx, 'upload.commit', { id })
+        return await call('upload.commit', { id, sessionId: composer.sessionId })
       } catch (error) {
         // The staging file would age out on its own, but a browser that failed
         // mid-upload is exactly the case where the tenant retries immediately
         // and meets the in-flight limit.
-        await call(ctx, 'upload.abort', { id }).catch(() => {})
+        await call('upload.abort', { id }).catch(() => {})
         throw error
       }
     }
 
+    // -------------------------------------------------------------- picking --
+
+    /**
+     * Ask the person for files.
+     *
+     * A fresh input each time, removed on either outcome. `cancel` is what
+     * closes the dialog without choosing; without listening for it, every
+     * cancelled pick would leave an element on the page for the life of the
+     * session.
+     *
+     * @returns {Promise<File[]>} what they chose, empty when they cancelled.
+     */
+    const pickFiles = () => new Promise((resolve) => {
+      const input = document.createElement('input')
+      input.type = 'file'
+      input.multiple = true
+      input.style.display = 'none'
+      document.body.append(input)
+      const settle = (files) => { input.remove(); resolve(files) }
+      input.addEventListener('change', () => { settle([...(input.files ?? [])]) }, { once: true })
+      input.addEventListener('cancel', () => { settle([]) }, { once: true })
+      input.click()
+    })
+
     // --------------------------------------------------------------- store --
 
     /**
-     * What the composer's two seats both need to see.
+     * The cards, and the composer they belong to.
      *
-     * A store rather than props: the control that starts an upload sits inside
-     * the composer card and the list that reports on it sits in the row above,
-     * and they are separate slot entries with no owner between them.
+     * A store rather than props: uploads are started from three places — the
+     * trigger menu, the spliced `+` group, and a drop — and only one of them is
+     * a component. `composer` is the live draft face, refreshed by the card row
+     * on every render, so the non-component callers can still write a path into
+     * the message being composed.
      */
     const createStore = () => {
       const listeners = new Set()
@@ -134,19 +159,75 @@ window.__ModuleLoader__.load({
           rows = rows.filter((row) => row.key !== key)
           emit()
         },
+        /**
+         * Drop the cards whose file has been handed to a turn.
+         *
+         * A card is the receipt for an attachment waiting on the next message.
+         * The moment that message starts running, the notice has been claimed
+         * and the card has nothing left to say — which is what stops it from
+         * becoming the permanent upload log it was in the first cut.
+         */
+        settle() {
+          const next = rows.filter((row) => row.path === undefined && row.error === undefined)
+          if (next.length === rows.length) return
+          rows = next
+          emit()
+        },
       }
     }
 
     const store = createStore()
 
+    /** How long a failed upload keeps its card. */
+    const FAILURE_LINGER_MS = 8000
+
+    /** Which session the uploads belong to, refreshed by the card row. */
+    const composer = { sessionId: undefined }
+
     /**
-     * Tail of the upload chain, shared by both seats.
+     * Tail of the upload chain.
      *
-     * One at a time across the whole page, not per component: the two seats
-     * that start uploads are separate slot entries, and a file dropped while
-     * another is climbing the tunnel is still the same socket's turn.
+     * One at a time across the whole page: the tunnel is one socket, so
+     * concurrent uploads only take turns more expensively.
      */
     let queue = Promise.resolve()
+
+    /**
+     * Upload files and let the host tell the agent about each one.
+     *
+     * Nothing is written into the draft. On a local host the person types a
+     * path because the path is theirs to type; here it would be a path they did
+     * not write appearing in a box that already shows them a card for the same
+     * file. The host injects the notice into the agent's inbox instead, where
+     * it rides the next turn and renders as context rather than as words the
+     * person appears to have said.
+     *
+     * @param {Iterable<File>} files - what to send.
+     */
+    const sendFiles = (files) => {
+      for (const file of files) {
+        const key = store.add(file)
+        queue = queue
+          .then(() => upload(file, (sent) => { store.update(key, { sent }) }))
+          .then((published) => {
+            store.update(key, {
+              path: published.path,
+              name: published.name,
+              sent: published.bytes,
+              messageId: published.messageId,
+            })
+          })
+          .catch((error) => {
+            store.update(key, { error: error.message })
+            // A failure has no card lifetime of its own — nothing in the
+            // composer refers to it — so it is the one card that times out.
+            setTimeout(() => { store.remove(key) }, FAILURE_LINGER_MS)
+          })
+      }
+    }
+
+    /** Open the picker and send whatever comes back. */
+    const pickAndSend = () => { void pickFiles().then((files) => { sendFiles(files) }) }
 
     /**
      * Subscribe a component to the store.
@@ -158,44 +239,10 @@ window.__ModuleLoader__.load({
       return rows
     }
 
-    /** Whether a drag currently over the page is carrying files. */
-    const useFileDrag = () => {
-      const [dragging, setDragging] = React.useState(false)
-      React.useEffect(() => {
-        // Observed, never intercepted. `preventDefault` here would make this
-        // plugin the drop target for the whole page, including the image drops
-        // the composer already handles itself. Our own element is the only
-        // thing that accepts a drop.
-        let depth = 0
-        const carriesFiles = (event) => [...(event.dataTransfer?.types ?? [])].includes('Files')
-        const enter = (event) => {
-          if (!carriesFiles(event)) return
-          depth += 1
-          setDragging(true)
-        }
-        const leave = () => {
-          depth = Math.max(0, depth - 1)
-          if (depth === 0) setDragging(false)
-        }
-        const end = () => { depth = 0; setDragging(false) }
-        window.addEventListener('dragenter', enter)
-        window.addEventListener('dragleave', leave)
-        window.addEventListener('drop', end)
-        window.addEventListener('dragend', end)
-        return () => {
-          window.removeEventListener('dragenter', enter)
-          window.removeEventListener('dragleave', leave)
-          window.removeEventListener('drop', end)
-          window.removeEventListener('dragend', end)
-        }
-      }, [])
-      return dragging
-    }
-
     // ---------------------------------------------------------------- copy --
 
     /**
-     * Human byte count, for a progress line nobody should have to decode.
+     * Human byte count, for a line nobody should have to decode.
      * @param {number} bytes - the count.
      * @returns {string} e.g. `1.4 MB`.
      */
@@ -208,10 +255,14 @@ window.__ModuleLoader__.load({
       return `${value < 10 ? value.toFixed(1) : String(Math.round(value))} ${units[unit]}`
     }
 
+    /** What the menu calls this group, and what the one item in it says. */
+    const GROUP = '附件'
+    const ITEM = { name: '上传文件…', description: '从这台电脑选择文件，送进你的沙箱' }
+
     // --------------------------------------------------------------- style --
 
     /** Classes the rules below are scoped to; nothing else in the page uses them. */
-    const CSS_PREFIX = 'dsh-sandbox-host'
+    const P = 'dsh-sandbox-host'
 
     /**
      * Restated from the shell's own tokens rather than borrowed from it. Every
@@ -221,260 +272,421 @@ window.__ModuleLoader__.load({
      * themes without this file knowing either.
      */
     const STYLE = `
-      .${CSS_PREFIX}-trigger {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 28px;
-        height: 28px;
-        padding: 0;
-        border: none;
-        border-radius: 8px;
-        background: transparent;
-        color: var(--dsw-alias-label-secondary, #6b6b68);
-        cursor: pointer;
-      }
-      .${CSS_PREFIX}-trigger:hover:not(:disabled) {
-        background: var(--dsw-alias-button-floating-hover, rgb(241 243 245));
-        color: var(--dsw-alias-label-primary, inherit);
-      }
-      .${CSS_PREFIX}-trigger:disabled { opacity: 0.4; cursor: default; }
-      .${CSS_PREFIX}-dock {
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-        padding: 0 2px 6px;
-      }
-      .${CSS_PREFIX}-drop {
+      .${P}-cards { display: flex; flex-direction: column; gap: 6px; padding: 4px 14px 2px; }
+      .${P}-card {
         display: flex;
         align-items: center;
-        justify-content: center;
-        gap: 8px;
-        padding: 14px;
-        border: 1px dashed var(--dsw-alias-border-l2, rgb(0 0 0 / 10%));
-        border-radius: 12px;
-        color: var(--dsw-alias-label-secondary, #6b6b68);
-        font-size: 13px;
-      }
-      .${CSS_PREFIX}-drop[data-over='true'] {
-        border-color: var(--dsw-alias-label-primary, #111);
-        color: var(--dsw-alias-label-primary, #111);
-      }
-      .${CSS_PREFIX}-row {
-        display: flex;
-        align-items: center;
-        gap: 8px;
+        gap: 10px;
         padding: 6px 10px;
         border: 1px solid var(--dsw-alias-border-l2, rgb(0 0 0 / 10%));
         border-radius: 10px;
-        background: var(--dsw-alias-button-elevated-fill, #fff);
+        background: var(--dsw-alias-fill-secondary, rgb(0 0 0 / 3%));
+        font-size: 13px;
+        line-height: 18px;
+      }
+      .${P}-icon { flex: none; color: var(--dsw-alias-label-secondary, #81858c); }
+      .${P}-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+      .${P}-name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+      .${P}-meta { color: var(--dsw-alias-label-secondary, #81858c); font-size: 12px; line-height: 16px; }
+      .${P}-fail { color: var(--dsw-alias-label-error, #c0392b); }
+      .${P}-bar {
+        height: 2px;
+        border-radius: 2px;
+        background: var(--dsw-alias-fill-secondary, rgb(0 0 0 / 6%));
+        overflow: hidden;
+      }
+      .${P}-bar > i { display: block; height: 100%; background: var(--dsw-alias-label-secondary, #81858c); }
+      .${P}-x {
+        flex: none;
+        width: 22px; height: 22px;
+        display: inline-flex; align-items: center; justify-content: center;
+        border: none; border-radius: 6px; background: transparent;
+        color: var(--dsw-alias-label-secondary, #81858c);
+        cursor: pointer; font-size: 14px; line-height: 1; padding: 0;
+      }
+      .${P}-x:hover { background: var(--dsw-alias-button-floating-hover, rgb(241 243 245)); }
+      .${P}-drop {
+        display: flex; align-items: center; justify-content: center;
+        padding: 10px;
+        border: 1px dashed var(--dsw-alias-border-l2, rgb(0 0 0 / 10%));
+        border-radius: 12px;
+        color: var(--dsw-alias-label-secondary, #81858c);
         font-size: 13px;
       }
-      .${CSS_PREFIX}-name {
-        flex: 1 1 auto;
-        overflow: hidden;
-        white-space: nowrap;
-        text-overflow: ellipsis;
+      .${P}-drop[data-over='true'] {
+        border-color: var(--dsw-alias-label-primary, #0f1115);
+        color: var(--dsw-alias-label-primary, #0f1115);
       }
-      .${CSS_PREFIX}-meta { color: var(--dsw-alias-label-secondary, #6b6b68); font-size: 12px; }
-      .${CSS_PREFIX}-fail { color: var(--dsw-alias-label-error, #c0392b); }
-      .${CSS_PREFIX}-dismiss {
-        border: none;
-        background: transparent;
-        color: var(--dsw-alias-label-secondary, #6b6b68);
-        cursor: pointer;
-        font-size: 15px;
-        line-height: 1;
-        padding: 0 2px;
-      }
-      .${CSS_PREFIX}-document {
-        margin: 0;
-        padding: 12px 14px;
-        max-height: 420px;
-        overflow: auto;
+      .${P}-document {
+        margin: 0; padding: 12px 14px; max-height: 420px; overflow: auto;
         border: 1px solid var(--dsw-alias-border-l2, rgb(0 0 0 / 10%));
         border-radius: 10px;
         background: var(--dsw-alias-fill-secondary, rgb(0 0 0 / 3%));
         color: var(--dsw-alias-label-primary, inherit);
         font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-        font-size: 12px;
-        line-height: 1.6;
-        white-space: pre;
+        font-size: 12px; line-height: 1.6; white-space: pre;
       }
-      .${CSS_PREFIX}-button {
-        display: inline-flex;
-        align-items: center;
-        height: 32px;
-        padding: 0 14px;
+      .${P}-button {
+        display: inline-flex; align-items: center; height: 32px; padding: 0 14px;
         border: 1px solid var(--dsw-alias-border-l2, rgb(0 0 0 / 10%));
         border-radius: 10px;
         background: var(--dsw-alias-button-elevated-fill, #fff);
         color: var(--dsw-alias-label-primary, inherit);
-        font-family: inherit;
-        font-size: 13px;
-        cursor: pointer;
+        font-family: inherit; font-size: 13px; cursor: pointer;
       }
-      .${CSS_PREFIX}-button:hover { background: var(--dsw-alias-button-floating-hover, rgb(241 243 245)); }
+      .${P}-button:hover { background: var(--dsw-alias-button-floating-hover, rgb(241 243 245)); }
     `
 
-    /** The stylesheet, mounted once by whichever of our seats renders first. */
+    /** The stylesheet, mounted by whichever of our seats renders first. */
     const Style = () => React.createElement('style', null, STYLE)
 
-    // ------------------------------------------------------------- composer --
+    /** A paperclip, at the size the composer's own chrome uses. */
+    const Clip = ({ size = 16 }) => React.createElement('svg', {
+      width: size, height: size, viewBox: '0 0 16 16', fill: 'none', 'aria-hidden': true,
+      className: `${P}-icon`,
+    }, React.createElement('path', {
+      d: 'M10.5 5 6 9.5a1.5 1.5 0 0 0 2.1 2.1l4.9-4.9a3 3 0 1 0-4.2-4.2L3.6 7.2a4.5 4.5 0 0 0 6.4 6.4l4-4',
+      stroke: 'currentColor', strokeWidth: 1.3, strokeLinecap: 'round', strokeLinejoin: 'round',
+    }))
+
+    // ------------------------------------------------------------ the cards --
 
     /**
-     * Start uploads and put what they produce into the draft.
+     * The attachment cards, rendered where dsh renders its own image rail.
      *
-     * The path goes into the draft rather than into an attachment list of our
-     * own. That is not a shortcut: on a local host the person types a path and
-     * the agent reads it, and a path this deployment produced is the same
-     * message. It also keeps the model side untouched — no new content block,
-     * no provider contract, nothing that has to agree with the harness about
-     * what an attachment is.
+     * The slot this registers into (`conversation.input.dock`) paints a row
+     * ABOVE the composer card, and dsh's image thumbnails sit INSIDE it, above
+     * the textarea. That seat — `accessory` on the composer bar's owner props —
+     * is not a slot, so the node this returns is moved into place: the card is
+     * a flex column of `overlayAnchor`, the scroll region holding the textarea,
+     * and the tool row, and an attachment belongs immediately before the scroll
+     * region.
      *
-     * @param {object} ctx - the client context.
-     * @param {object} inputActions - the session's public input face.
-     * @param {{current: string}} draftRef - the live draft, read at click time.
-     * @returns {(files: FileList | File[]) => void} the handler both seats call.
-     */
-    const useSend = (ctx, inputActions, draftRef) => React.useCallback((files) => {
-      for (const file of files) {
-        const key = store.add(file)
-        // Chained rather than started together, for two reasons that happen to
-        // agree. The tunnel is one socket, so concurrent uploads only take
-        // turns more expensively. And the draft is read from a ref that updates
-        // on render, so two completions landing in the same frame would both
-        // read the draft as it was before either of them, and the second would
-        // write over the first's path.
-        queue = queue
-          .then(() => upload(ctx, file, (sent) => { store.update(key, { sent }) }))
-          .then((published) => {
-            store.update(key, { path: published.path, sent: published.bytes })
-            const draft = draftRef.current
-            // A space, not a newline: the path is being named inside whatever
-            // sentence the person is writing, and a newline would break it.
-            const separator = draft === '' || draft.endsWith(' ') || draft.endsWith('\n') ? '' : ' '
-            inputActions?.setDraft(`${draft}${separator}${published.path} `)
-            // Flushed here rather than waited for: setDraft is synchronous into
-            // the input machine, but the ref this read from only catches up on
-            // the next render, and the next file in the chain would otherwise
-            // read the stale one.
-            draftRef.current = `${draft}${separator}${published.path} `
-          })
-          .catch((error) => { store.update(key, { error: error.message }) })
-      }
-    }, [ctx, inputActions, draftRef])
-
-    /**
-     * The attach control, in the composer's tool row beside the shipped chrome.
+     * A forgery, like the spliced `+` group, and reported upstream with it. It
+     * keys on the textarea rather than on the card's hashed class name, and it
+     * re-seats itself when React replaces the container.
+     *
      * @param {object} props - the session standard kit.
-     * @returns {object} the button and its file input.
+     * @returns {object|null} the cards, or nothing to show.
      */
-    const AttachControl = ({ useInput, inputActions }) => {
-      const ctx = React.useContext(ClientContext)
-      const draft = useInput((state) => state.draft)
-      const draftRef = React.useRef(draft)
-      draftRef.current = draft
-      const send = useSend(ctx, inputActions, draftRef)
-      const inputRef = React.useRef(null)
+    const AttachmentCards = ({ useSession, sessionId }) => {
+      const rows = useRows()
+      const [dragging, setDragging] = React.useState(false)
+      const running = useSession((state) => state.running) ?? false
+      const host = React.useRef(null)
+
+      composer.sessionId = sessionId
+
+      // Move the node into the composer card, and put it back if React ever
+      // rebuilds the container out from under it.
+      React.useEffect(() => {
+        const seat = () => {
+          const node = host.current
+          if (node === null) return
+          const scroll = document.querySelector('textarea')?.parentElement?.parentElement
+          if (scroll === undefined || scroll === null) return
+          if (node.parentElement === scroll.parentElement && node.nextElementSibling === scroll) return
+          scroll.before(node)
+        }
+        seat()
+        const observer = new MutationObserver(seat)
+        observer.observe(document.body, { subtree: true, childList: true })
+        return () => { observer.disconnect() }
+      }, [])
+
+      // The turn claims the notices, so the cards have nothing left to say.
+      const wasRunning = React.useRef(running)
+      React.useEffect(() => {
+        if (running && !wasRunning.current) store.settle()
+        wasRunning.current = running
+      }, [running])
+
+      // Non-image file drags, taken before dsh sees them.
+      //
+      // dsh claims document-level drops for the image rail and answers anything
+      // else with "仅支持 PNG、JPG、WebP、GIF 格式的图片" — true of its own
+      // attachment plane and false of this deployment. Capture phase plus
+      // `stopPropagation` means its handler never runs for a drag carrying no
+      // image at all; a drag carrying one is left entirely alone.
+      React.useEffect(() => {
+        const onlyFiles = (transfer) => {
+          const items = [...(transfer?.items ?? [])].filter((item) => item.kind === 'file')
+          return items.length > 0 && items.every((item) => !String(item.type).startsWith('image/'))
+        }
+        // The hint is driven from here rather than from a window listener,
+        // because `stopPropagation` at capture means nothing further out ever
+        // sees these events.
+        let depth = 0
+        const guard = (event) => {
+          if (!onlyFiles(event.dataTransfer)) return
+          event.stopPropagation()
+          if (event.type === 'dragenter') { depth += 1; setDragging(true); return }
+          if (event.type === 'dragleave') {
+            depth = Math.max(0, depth - 1)
+            if (depth === 0) setDragging(false)
+            return
+          }
+          event.preventDefault()
+          if (event.type !== 'drop') return
+          depth = 0
+          setDragging(false)
+          sendFiles(event.dataTransfer?.files ?? [])
+        }
+        const kinds = ['dragenter', 'dragover', 'dragleave', 'drop']
+        for (const kind of kinds) document.addEventListener(kind, guard, true)
+        return () => { for (const kind of kinds) document.removeEventListener(kind, guard, true) }
+      }, [])
+
+      /**
+       * Take a card off the message, and the notice off the agent with it.
+       * @param {object} row - the card's row.
+       */
+      const detach = (row) => {
+        if (row.messageId !== undefined) {
+          void call('upload.retract', { sessionId, messageId: row.messageId }).catch(() => {})
+        }
+        store.remove(row.key)
+      }
+
+      const body = !dragging && rows.length === 0
+        ? null
+        : React.createElement(
+          'div',
+          { className: `${P}-cards` },
+          React.createElement(Style),
+          dragging && rows.length === 0 && React.createElement(
+            'div',
+            { className: `${P}-drop` },
+            '松手即可上传到你的沙箱',
+          ),
+          ...rows.map((row) => {
+            const done = row.path !== undefined
+            const failed = row.error !== undefined
+            return React.createElement(
+              'div',
+              { key: row.key, className: `${P}-card` },
+              React.createElement(Clip, null),
+              React.createElement(
+                'span',
+                { className: `${P}-text` },
+                React.createElement('span', { className: `${P}-name`, title: row.path ?? row.name }, row.name),
+                React.createElement(
+                  'span',
+                  { className: `${P}-meta${failed ? ` ${P}-fail` : ''}` },
+                  failed ? row.error : done ? humanBytes(row.size) : `上传中 ${humanBytes(row.sent)} / ${humanBytes(row.size)}`,
+                ),
+                !done && !failed && React.createElement(
+                  'span',
+                  { className: `${P}-bar` },
+                  React.createElement('i', {
+                    style: { width: `${String(row.size === 0 ? 100 : Math.round((row.sent / row.size) * 100))}%` },
+                  }),
+                ),
+              ),
+              React.createElement(
+                'button',
+                {
+                  type: 'button',
+                  className: `${P}-x`,
+                  // The wording dsh uses for the same gesture on an image is
+                  // "移除图片 <name>"; this is its sibling.
+                  title: `移除附件 ${row.name}`,
+                  'aria-label': `移除附件 ${row.name}`,
+                  onClick: () => { detach(row) },
+                },
+                '×',
+              ),
+            )
+          }),
+        )
+
+      // The wrapper is always rendered, empty or not: it is the node the effect
+      // above seats inside the composer card, and a null return would take that
+      // seat away every time the last card goes.
+      return React.createElement('div', { ref: host }, body)
+    }
+
+    // ------------------------------------------------------- the + splicing --
+
+    /**
+     * Copy a few computed properties off a live element.
+     * @param {Element} el - the element to read.
+     * @param {string[]} keys - CSS property names.
+     * @returns {object} a React style object.
+     */
+    const mirror = (el, keys) => {
+      const cs = getComputedStyle(el)
+      const out = {}
+      for (const key of keys) {
+        out[key.replace(/-([a-z])/g, (_, c) => c.toUpperCase())] = cs.getPropertyValue(key)
+      }
+      return out
+    }
+
+    /**
+     * Same, for an element found by selector; null when it is not there.
+     * @param {Element} root - where to look.
+     * @param {string} selector - what to look for.
+     * @param {string[]} keys - CSS property names.
+     * @returns {object|null} a React style object, or null.
+     */
+    const mirrorOf = (root, selector, keys) => {
+      const el = root.querySelector(selector)
+      return el === null ? null : mirror(el, keys)
+    }
+
+    /**
+     * The "附件" group, spliced onto the `+` menu.
+     *
+     * This one is a forgery, and it is here because the honest route is closed.
+     * The `+` button calls `inputTriggers.toggleSource('command', …)`, which
+     * seeds the menu with exactly one source — so a registered source appears
+     * when the person types `/` and never under `+`. Reported upstream; see
+     * docs/sandbox-pitfalls.md.
+     *
+     * What keeps it from being pure guesswork: everything it depends on is a
+     * role or an ARIA state, not a private class name. It finds the real panel
+     * as `[role=listbox]` inside the same overlay anchor it renders into, reads
+     * that panel's COMPUTED style rather than restating it — so it tracks the
+     * theme and any upstream restyle for free — and decides whether to show
+     * itself from `aria-expanded` on the `+` button, which is true only for the
+     * launcher and false while the person is typing a trigger.
+     *
+     * It will still break the day upstream changes the anchor's shape. That is
+     * the deal; the `/` group below is the part that does not.
+     *
+     * @returns {object|null} the spliced panel, or nothing.
+     */
+    const PlusAttachmentGroup = () => {
+      const [look, setLook] = React.useState(null)
+
+      React.useEffect(() => {
+        /**
+         * The panel currently being followed, and the observer following it.
+         * Its height changes while candidates load, and this side's offset is
+         * measured from its top edge.
+         */
+        const watched = { panel: null, observer: null }
+
+        /** Re-read the real panel and mirror it, or hide when there is none. */
+        const measure = () => {
+          // `aria-expanded` on the trigger is the launcher's own state: true
+          // only while `+` holds the menu open, false while the person types a
+          // trigger character — which is exactly when the honest `/` group
+          // renders instead, and this one must not double it.
+          const launcher = document.querySelector('button[aria-haspopup="listbox"][aria-expanded="true"]')
+          const panel = launcher === null ? null : document.querySelector('[role="listbox"]')
+          if (panel === null) {
+            watched.observer?.disconnect()
+            watched.panel = null
+            watched.observer = null
+            setLook(null)
+            return
+          }
+          if (watched.panel !== panel) {
+            watched.observer?.disconnect()
+            watched.panel = panel
+            watched.observer = new ResizeObserver(() => { measure() })
+            watched.observer.observe(panel)
+          }
+          const p = panel.getBoundingClientRect()
+          const cs = getComputedStyle(panel)
+          const title = panel.querySelector('[role="presentation"][data-source]')
+          const option = panel.querySelector('[role="option"]')
+          setLook({
+            // Viewport coordinates, so this makes no assumption about the
+            // overlay anchor's shape — only that the real panel is on screen.
+            left: p.left,
+            width: p.width,
+            // 4px is the gap the real panel already leaves above its anchor;
+            // reusing it stacks the two with the spacing dsh chose.
+            bottom: window.innerHeight - p.top + 4,
+            panel: {
+              background: cs.backgroundColor,
+              border: cs.border,
+              borderRadius: cs.borderRadius,
+              boxShadow: cs.boxShadow,
+              padding: cs.padding,
+              zIndex: cs.zIndex,
+            },
+            title: title === null ? null : mirror(title, ['color', 'font-size', 'line-height', 'padding']),
+            option: option === null ? null : mirror(option, ['color', 'font-size', 'line-height', 'padding', 'border-radius', 'gap']),
+            name: mirrorOf(panel, '[role="option"] > span:first-child', ['color', 'font-size', 'font-weight']),
+            description: mirrorOf(panel, '[role="option"] > span:last-child', ['color', 'font-size']),
+          })
+        }
+        // `aria-expanded` alone, not the subtree. Watching childList over the
+        // whole document would re-measure on every token of a streaming reply,
+        // and the one signal that matters — the launcher opening or closing —
+        // is an attribute flip.
+        //
+        // The panel is created in the same gesture, sometimes a frame after the
+        // attribute, so each flip measures twice: now, and on the next frame.
+        const soon = () => { measure(); requestAnimationFrame(measure) }
+        soon()
+        const observer = new MutationObserver(soon)
+        observer.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['aria-expanded'] })
+        window.addEventListener('resize', measure)
+        window.addEventListener('scroll', measure, true)
+        return () => {
+          observer.disconnect()
+          watched.observer?.disconnect()
+          window.removeEventListener('resize', measure)
+          window.removeEventListener('scroll', measure, true)
+        }
+      }, [])
+
+      const [hover, setHover] = React.useState(false)
+      if (look === null) return null
 
       return React.createElement(
         React.Fragment,
         null,
-        React.createElement(Style),
-        React.createElement('input', {
-          ref: inputRef,
-          type: 'file',
-          multiple: true,
-          style: { display: 'none' },
-          onChange: (event) => {
-            send(event.target.files ?? [])
-            // Cleared so that choosing the same file twice in a row still
-            // fires a change event.
-            event.target.value = ''
-          },
-        }),
         React.createElement(
-          'button',
-          {
-            type: 'button',
-            className: `${CSS_PREFIX}-trigger`,
-            title: '上传文件到沙箱',
-            'aria-label': '上传文件到沙箱',
-            onClick: () => { inputRef.current?.click() },
-          },
-          React.createElement('svg', {
-            width: 16, height: 16, viewBox: '0 0 16 16', fill: 'none', 'aria-hidden': true,
-          }, React.createElement('path', {
-            d: 'M8 11.5V3.5M8 3.5 5 6.5M8 3.5l3 3M3 11v1.5A1.5 1.5 0 0 0 4.5 14h7a1.5 1.5 0 0 0 1.5-1.5V11',
-            stroke: 'currentColor', strokeWidth: 1.3, strokeLinecap: 'round', strokeLinejoin: 'round',
-          })),
-        ),
-      )
-    }
-
-    /**
-     * The row above the composer: a drop target while a drag is in progress,
-     * and one line per upload until it is dismissed.
-     * @param {object} props - the session standard kit.
-     * @returns {object|null} the row, or nothing to say.
-     */
-    const UploadDock = ({ useInput, inputActions }) => {
-      const ctx = React.useContext(ClientContext)
-      const draft = useInput((state) => state.draft)
-      const draftRef = React.useRef(draft)
-      draftRef.current = draft
-      const send = useSend(ctx, inputActions, draftRef)
-      const rows = useRows()
-      const dragging = useFileDrag()
-      const [over, setOver] = React.useState(false)
-
-      if (!dragging && rows.length === 0) return null
-
-      return React.createElement(
-        'div',
-        { className: `${CSS_PREFIX}-dock` },
-        React.createElement(Style),
-        dragging && React.createElement(
           'div',
           {
-            className: `${CSS_PREFIX}-drop`,
-            'data-over': String(over),
-            onDragOver: (event) => { event.preventDefault(); setOver(true) },
-            onDragLeave: () => { setOver(false) },
-            onDrop: (event) => {
-              event.preventDefault()
-              setOver(false)
-              send(event.dataTransfer?.files ?? [])
+            role: 'presentation',
+            style: {
+              position: 'fixed',
+              left: `${String(look.left)}px`,
+              bottom: `${String(look.bottom)}px`,
+              width: `${String(look.width)}px`,
+              boxSizing: 'border-box',
+              ...look.panel,
             },
           },
-          '把文件拖到这里，上传到你的沙箱',
-        ),
-        ...rows.map((row) => React.createElement(
-          'div',
-          { key: row.key, className: `${CSS_PREFIX}-row` },
-          React.createElement('span', { className: `${CSS_PREFIX}-name`, title: row.path ?? row.name }, row.name),
-          React.createElement(
-            'span',
-            { className: `${CSS_PREFIX}-meta${row.error === undefined ? '' : ` ${CSS_PREFIX}-fail`}` },
-            row.error !== undefined
-              ? row.error
-              : row.path !== undefined
-                ? `已上传 · ${humanBytes(row.size)}`
-                : `${humanBytes(row.sent)} / ${humanBytes(row.size)}`,
-          ),
+          look.title !== null && React.createElement('div', { style: look.title }, GROUP),
           React.createElement(
             'button',
             {
               type: 'button',
-              className: `${CSS_PREFIX}-dismiss`,
-              title: '不再显示',
-              'aria-label': '不再显示',
-              onClick: () => { store.remove(row.key) },
+              style: {
+                ...look.option,
+                display: 'flex',
+                width: '100%',
+                boxSizing: 'border-box',
+                border: 'none',
+                textAlign: 'left',
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+                background: hover ? 'var(--dsw-alias-fill-secondary, rgb(38 49 72 / 6%))' : 'transparent',
+              },
+              onMouseEnter: () => { setHover(true) },
+              onMouseLeave: () => { setHover(false) },
+              // The composer keeps focus through its own chrome the same way.
+              onMouseDown: (event) => { event.preventDefault() },
+              onClick: () => {
+                // Closing is the launcher's own toggle: clicking inside the
+                // composer area is not the outside-pointer gesture that
+                // dismisses the menu.
+                document.querySelector('button[aria-haspopup="listbox"][aria-expanded="true"]')?.click()
+                pickAndSend()
+              },
             },
-            '×',
+            React.createElement('span', { style: look.name }, ITEM.name),
+            React.createElement('span', { style: look.description }, ITEM.description),
           ),
-        )),
+        ),
       )
     }
 
@@ -495,18 +707,17 @@ window.__ModuleLoader__.load({
      * @returns {object} the page.
      */
     const ConfigurationSection = () => {
-      const ctx = React.useContext(ClientContext)
       const [state, setState] = React.useState({ status: 'loading' })
 
       React.useEffect(() => {
         let live = true
-        void call(ctx, 'document.read', {})
+        void call('document.read', {})
           .then((value) => { if (live) setState({ status: 'ready', ...value }) })
           .catch((error) => { if (live) setState({ status: 'failed', message: error.message }) })
         return () => { live = false }
-      }, [ctx])
+      }, [])
 
-      const secondary = { color: 'var(--dsw-alias-label-secondary, #6b6b68)', fontSize: '13px' }
+      const secondary = { color: 'var(--dsw-alias-label-secondary, #81858c)', fontSize: '13px' }
 
       if (state.status === 'loading') {
         return React.createElement('p', { style: secondary }, '读取中…')
@@ -530,7 +741,7 @@ window.__ModuleLoader__.load({
           { style: { ...secondary, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' } },
           state.path,
         ),
-        React.createElement('pre', { className: `${CSS_PREFIX}-document` }, state.text === '' ? '（空）' : state.text),
+        React.createElement('pre', { className: `${P}-document` }, state.text === '' ? '（空）' : state.text),
         React.createElement(
           'div',
           { style: { display: 'flex', gap: '8px' } },
@@ -538,7 +749,7 @@ window.__ModuleLoader__.load({
             'button',
             {
               type: 'button',
-              className: `${CSS_PREFIX}-button`,
+              className: `${P}-button`,
               onClick: () => { void navigator.clipboard?.writeText(state.text) },
             },
             '复制',
@@ -547,7 +758,7 @@ window.__ModuleLoader__.load({
             'button',
             {
               type: 'button',
-              className: `${CSS_PREFIX}-button`,
+              className: `${P}-button`,
               onClick: () => {
                 // Saved from a Blob rather than fetched from a URL: the bytes
                 // are already here, and a URL for them would be a second
@@ -571,38 +782,61 @@ window.__ModuleLoader__.load({
     return {
       inject: ['slots', 'connection'],
       /**
-       * Register the three seats.
+       * Register the seats.
        * @param {object} ctx - client root context.
        */
       apply(ctx) {
-        /**
-         * Wrap one component so it can reach the plugin context.
-         * @param {Function} Component - the seat's component.
-         * @returns {Function} the same seat, with the context above it.
-         */
-        const withContext = (Component) => (props) =>
-          React.createElement(ClientContext.Provider, { value: ctx }, React.createElement(Component, props))
-
-        ctx.effect(
-          () => ctx.slots.inject('conversation.input.left', () => ctx.slots.register(
-            { name: 'conversation.input.left', id: 'sandbox-attach', order: 100 },
-            withContext(AttachControl),
-          )),
-          'sandbox-host: composer attach control',
-        )
+        plugin = ctx
 
         ctx.effect(
           () => ctx.slots.inject('conversation.input.dock', () => ctx.slots.register(
-            { name: 'conversation.input.dock', id: 'sandbox-uploads', order: 100 },
-            withContext(UploadDock),
+            { name: 'conversation.input.dock', id: 'sandbox-attachments', order: 100 },
+            AttachmentCards,
           )),
-          'sandbox-host: upload dock',
+          'sandbox-host: attachment cards',
         )
+
+        ctx.effect(
+          () => ctx.slots.inject('conversation.input.overlay', () => ctx.slots.register(
+            { name: 'conversation.input.overlay', id: 'sandbox-attach-group', order: 100 },
+            PlusAttachmentGroup,
+          )),
+          'sandbox-host: attachment group spliced onto the + menu',
+        )
+
+        // The honest entry: a trigger source, so "附件" is a group beside
+        // "命令" whenever the person types `/`. Optional rather than injected
+        // at the plugin level — a composition without ui-input-trigger should
+        // lose this entry, not the uploads.
+        ctx.inject(['inputTriggers'], (triggerCtx) => {
+          triggerCtx.effect(
+            () => triggerCtx.inputTriggers.registerSource({
+              trigger: '/',
+              // The menu titles a group by looking its source name up in the
+              // shell's dictionary and returning an unknown key verbatim, so
+              // the name IS the heading.
+              name: GROUP,
+              order: 50,
+              candidates: () => Promise.resolve([ITEM]),
+              /**
+               * Open the picker, and clear the trigger token.
+               * @returns {{text: string}} the token's replacement.
+               */
+              onPick: () => {
+                pickAndSend()
+                // Not 'handled': that outcome leaves the `/` the person typed
+                // sitting in the draft, because nothing consumes the span.
+                return { text: '' }
+              },
+            }),
+            'sandbox-host: 附件 trigger source',
+          )
+        })
 
         ctx.effect(
           () => ctx.slots.inject('settings.section', () => ctx.slots.register(
             { name: 'settings.section', id: 'configuration', order: 890, label: '配置文件' },
-            withContext(ConfigurationSection),
+            ConfigurationSection,
           )),
           'sandbox-host: settings configuration section',
         )
