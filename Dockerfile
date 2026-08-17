@@ -273,7 +273,15 @@ RUN npm install --omit=dev --no-audit --no-fund --install-links \
 # Written from the values rather than restated, so this cannot drift from the
 # `ENV` lines that remain the single home for them. It must stay the last thing
 # after them.
-RUN for name in DSH_BIN DSH_HOME HOME DSH_PERMISSION_MODE NODE_ENV NODE_EXTRA_CA_CERTS TZ; do \
+#
+# `PATH` is in the list for the same reason as the rest, and it was left out
+# once: the Python virtualenv lives at /opt/agent-python/bin, which only the
+# image's PATH names, so a tenant's agent found `officecli` in /usr/local/bin
+# and no `python` at all. Anything installed outside the default directories
+# has to be reachable through this file or it does not exist to the backend.
+RUN for name in PATH DSH_BIN DSH_HOME HOME DSH_PERMISSION_MODE NODE_ENV \
+                NODE_EXTRA_CA_CERTS TZ VIRTUAL_ENV MPLBACKEND MPLCONFIGDIR \
+                OFFICECLI_SKIP_UPDATE; do \
       printf 'export %s=%s\n' "$name" "$(printenv "$name")"; \
     done > /app/sandbox/env.sh
 

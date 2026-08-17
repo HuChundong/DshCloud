@@ -19,7 +19,11 @@ for p in /proc/[0-9]*; do
   # rather than the harness's own installation — not which of its two names is
   # printed.
   echo "cwd=$(readlink "$p/cwd")"
-  tr '\0' '\n' < "$p/environ" | grep -E '^(DSH_PERMISSION_MODE|NODE_ENV)='
+  # PATH among them, because the tools an agent reaches for are only on it if
+  # the entrypoint's environment file carried it: envd starts this process with
+  # a clean environment, and anything installed outside the default directories
+  # — the Python virtualenv, in particular — is invisible without it.
+  tr '\0' '\n' < "$p/environ" | grep -E '^(DSH_PERMISSION_MODE|NODE_ENV|PATH)='
   break
 done
 

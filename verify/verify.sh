@@ -365,6 +365,18 @@ check 'the tenant workspace is their own' 1 \
 check 'the gateway runs as production' production \
   "$(docker compose exec -T gateway printenv NODE_ENV | tr -d '\r')"
 
+# The toolchain an agent is promised, asked of the process that would run it.
+# The image's PATH is not the backend's: envd starts it with a clean
+# environment, so anything outside the default directories exists only if the
+# entrypoint's environment file carried PATH across. It did not, once, and the
+# sandbox shipped a Python nothing could find.
+BACKEND_PATH=$(fact PATH)
+check 'the backend PATH carries the python virtualenv' 1 \
+  "$(case "$BACKEND_PATH" in *"/opt/agent-python/bin"*) echo 1 ;; *) echo 0 ;; esac)"
+check 'every promised tool is reachable with it' '' \
+  "$(sandbox_run_script "$(sandbox_handles_of "$ALICE" | head -1)" verify-sandbox-tools.sh \
+      "PATH='$BACKEND_PATH'" | tr -d '\r' | tr -s ' ' | sed 's/ *$//')"
+
 # The agent inside runs with full access on the tenant's behalf, so anything in
 # its environment is something a prompt can be made to read back. Where the
 # runtime can withhold the model credential and have CubeEgress supply it on the
