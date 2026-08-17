@@ -12,7 +12,13 @@
 import assert from 'node:assert/strict'
 import process from 'node:process'
 
-const { SendLimit, callerAddress } = await import('../gateway/src/send-limit.js')
+// `./` when this file sits beside the gateway tree, as it does at /app in the
+// container; `../` when it is run from the repository, where it is one level
+// down. Both are supported because AGENTS.md asks contributors to run the
+// checks locally.
+const sendLimit = await import('./gateway/src/send-limit.js')
+  .catch(() => import('../gateway/src/send-limit.js'))
+const { SendLimit, callerAddress } = sendLimit
 
 let failures = 0
 

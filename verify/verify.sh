@@ -261,16 +261,19 @@ check 'a wrong code is rejected' 401 \
      --data-urlencode "email=$ALICE" --data-urlencode 'code=000000')"
 check 'an address that is not one is refused' 400 \
   "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$GATEWAY/login" --data-urlencode 'email=not-an-address')"
-# Registration is gated, so an address arriving without an invite must be
-# refused after proving the address rather than before — the first step has to
-# answer identically whether or not the address is registered.
+# Registration is gated, and the gate is now in front of the mail rather than
+# behind it: an unknown address arriving without an invite is issued no code at
+# all, so it never reaches the step that would refuse it. That is what stops the
+# form being a way to send mail to strangers, and the first step still answers
+# identically either way.
 if [ "$(psql "SELECT current_setting('server_version_num')" > /dev/null 2>&1; echo "${REGISTRATION:-invite}")" != open ]; then
   NEWCOMER="delivered+newcomer@$EMAIL_DOMAIN"
   psql "DELETE FROM accounts WHERE email = '$NEWCOMER'" > /dev/null
-  curl -s -o /dev/null -X POST "$GATEWAY/login" --data-urlencode "email=$NEWCOMER"
-  check 'registering without an invite is refused' 403 \
-    "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$GATEWAY/login" \
-       --data-urlencode "email=$NEWCOMER" --data-urlencode "code=$(code_for "$NEWCOMER")")"
+  psql "DELETE FROM challenges WHERE email = '$NEWCOMER'" > /dev/null
+  check 'asking without an invite answers as if it had sent' 200 \
+    "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$GATEWAY/login" --data-urlencode "email=$NEWCOMER")"
+  check 'but no code was issued' 0 \
+    "$(psql "SELECT count(*) FROM challenges WHERE email = '$NEWCOMER'")"
   check 'and left no account behind' 0 \
     "$(psql "SELECT count(*) FROM accounts WHERE email = '$NEWCOMER'")"
 fi
