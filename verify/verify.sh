@@ -376,9 +376,28 @@ echo
 # two failures it exists to catch showed up.
 # The console's confirmation dialog is the page's own rather than the browser's,
 # so nothing enforces that it appears, cancels, or closes except a check that
-# drives it. Skipped when the deployment names no administrator, since there is
-# then no console to reach.
-ADMIN=$(docker compose exec -T gateway printenv GATEWAY_ADMINS 2>/dev/null | tr -d '\r' | cut -d, -f1)
+# drives it.
+#
+# The address is named by the operator and never inferred. Taking the
+# deployment's first administrator would mean this run signs in as whoever that
+# is — reading their code straight out of the database and leaving sessions
+# behind under their identity. It did exactly that until this was fixed.
+#
+# `VERIFY_ADMIN` must already be in `GATEWAY_ADMINS`; the check below says so
+# rather than letting the browser meet an unexplained 403.
+ADMIN="${VERIFY_ADMIN:-}"
+if [ -n "$ADMIN" ] \
+   && ! docker compose exec -T gateway printenv GATEWAY_ADMINS 2>/dev/null | tr -d '\r' | tr ',' '\n' | grep -qxF "$ADMIN"; then
+  echo
+  echo "=== 15. The console asks before it deletes ==="
+  printf '  \033[31mFAIL\033[0m  VERIFY_ADMIN (%s) is not in GATEWAY_ADMINS\n' "$ADMIN"
+  NODE_FAIL=1
+  ADMIN=''
+elif [ -z "$ADMIN" ]; then
+  echo
+  echo '=== 15. The console asks before it deletes ==='
+  echo '     (skipped: set VERIFY_ADMIN to an address this deployment administers)'
+fi
 if [ -n "$ADMIN" ]; then
   echo
   echo '=== 15. The console asks before it deletes ==='
