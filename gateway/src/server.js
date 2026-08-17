@@ -34,6 +34,7 @@ import { canSendEmail } from './email.js'
 import { Invites, inviteRequired } from './invites.js'
 import { loginPage } from './login-page.js'
 import { DIAL_IN_TIMEOUT_MS, SandboxManager } from './sandboxes.js'
+import { SendLimit } from './send-limit.js'
 import { Settings } from './settings.js'
 import { handleSignIn } from './sign-in.js'
 import { Tokens, signedOutCookies } from './tokens.js'
@@ -130,7 +131,10 @@ const sandboxes = new SandboxManager({
  * database pool, the sandbox manager — is created once here and the modules stay
  * functions of their inputs.
  */
-const signInDeps = { accounts, invites, tokens, verification, readBody, version: DSH_VERSION }
+// What bounds the mail this deployment can be made to send. Held here because
+// it is per-process state with a lifetime, like the pool and the manager.
+const sendLimit = new SendLimit()
+const signInDeps = { accounts, invites, tokens, verification, sendLimit, readBody, version: DSH_VERSION }
 const consoleDeps = {
   accounts,
   invites,

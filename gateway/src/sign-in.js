@@ -13,6 +13,7 @@ import { isAdminEmail, isEmailAddress, normalizeEmail } from './accounts.js'
 import { isSecureRequest } from './auth.js'
 import { sendVerificationCode } from './email.js'
 import { inviteRequired, normalizeInvite } from './invites.js'
+import { callerAddress } from './send-limit.js'
 import { loginPage } from './login-page.js'
 import { signedInCookies } from './tokens.js'
 import { CODE_TTL_SECONDS } from './verification.js'
@@ -22,6 +23,7 @@ import { CODE_TTL_SECONDS } from './verification.js'
  * @typedef {object} SignInDeps
  * @property {import('./accounts.js').Accounts} accounts - who exists.
  * @property {import('./invites.js').Invites} invites - what admits a new address.
+ * @property {import('./send-limit.js').SendLimit} sendLimit - what bounds the mail this can be made to send.
  * @property {import('./tokens.js').Tokens} tokens - what a session is made of.
  * @property {import('./verification.js').Verification} verification - the code challenge.
  * @property {(req: import('node:http').IncomingMessage, limit: number) => Promise<Buffer | undefined>} readBody - the capped body reader.
@@ -39,6 +41,13 @@ import { CODE_TTL_SECONDS } from './verification.js'
  * @param {SignInDeps} deps - the stores this reads and writes.
  * @returns {Promise<void>} resolves once the response is complete.
  */
+/**
+ * What the page says whenever a code was requested — sent, withheld, or rate
+ * limited alike. One sentence for every outcome, because which one it was is
+ * exactly what must not be inferable from here.
+ */
+const SENT_NOTICE = '如果该邮箱可以接收验证码，我们已经发出了，请查收邮件。'
+
 export async function handleSignIn(req, res, deps) {
   const form = new URLSearchParams((await deps.readBody(req, 4096))?.toString('utf8') ?? '')
   const email = normalizeEmail(form.get('email') ?? '')
@@ -61,14 +70,39 @@ export async function handleSignIn(req, res, deps) {
 
   if (code === null) {
     // A wrong invite is said so now rather than after a round trip through
-    // someone's mail. Only one that was actually typed is checked: an empty
-    // field cannot be judged here, because whether it is needed depends on
-    // whether the address is registered, and answering that is what the whole
-    // two-step shape exists to avoid.
+    // someone's mail. Only one that was actually typed is checked; an empty
+    // field is judged below, where the answer does not reach the page.
     if (invite !== '' && !await deps.invites.usable(invite)) {
       page(403, { error: '邀请码无效或已被使用。' })
       return
     }
+
+    // One caller, whatever addresses they name. Checked before anything reads
+    // the database, so a flood costs a map lookup.
+    if (!deps.sendLimit.allowRequest(callerAddress(req))) {
+      page(200, { pending: email, notice: SENT_NOTICE })
+      return
+    }
+
+    // Whether a code may actually go out — and never a difference the page can
+    // show. Answering "no invite needed" for a registered address and "invite
+    // required" for an unregistered one turns this form into an oracle for who
+    // has an account here, so both answers look identical and only the mail
+    // differs. Without this the form sends mail from this domain to any address
+    // anyone names, which is a way to reach strangers rather than a way in.
+    //
+    // Open registration means anyone may have an account, so withholding the
+    // code would withhold the thing they are entitled to; there the two
+    // counters carry the load alone.
+    const mayReceive = !inviteRequired()
+      || isAdminEmail(email)
+      || await deps.accounts.exists(email)
+      || (invite !== '' && await deps.invites.usable(invite))
+    if (!mayReceive) {
+      page(200, { pending: email, notice: SENT_NOTICE })
+      return
+    }
+
     const challenge = await deps.verification.open(email)
     if ('retryAfterSeconds' in challenge) {
       // Answered 200, not 429. Nothing went wrong from where the person is
@@ -77,8 +111,17 @@ export async function handleSignIn(req, res, deps) {
       // browser's cue to log a failed navigation, which is what it means to it.
       page(200, {
         pending: email,
-        notice: `验证码已发送，请查收邮件。${challenge.retryAfterSeconds} 秒后可重新获取。`,
+        notice: `${SENT_NOTICE}${challenge.retryAfterSeconds} 秒后可重新获取。`,
       })
+      return
+    }
+    // The deployment's own ceiling, asked immediately before sending so it
+    // counts mail that left rather than requests that arrived. Failing closed
+    // is the point: an hour's worth of codes to strangers is already the shape
+    // of abuse, and continuing costs the sending domain its reputation.
+    if (!deps.sendLimit.allowSend()) {
+      console.error(`gateway: hourly send budget spent; withholding a code for ${email}`)
+      page(200, { pending: email, notice: SENT_NOTICE })
       return
     }
     try {
@@ -90,7 +133,7 @@ export async function handleSignIn(req, res, deps) {
       page(502, { error: '验证码发送失败，请稍后再试。' })
       return
     }
-    page(200, { pending: email, notice: '验证码已发送，请查收邮件。' })
+    page(200, { pending: email, notice: SENT_NOTICE })
     return
   }
 

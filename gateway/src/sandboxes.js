@@ -192,10 +192,10 @@ export class SandboxManager {
    */
   async reapIdle() {
     const deadline = Date.now() - IDLE_TTL_MS
-    // Snapshotted, because `release` deletes from this map and iterating it
-    // while it is being mutated skips entries.
-    // oxlint-disable-next-line no-useless-spread
-    for (const [username, record] of [...this.byUser]) {
+    // `release` deletes the entry this iteration is on, which a Map allows: an
+    // entry removed before it is reached is simply not reached, and the one
+    // being visited has already been handed over.
+    for (const [username, record] of this.byUser) {
       const active = this.options.lastActiveAt(record.sandboxId) ?? 0
       if (Math.max(record.lastUsedAt, active) > deadline) continue
       await this.release(username).catch((error) => {
