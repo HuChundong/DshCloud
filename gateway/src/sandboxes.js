@@ -22,6 +22,18 @@ const runtime = selectRuntime()
 /** How long a sandbox may sit unused before it is reclaimed. */
 const IDLE_TTL_MS = Number(process.env.SANDBOX_IDLE_TTL_MS ?? 30 * 60 * 1000)
 
+/**
+ * How long a sandbox may sit unused once nobody is looking at it.
+ *
+ * A browser holds the `/api` event socket open for as long as its page is
+ * loaded, so no socket means the tab is closed. Waiting the full idle TTL then
+ * holds a machine for someone who has left; coming back costs the seconds a
+ * sandbox takes to start, and their files and history are on the volume either
+ * way. Nothing here applies while an agent is working — that is decided before
+ * either TTL is consulted.
+ */
+const DEPARTED_TTL_MS = Number(process.env.SANDBOX_DEPARTED_TTL_MS ?? 5 * 60 * 1000)
+
 /** How often to scan for idle sandboxes. */
 const REAP_INTERVAL_MS = 60_000
 
@@ -180,24 +192,37 @@ export class SandboxManager {
   }
 
   /**
-   * Reclaim sandboxes whose owner has been gone longer than the idle TTL.
+   * Reclaim sandboxes nobody is using.
    *
-   * Idle means no traffic, not no new request. `lastUsedAt` moves when a
-   * request starts, which misses the case that matters most: one agent turn can
-   * run for an hour, and it streams its answer over a socket opened before it
-   * began, so on that signal alone the sandbox looks untouched and gets
-   * destroyed with the turn's work inside it. The tunnel's own last frame
-   * covers that, and carries no heartbeat to confound it — an abandoned browser
-   * tab holds its socket open in silence and is still reclaimed on time.
+   * Three states, because "idle" turns out to be two questions:
+   *
+   * - **Something is working in there.** Never reclaimed, however quiet the
+   *   tunnel is. A turn with no browser attached sends nothing at all — the
+   *   page that would receive its output is closed — so traffic alone would
+   *   destroy exactly the long task this exists to run.
+   * - **Idle, page still open.** The tenant is present but not asking, and
+   *   gets the full idle TTL.
+   * - **Idle, nobody looking.** A browser holds its `/api` event socket for as
+   *   long as the page is loaded, so no socket is the tenant having left. They
+   *   get the short one: coming back costs the seconds a sandbox takes to
+   *   start, and their files and history are on the volume regardless.
+   *
+   * Traffic still decides *when* within a state, because `lastUsedAt` moves
+   * only as a request starts and would call a streaming sandbox untouched.
    */
   async reapIdle() {
-    const deadline = Date.now() - IDLE_TTL_MS
+    const now = Date.now()
     // `release` deletes the entry this iteration is on, which a Map allows: an
     // entry removed before it is reached is simply not reached, and the one
     // being visited has already been handed over.
     for (const [username, record] of this.byUser) {
+      const presence = this.options.presenceOf(record.sandboxId)
+      // A sandbox with no tunnel reports nothing and protects nothing, so it is
+      // judged on traffic alone — which is what one that never dialled in is.
+      if (presence?.busy === true) continue
+      const ttl = presence?.attached === true ? IDLE_TTL_MS : DEPARTED_TTL_MS
       const active = this.options.lastActiveAt(record.sandboxId) ?? 0
-      if (Math.max(record.lastUsedAt, active) > deadline) continue
+      if (Math.max(record.lastUsedAt, active) > now - ttl) continue
       await this.release(username).catch((error) => {
         console.error(`gateway: reaping ${username} failed: ${error.message}`)
       })

@@ -32,6 +32,16 @@ class SandboxTunnel {
     this.sandboxId = sandboxId
     this.socket = socket
     /**
+     * Whether anything is working inside this sandbox, as it last told us.
+     *
+     * The half of "idle" that traffic cannot see: an agent turn with no browser
+     * attached sends nothing through here, so on traffic alone the sandbox
+     * looks abandoned while it is doing the work it exists for. Starts false
+     * because a sandbox that has said nothing has started nothing.
+     */
+    this.agentBusy = false
+
+    /**
      * When a frame last crossed this tunnel in either direction.
      *
      * What "idle" is judged on. The tunnel carries no heartbeat — every frame
@@ -150,6 +160,10 @@ class SandboxTunnel {
   handle(frame) {
     this.lastActiveAt = Date.now()
     switch (frame.t) {
+      case 'activity': {
+        this.agentBusy = frame.busy === true
+        return
+      }
       case 'httpres': {
         const stream = this.httpStreams.get(frame.id)
         if (stream === undefined) return
@@ -271,6 +285,25 @@ export class TunnelServer {
    */
   get(sandboxId) {
     return this.tunnels.get(sandboxId)
+  }
+
+  /**
+   * Whether a browser is attached to a sandbox, and whether anything is
+   * working inside it.
+   *
+   * The two are separate questions and the idle sweep needs both. A browser
+   * holds the `/api` event socket open for as long as its page is loaded, so
+   * its absence means the person closed the tab — which is when a sandbox
+   * doing nothing may go quickly. What it must never mean is reclaiming one
+   * mid-turn, which is what `busy` is for.
+   *
+   * @param {string} sandboxId - the sandbox to ask about.
+   * @returns {{attached: boolean, busy: boolean} | undefined} the two, or undefined when no tunnel is connected.
+   */
+  presenceOf(sandboxId) {
+    const tunnel = this.tunnels.get(sandboxId)
+    if (tunnel === undefined) return undefined
+    return { attached: tunnel.wsStreams.size > 0, busy: tunnel.agentBusy }
   }
 
   /**

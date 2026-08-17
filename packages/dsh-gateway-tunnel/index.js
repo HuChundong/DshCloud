@@ -50,6 +50,45 @@ const RECONNECT_DELAY_MS = 1000
  * @param {import('@deepseek-ai/cordis').Context} ctx - the plugin context, with `connection` and `apiProxy` injected.
  */
 export function apply(ctx) {
+  /**
+   * Agents currently working, by the identity dsh gives them.
+   *
+   * A set rather than a flag because a tenant can have several agents at once —
+   * a subagent runs beside the one that spawned it — and the sandbox is busy
+   * while any of them is.
+   * @type {Set<unknown>}
+   */
+  const busyAgents = new Set()
+
+  /**
+   * Tell the gateway whether anything is working in here.
+   *
+   * This is the half of "idle" that traffic cannot see. A turn that runs for an
+   * hour with nobody watching sends nothing through the tunnel — the browser
+   * that would have been receiving its output is closed — so on traffic alone
+   * the sandbox looks abandoned and is reclaimed with the work inside it.
+   *
+   * Sent on transitions rather than on a timer, because a timer is traffic and
+   * would make every sandbox look busy to the very check this informs.
+   */
+  const reportActivity = () => { send({ t: 'activity', busy: busyAgents.size > 0 }) }
+
+  // `agent` identifies which one changed; a subagent transitions independently
+  // of the agent that spawned it.
+  ctx.on('agent/status', ({ agent, status }) => {
+    const before = busyAgents.size > 0
+    if (status === 'running') busyAgents.add(agent)
+    else busyAgents.delete(agent)
+    if ((busyAgents.size > 0) !== before) reportActivity()
+  })
+
+  // An agent disposed mid-turn never reports going idle, and would otherwise
+  // hold the sandbox open for as long as the process lives.
+  ctx.on('agent/disposed', ({ agent }) => {
+    if (!busyAgents.delete(agent)) return
+    if (busyAgents.size === 0) reportActivity()
+  })
+
   const gatewayUrl = process.env.GATEWAY_TUNNEL_URL
   const sandboxId = process.env.SANDBOX_ID
   const token = process.env.SANDBOX_TOKEN
@@ -192,6 +231,10 @@ export function apply(ctx) {
     dialed.on('open', () => {
       ctx.logger?.info?.(`gateway-tunnel: connected to ${gatewayUrl} as ${sandboxId}`)
       send({ t: 'hello', sandboxId })
+      // Stated on every connection, because the gateway forgets what it knew
+      // about a sandbox whose tunnel dropped, and an agent mid-turn when the
+      // socket reconnects would otherwise look idle until its next transition.
+      send({ t: 'activity', busy: busyAgents.size > 0 })
     })
     dialed.on('message', (raw) => {
       let frame

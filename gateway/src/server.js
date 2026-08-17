@@ -123,6 +123,7 @@ const sandboxes = new SandboxManager({
   // server authorizes dial-ins against this manager — and the idle sweep that
   // calls it runs on a timer, long after both are built.
   lastActiveAt: (sandboxId) => tunnels.lastActiveAt(sandboxId),
+  presenceOf: (sandboxId) => tunnels.presenceOf(sandboxId),
 })
 /**
  * What the two page modules are handed.

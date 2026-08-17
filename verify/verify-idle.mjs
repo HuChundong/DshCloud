@@ -18,7 +18,10 @@ import process from 'node:process'
 const TTL_MS = 30 * 60 * 1000
 process.env.SANDBOX_IDLE_TTL_MS = String(TTL_MS)
 
+// `./` beside the gateway tree at /app in the container; `../` from the
+// repository, where this sits one level down.
 const { SandboxManager } = await import('./gateway/src/sandboxes.js')
+  .catch(() => import('../gateway/src/sandboxes.js'))
 
 let failures = 0
 
@@ -44,15 +47,19 @@ function check(label, body) {
  * @param {object} times - the two signals.
  * @param {number} times.lastUsedAt - when a request last started, as an age in milliseconds.
  * @param {number | undefined} times.lastActiveAt - when a frame last crossed the tunnel, as an age in milliseconds; undefined when no tunnel is connected.
+ * @param {boolean} [times.attached] - whether a browser holds the event socket.
+ * @param {boolean} [times.busy] - whether anything is working inside the sandbox.
+ * @param {boolean} [times.tunnel] - whether a tunnel is connected at all.
  * @returns {{manager: object, released: string[]}} the manager and the names it reclaims.
  */
-function managerWith({ lastUsedAt, lastActiveAt }) {
+function managerWith({ lastUsedAt, lastActiveAt, attached = true, busy = false, tunnel = true }) {
   const now = Date.now()
   const released = []
   const manager = new SandboxManager({
     gatewayTunnelUrl: 'ws://10.100.0.1:8090/_tunnel',
     env: async () => ({}),
     lastActiveAt: () => (lastActiveAt === undefined ? undefined : now - lastActiveAt),
+    presenceOf: () => (tunnel ? { attached, busy } : undefined),
   })
   clearInterval(manager.timer)
   manager.byUser.set('alice', {
@@ -109,6 +116,55 @@ console.log('=== the idle sweep ===')
   const { manager, released } = managerWith({ lastUsedAt: 29 * MINUTE, lastActiveAt: 29 * MINUTE })
   await manager.reapIdle()
   check('spares one just inside the TTL', () => { assert.deepEqual(released, []) })
+}
+
+console.log('\n=== the two questions "idle" turns out to be ===')
+
+{
+  // The case traffic cannot see at all: a long turn with the page closed sends
+  // nothing through the tunnel, and judging on traffic alone destroys it.
+  const { manager, released } = managerWith({
+    lastUsedAt: 90 * MINUTE, lastActiveAt: 90 * MINUTE, attached: false, busy: true,
+  })
+  await manager.reapIdle()
+  check('spares a working sandbox nobody is watching', () => { assert.deepEqual(released, []) })
+}
+
+{
+  const { manager, released } = managerWith({
+    lastUsedAt: 10 * MINUTE, lastActiveAt: 10 * MINUTE, attached: false, busy: false,
+  })
+  await manager.reapIdle()
+  check('reclaims an idle one once the page is closed', () => {
+    assert.deepEqual(released, ['alice'])
+  })
+}
+
+{
+  // The same age, but the tenant is still sitting there. They keep the long TTL.
+  const { manager, released } = managerWith({
+    lastUsedAt: 10 * MINUTE, lastActiveAt: 10 * MINUTE, attached: true, busy: false,
+  })
+  await manager.reapIdle()
+  check('spares that same age while the page is open', () => { assert.deepEqual(released, []) })
+}
+
+{
+  const { manager, released } = managerWith({
+    lastUsedAt: 2 * MINUTE, lastActiveAt: 2 * MINUTE, attached: false, busy: false,
+  })
+  await manager.reapIdle()
+  check('and spares one only just closed', () => { assert.deepEqual(released, []) })
+}
+
+{
+  // No tunnel means nothing to ask, so it falls back to the departed TTL: a
+  // sandbox that never dialled in is not one somebody is watching.
+  const { manager, released } = managerWith({
+    lastUsedAt: 10 * MINUTE, lastActiveAt: undefined, tunnel: false,
+  })
+  await manager.reapIdle()
+  check('reclaims one whose tunnel never arrived', () => { assert.deepEqual(released, ['alice']) })
 }
 
 console.log(failures === 0 ? '\n空闲回收检查全部通过' : `\n${failures} 项失败`)
