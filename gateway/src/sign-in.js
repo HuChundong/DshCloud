@@ -109,10 +109,10 @@ export async function handleSignIn(req, res, deps) {
       // standing: they asked for a code and one is already on its way to them,
       // and the page shows the same code field it would have. A 4xx here is the
       // browser's cue to log a failed navigation, which is what it means to it.
-      page(200, {
-        pending: email,
-        notice: `${SENT_NOTICE}${challenge.retryAfterSeconds} 秒后可重新获取。`,
-      })
+      // No countdown, and no other detail. A cooldown only exists for an
+      // address a code was actually sent to, so appending its seconds says the
+      // address is one of those — the very thing this notice must not reveal.
+      page(200, { pending: email, notice: SENT_NOTICE })
       return
     }
     // The deployment's own ceiling, asked immediately before sending so it
