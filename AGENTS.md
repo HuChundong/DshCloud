@@ -113,6 +113,27 @@ a snapshot taken at creation, so pointing an existing one at a new image leaves
 every sandbox restoring the old snapshot. See "Running on CubeSandbox" in the
 [README](README.md).
 
+## The deployment tracks the repository
+
+A deployment host is a checkout, not a copy. It updates with `git pull`, which
+is also what makes "which commit is running there" a question with an answer —
+the previous arrangement was rsync from a laptop, and the host silently held a
+`verify.sh` two commits behind the fix it needed.
+
+```sh
+ssh <host> 'cd /path/to/dshcloud && git pull --ff-only'
+```
+
+Read-only access is a GitHub deploy key on the host; nothing there can push.
+`.env` and `sandbox/egress-ca/*.crt` are gitignored and belong to the host, so a
+pull never touches them.
+
+**A pull is not a deployment.** What tenants run is the images, and under
+CubeSandbox the template built from them — so a change to anything under
+`gateway/`, `web/`, `sandbox/`, or `packages/` reaches nobody until it is
+rebuilt, and a sandbox change also needs a new template. A change to `verify/`,
+`scripts/`, or `docs/` takes effect on pull alone.
+
 ## Documentation
 
 Every page is a pair: `X.md` in English and `X.zh.md` in Chinese, each linking

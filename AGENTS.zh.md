@@ -92,6 +92,23 @@ cd verify && SANDBOX_RUNTIME=cube COMPOSE_FILE=../compose.yml:../compose.cube.ym
 改了 sandbox 镜像还意味着要建新的 CubeSandbox 模板——模板是创建那一刻拍下的快照，把已有模板
 指向新镜像，每个沙箱还原的仍是旧快照。见 [README](README.zh.md) 的「在 CubeSandbox 上运行」。
 
+## 部署跟随仓库
+
+部署机是一份 checkout，不是一份拷贝。它用 `git pull` 更新——这也让「那台机器上跑的是哪个
+commit」成为一个有答案的问题。此前的做法是从笔记本 rsync，结果那台机器悄悄持有一个比修复
+落后两个提交的 `verify.sh`。
+
+```sh
+ssh <host> 'cd /path/to/dshcloud && git pull --ff-only'
+```
+
+只读权限由主机上的一把 GitHub deploy key 提供，那台机器推不了任何东西。`.env` 与
+`sandbox/egress-ca/*.crt` 被 gitignore、归主机所有，pull 不会碰它们。
+
+**pull 不等于部署。** 租户跑的是镜像，CubeSandbox 下还有由镜像构建出的模板——所以
+`gateway/`、`web/`、`sandbox/`、`packages/` 下的任何改动，在重新构建之前抵达不了任何人，
+而改了 sandbox 还需要建新模板。只改 `verify/`、`scripts/`、`docs/` 的话，pull 即生效。
+
 ## 文档
 
 每一页都是一对：英文 `X.md` 与中文 `X.zh.md`，互相链接，`##` 章节相同且顺序一致。英文是默认
