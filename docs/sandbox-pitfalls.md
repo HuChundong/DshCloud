@@ -316,6 +316,31 @@ would have been none of those things.
 Note also what the channel name may be: `/^\/[A-Za-z0-9._~-]+$/`. One segment.
 `/api/files` is not a legal channel, so a plane cannot be nested under another.
 
+## A service you did not inject fails where you use it, not where you mount
+
+The tunnel plugin injects `connection` and `apiProxy`, and calls
+`ctx.setTimeout` in one place: the redial after a dropped tunnel. cordis refuses
+a service the reading context did not inject — and refuses it at the read, not
+at the mount — so that one line threw, inside a WebSocket close handler where
+nothing catches it, taking the tenant's whole backend process down with the
+tunnel.
+
+It survived for weeks because of what it looked like from outside: a sandbox
+that restarts when the gateway does. That is close enough to what one expects of
+a gateway restart that nobody asked why, and the acceptance suite agreed — it
+restarts the gateway and then checks a live session still works, which it does,
+because the gateway rebuilds the sandbox it just killed.
+
+It surfaced from a throwaway probe that booted the sandbox image against a
+gateway URL that could not connect. The first close arrived in milliseconds
+instead of never, and the process died in the logs.
+
+Two things generalize. A dependency used on one rare path is a dependency the
+happy path cannot prove, so `inject` has to be read against every use of `ctx`,
+not against the ones the plugin performs at startup. And a failure that
+resembles a normal event is the kind that lasts: "restarts with the gateway"
+needed no explanation, so it never got one.
+
 ## What generalizes
 
 - **A snapshot cannot hold what is only knowable later.** Everything
@@ -338,3 +363,8 @@ Note also what the channel name may be: `/^\/[A-Za-z0-9._~-]+$/`. One segment.
   for weeks.
 - **A public method is not necessarily an available one.** `rpc.intercept` is
   documented, exported, and already taken.
+- **Read `inject` against every use of `ctx`, not the ones at startup.** A
+  service used on one rare path is one the happy path cannot prove.
+- **A failure that looks like a normal event is the kind that lasts.** "The
+  sandbox restarts when the gateway does" needed no explanation, so it never
+  got one.
