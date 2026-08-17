@@ -144,8 +144,13 @@ registry=$(docker run --rm --entrypoint npm "$SANDBOX" config get registry 2>/de
 check 'npm has a registry' 1 "$([ -n "$registry" ] && echo 1 || echo 0)"
 printf '        npm  -> %s\n' "${registry:-unset}"
 
+# `pip config list` rather than `pip config get`: get exits non-zero when the
+# key is unset, and an `|| echo <default>` around it reports the default as
+# though pip had chosen it — which is how the first version of this check
+# passed while claiming the mirror was not configured.
 index=$(docker run --rm --entrypoint sh "$SANDBOX" -c \
-  'pip config get global.index-url 2>/dev/null || echo https://pypi.org/simple' | tr -d '\r')
+  "pip config list 2>/dev/null | sed -n \"s/^global.index-url='\\(.*\\)'$/\\1/p\"" | tr -d '\r')
+[ -n "$index" ] || index=https://pypi.org/simple
 check 'pip has an index' 1 "$([ -n "$index" ] && echo 1 || echo 0)"
 printf '        pip  -> %s\n' "${index:-unset}"
 

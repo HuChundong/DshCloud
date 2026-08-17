@@ -394,6 +394,45 @@ name uploaded on one day are two files. The destination is
 volume whenever they have one, so an upload outlives the sandbox that received
 it.
 
+## What a tenant's agent is given
+
+The sandbox is where the work happens, so what is installed in it is the
+difference between an agent that can answer a question about an attached
+spreadsheet and one that can only describe the file. It ships:
+
+- the search and text tools an agent reaches for — `rg`, `fd`, `jq`, `tree`,
+  `patch`, `file`, `less`;
+- archives in both directions — `unzip`, `zip`, `7z`, `zstd`, `bsdtar`;
+- documents — `pdftotext`, `sqlite3`, and `officecli`, one binary that reads
+  and writes xlsx, docx, pptx and pdf without a headless office suite behind
+  it;
+- reachability — `dig`, `ping`, `ip`, `nc`, which is the first thing anyone
+  debugs in a sandbox whose whole architecture is dialling out;
+- a Python with pandas, duckdb, the spreadsheet and PDF readers, pillow and
+  matplotlib already in it;
+- and a CJK font, because a chart with Chinese labels renders as boxes without
+  one and nothing about that failure says "font".
+
+Python is a virtualenv on `PATH`, not the system interpreter. Debian marks that
+one externally managed, so `pip install` there fails by design and
+`--break-system-packages` is a way of saying the design was wrong. The venv
+gives a tenant an ordinary `pip install` that cannot damage the distribution's
+Python — and both package managers carry the deployment's mirror *into* the
+image (`/etc/pip.conf`, npm's global config), so a tenant's own install reaches
+the same mirror the build did rather than waiting out the public index.
+
+The cost is the number that matters: the image went from 617 MB to 1050 MB, and
+a CubeSandbox template is a snapshot of it. That is why the list is shorter than
+the one it was borrowed from. Measured in the built image and then cut:
+`pyarrow` (152 MB, and duckdb reads parquet in 58), `plotly` (42 MB, and what a
+chat window shows is the static image matplotlib already draws), `libgl1` (41
+packages of OpenGL that nothing here draws through), `unar` (18 packages of
+GNUstep for archives `bsdtar` reads). Each is one install away.
+
+Not taken at all: database drivers, because one deployment's databases are not
+another's; and a compiler, because every wheel here is prebuilt for this
+platform and a source build is the one thing a tenant has to arrange itself.
+
 ## Permissions inside a sandbox
 
 Sandboxes run with `DSH_PERMISSION_MODE=danger-full-access`, which the base

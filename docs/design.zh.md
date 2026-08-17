@@ -287,6 +287,36 @@ priority 是格子的遮蔽序位，数值最小者渲染。
 文件。落点是 `<workspace>/uploads/<日期>/`，而只要租户有卷，`/workspace` 就是指向那个卷的
 符号链接，所以上传的东西比收下它的那个沙箱活得久。
 
+## 租户的 agent 拿到什么
+
+活是在沙箱里干的，所以里面装了什么，直接决定 agent 是"能回答关于这张表的问题"还是"只能
+描述这个文件"。它带着：
+
+- agent 真正会去敲的搜索与文本工具——`rg`、`fd`、`jq`、`tree`、`patch`、`file`、`less`；
+- 双向的归档——`unzip`、`zip`、`7z`、`zstd`、`bsdtar`；
+- 文档——`pdftotext`、`sqlite3`，以及 `officecli`：一个二进制就能读写 xlsx/docx/pptx/pdf，
+  背后不需要一整套无头办公套件；
+- 连通性——`dig`、`ping`、`ip`、`nc`，这是任何人在一个「整套架构就是主动外拨」的沙箱里
+  第一个要查的东西；
+- 一个已经装好 pandas、duckdb、表格与 PDF 读取、pillow 和 matplotlib 的 Python；
+- 以及一套中文字体——没有它，带中文标签的图渲染出来全是方块，而报错里不会出现「字体」
+  两个字。
+
+Python 是挂在 `PATH` 上的 virtualenv，不是系统解释器。Debian 把系统那个标记为外部管理，
+所以在它上面 `pip install` 是设计上就会失败的，而 `--break-system-packages` 等于说这个设计
+错了。venv 让租户能正常 `pip install`，且伤不到发行版的 Python——而且两个包管理器都把这套
+部署的镜像源**烧进了镜像**（`/etc/pip.conf`、npm 全局配置），所以租户自己装包走的是构建时
+用的同一个源，而不是干等公共索引。
+
+代价就是那个真正要紧的数字：镜像从 617 MB 变成 1050 MB，而 CubeSandbox 模板是它的快照。
+这也是为什么这份清单比它借鉴的那份短。以下都是在构建出的镜像里量过之后砍掉的：`pyarrow`
+（152 MB，而 duckdb 用 58 MB 就能读 parquet）、`plotly`（42 MB，而聊天窗口能显示的是
+matplotlib 已经在画的静态图）、`libgl1`（41 个包的 OpenGL，这里没有任何东西经它绘图）、
+`unar`（18 个包的 GNUstep，读的归档 `bsdtar` 都能读）。每一个都只差一条安装命令。
+
+完全没拿的：数据库驱动——一个部署的数据库不是另一个部署的数据库；以及编译器——这里每个
+wheel 都有对应平台的预编译版，而从源码构建是唯一需要租户自己张罗的事。
+
 ## 沙箱内的权限
 
 沙箱以 `DSH_PERMISSION_MODE=danger-full-access` 运行，base bundle 会用这一个变量同时决定
