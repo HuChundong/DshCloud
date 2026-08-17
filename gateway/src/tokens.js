@@ -29,6 +29,15 @@ const ACCESS_TTL_SECONDS = 15 * 60
 /** How long a browser may stay signed in without presenting a code again. */
 const REFRESH_TTL_SECONDS = Number(process.env.REFRESH_TTL_SECONDS ?? 30 * 24 * 60 * 60)
 
+/**
+ * How long a rotated token still answers with its replacement.
+ *
+ * Long enough to cover the burst a waking browser makes with one cookie, short
+ * enough that a token replayed later is still refused. Seconds, not minutes:
+ * the requests it exists for are made at once.
+ */
+const ROTATION_GRACE_SECONDS = Number(process.env.REFRESH_GRACE_SECONDS ?? 30)
+
 /** Cookie carrying the access token. */
 export const ACCESS_COOKIE = 'dsh_gw_access'
 
@@ -111,19 +120,51 @@ export class Tokens {
    * in which a copy still works.
    *
    * @param {string | undefined} token - the presented token, if any.
-   * @returns {Promise<string | undefined>} the owning address, or undefined when the token is unknown or spent.
+   * @returns {Promise<{email: string, refresh: string} | undefined>} the owning address and the token that replaces the one presented, or undefined when it is unknown, expired, or replayed after its grace.
    */
   async spendRefresh(token) {
     if (token === undefined) return undefined
-    // Deleting and reading in one statement is what makes spending atomic: two
-    // requests presenting the same token cannot both be told it was theirs.
-    // Expiry is a condition of the delete rather than a sweep, so a token past
-    // its date is already unspendable.
+
+    // Rotate in one statement. The `WHERE spent_at IS NULL` is what makes it
+    // atomic: of several requests presenting the same token, exactly one
+    // updates the row and learns it rotated it.
+    //
+    // The old row is kept rather than deleted, because a browser waking from
+    // the background asks several times at once — session history, the preset
+    // list, the event socket — all carrying the cookie it went to sleep with.
+    // Deleting on first use answered one of them and told the rest their token
+    // was unknown, which is a signed-in person being asked for a code again.
+    const replacement = randomBytes(32).toString('hex')
     const { rows } = await this.pool.query(
-      'DELETE FROM refresh_tokens WHERE token = $1 AND expires_at > now() RETURNING email',
-      [token],
+      `UPDATE refresh_tokens
+          SET spent_at = now(), replaced_by = $2
+        WHERE token = $1 AND spent_at IS NULL AND expires_at > now()
+      RETURNING email`,
+      [token, replacement],
     )
-    return rows.length === 0 ? undefined : rows[0].email
+    if (rows.length > 0) {
+      await this.pool.query(
+        `INSERT INTO refresh_tokens (token, email, expires_at)
+         VALUES ($1, $2, now() + make_interval(secs => $3))`,
+        [replacement, rows[0].email, REFRESH_TTL_SECONDS],
+      )
+      return { email: rows[0].email, refresh: replacement }
+    }
+
+    // It did not rotate. Either another request just did — in which case this
+    // one is the same browser a moment later and gets that same replacement —
+    // or the token is being replayed long after its use, which is what a stolen
+    // one looks like and is refused.
+    const spent = await this.pool.query(
+      `SELECT email, replaced_by
+         FROM refresh_tokens
+        WHERE token = $1
+          AND replaced_by IS NOT NULL
+          AND spent_at > now() - make_interval(secs => $2)`,
+      [token, ROTATION_GRACE_SECONDS],
+    )
+    if (spent.rows.length === 0) return undefined
+    return { email: spent.rows[0].email, refresh: spent.rows[0].replaced_by }
   }
 
   /**

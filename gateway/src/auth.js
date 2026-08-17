@@ -74,12 +74,14 @@ export async function authenticate(req, tokens, accounts) {
   // The access token is missing or expired. A refresh token is the only thing
   // that can replace it, and spending it is where revocation takes effect:
   // signing out, suspension, and deletion all work by making this step fail.
-  const email = await tokens.spendRefresh(cookies[REFRESH_COOKIE])
-  if (email === undefined) return undefined
-  const account = await accounts.read(email)
+  const spent = await tokens.spendRefresh(cookies[REFRESH_COOKIE])
+  if (spent === undefined) return undefined
+  const account = await accounts.read(spent.email)
   if (account === undefined || account.disabled) return undefined
 
+  // The replacement comes from the rotation rather than being minted here, so
+  // the several requests a waking browser makes at once all end up holding the
+  // same one instead of each issuing another.
   const access = await tokens.issueAccess(account)
-  const refresh = await tokens.issueRefresh(account)
-  return { account, cookies: signedInCookies(access, refresh, isSecureRequest(req)) }
+  return { account, cookies: signedInCookies(access, spent.refresh, isSecureRequest(req)) }
 }

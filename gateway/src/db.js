@@ -50,6 +50,18 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
   email      text        NOT NULL REFERENCES accounts(email) ON DELETE CASCADE ON UPDATE CASCADE,
   expires_at timestamptz NOT NULL
 );
+
+-- What a spent token was replaced by, and when. A rotated token is kept for a
+-- grace period rather than deleted, because a browser waking from the
+-- background asks several times at once with the same one: the first rotation
+-- would win and every other request would be told its token is unknown.
+--
+-- Within the grace period a spent token answers with its replacement, so those
+-- requests all succeed and all end up holding the same new token. Presented
+-- after it, or when it names no replacement, it is a token being replayed.
+ALTER TABLE refresh_tokens ADD COLUMN IF NOT EXISTS replaced_by text;
+ALTER TABLE refresh_tokens ADD COLUMN IF NOT EXISTS spent_at timestamptz;
+CREATE INDEX IF NOT EXISTS refresh_tokens_spent ON refresh_tokens (spent_at) WHERE spent_at IS NOT NULL;
 CREATE INDEX IF NOT EXISTS refresh_tokens_email ON refresh_tokens (email);
 
 -- One outstanding challenge per address, holding both the code and the rate
@@ -113,6 +125,14 @@ export async function connect() {
   const sweep = setInterval(() => {
     void pool.query('DELETE FROM challenges WHERE expires_at < now()')
       .catch((error) => { console.error(`gateway: sweeping expired codes failed: ${error.message}`) })
+    // Rotation keeps a spent token for its grace period rather than deleting
+    // it, so unlike before there is something here to clean up: rows past
+    // their expiry, and spent ones whose grace has long gone.
+    void pool.query(
+      `DELETE FROM refresh_tokens
+        WHERE expires_at < now()
+           OR (spent_at IS NOT NULL AND spent_at < now() - interval '1 hour')`,
+    ).catch((error) => { console.error(`gateway: sweeping spent tokens failed: ${error.message}`) })
   }, SWEEP_INTERVAL_MS)
   sweep.unref()
 
