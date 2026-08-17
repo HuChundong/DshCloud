@@ -39,8 +39,17 @@ export const name = 'gateway-tunnel'
  * created in the same apply that registers the route, so its presence means
  * the surface this forwards to exists. `apiProxy` gates the plane behind it,
  * which answers 404 until it is mounted.
+ *
+ * `timer` is not an ordering constraint but a correctness one, and it was
+ * missing. cordis refuses a service the reading context did not inject, and it
+ * refuses it *where it is read* rather than at mount — so the one line that
+ * uses `ctx.setTimeout`, the redial after a dropped tunnel, threw where nothing
+ * catches it and took the tenant's whole backend down with it. From outside
+ * that looked like a sandbox that restarts when the gateway does, which is
+ * roughly what one expects, so it survived. `timer` is the composition's second
+ * entry, mounted long before this one.
  */
-export const inject = ['connection', 'apiProxy']
+export const inject = ['connection', 'apiProxy', 'timer']
 
 /** Delay before redialing after the tunnel drops. */
 const RECONNECT_DELAY_MS = 1000
