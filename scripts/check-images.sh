@@ -101,7 +101,7 @@ check 'DSH_BIN names a file that exists' present "$entry"
 # somebody's task, which is the worst place to find out.
 missing=$(docker run --rm --entrypoint sh "$SANDBOX" -c '
   for tool in git curl jq rg fd tree file patch make less \
-              unzip zip 7z zstd bsdtar unar \
+              unzip zip 7z zstd bsdtar \
               sqlite3 pdftotext officecli dig ping ip nc \
               python3 pip node npm pnpm yarn; do
     command -v "$tool" >/dev/null 2>&1 || printf "%s " "$tool"
@@ -111,9 +111,9 @@ check 'every tool the image promises resolves' '' "$missing"
 
 # The wheels, imported rather than merely present: a wheel whose native
 # dependency is absent installs cleanly and raises on import.
-MODULES="pandas pyarrow duckdb sqlalchemy openpyxl xlsxwriter xlrd pyxlsb odf"
-MODULES="$MODULES pdfplumber PIL matplotlib plotly lxml bs4 markdownify jinja2"
-MODULES="$MODULES magic py7zr rarfile zstandard requests"
+MODULES="pandas duckdb sqlalchemy openpyxl xlsxwriter xlrd pyxlsb odf"
+MODULES="$MODULES pdfplumber PIL matplotlib lxml bs4 markdownify jinja2"
+MODULES="$MODULES magic py7zr rarfile requests"
 stack=$(docker run --rm --entrypoint python3 -e "MODULES=$MODULES" "$SANDBOX" \
   -c 'import importlib.util, os; names = os.environ["MODULES"].split(); missing = [n for n in names if importlib.util.find_spec(n) is None]; print(" ".join(missing) if missing else "all")' \
   2>/dev/null || echo docker-error)

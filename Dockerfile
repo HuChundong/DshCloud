@@ -64,15 +64,20 @@ RUN if [ -n "$APT_MIRROR" ]; then \
 #
 #   search and text     rg, fd, jq, less, tree, patch, file
 #   fetch and archive    curl, unzip, zip, p7zip-full, zstd, xz-utils,
-#                        libarchive-tools, unar
+#                        libarchive-tools
 #   documents and data   sqlite3, poppler-utils, plus the Python stack below
 #   reachability         dnsutils, iputils-ping, iproute2, netcat-openbsd
 #
 # `make` because repositories are entered through it. `fontconfig` and
 # `fonts-wqy-microhei` because a chart with CJK labels renders as boxes without
-# them, and this deployment's tenants write Chinese. `libmagic1`, `libgl1`,
-# `libglib2.0-0`, `libgomp1` are runtime dependencies of the wheels below, not
-# tools in their own right.
+# them, and this deployment's tenants write Chinese. `libmagic1` and `libgomp1`
+# are runtime dependencies of the wheels below, not tools in their own right.
+#
+# Measured while trimming, because two of these are not obvious: `libgl1` costs
+# 41 packages and 49 MB of downloads for an OpenGL stack that nothing here uses
+# — matplotlib draws through Agg — and `unar` costs 18 packages of GNUstep to
+# read archives `bsdtar` already reads. Both are in the list this borrows from,
+# for a runtime this one does not have.
 #
 # Still left out, and why: `wget` (curl covers it), `rsync` (nothing here copies
 # between hosts), `openssh-client` (clones go over https), editors and `htop`
@@ -87,11 +92,11 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends \
        git ca-certificates procps tzdata make \
        curl jq ripgrep fd-find less tree patch file \
-       unzip zip p7zip-full zstd xz-utils libarchive-tools unar \
+       unzip zip p7zip-full zstd xz-utils libarchive-tools \
        sqlite3 poppler-utils \
        dnsutils iputils-ping iproute2 netcat-openbsd \
        fontconfig fonts-wqy-microhei \
-       python3 python3-venv libmagic1 libgl1 libglib2.0-0 libgomp1 \
+       python3 python3-venv libmagic1 libgomp1 \
   && ln -sf "$(command -v fdfind)" /usr/local/bin/fd \
   && fc-cache -f \
   && rm -rf /var/lib/apt/lists/*
@@ -106,9 +111,15 @@ RUN apt-get update \
 #
 # What is in it is what an agent is asked to do with files it is given —
 # spreadsheets, PDFs, tabular data, charts, archives — and nothing about any
-# particular business. Deliberately absent: scipy and scikit-learn, which
-# together cost more than everything here combined and are one `pip install`
-# away; and every database driver, for the same reason.
+# particular business.
+#
+# Deliberately absent, each measured in the built image before it was cut:
+# `pyarrow` (152 MB, and duckdb reads and writes parquet in 58), `plotly`
+# (42 MB, and what a chat window can show is the static image matplotlib
+# already draws), `zstandard` (23 MB for what the `zstd` binary above does to
+# files), scipy and scikit-learn (together more than everything kept), and
+# every database driver — one deployment's databases are not another's. Each is
+# one `pip install` away, through the mirror configured below.
 ENV VIRTUAL_ENV=/opt/agent-python
 ENV PATH=/opt/agent-python/bin:$PATH
 #
@@ -129,11 +140,11 @@ RUN if [ -n "$PIP_INDEX_URL" ]; then \
 RUN python3 -m venv "$VIRTUAL_ENV" \
   && pip install --no-cache-dir --upgrade pip \
   && pip install --no-cache-dir --retries 5 --timeout 120 \
-       pandas pyarrow duckdb sqlalchemy tabulate \
+       pandas duckdb sqlalchemy tabulate \
        openpyxl xlsxwriter xlrd pyxlsb odfpy \
-       pdfplumber pillow matplotlib plotly \
+       pdfplumber pillow matplotlib \
        lxml beautifulsoup4 markdownify jinja2 \
-       python-magic py7zr rarfile zstandard charset-normalizer requests \
+       python-magic py7zr rarfile charset-normalizer requests \
   && find "$VIRTUAL_ENV" -name '__pycache__' -type d -prune -exec rm -rf {} + \
   && rm -rf /root/.cache/pip
 
