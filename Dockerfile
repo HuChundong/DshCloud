@@ -59,25 +59,119 @@ RUN if [ -n "$APT_MIRROR" ]; then \
 
 # What a tenant's agent reaches for, and nothing that built the tree it runs.
 #
-# The base already has grep, sed, awk, find, xargs, diff, tar, and gzip, so what
-# is added is what an agent asks for and does not find: `rg` because it is the
-# search it actually reaches for, `jq` for JSON, `curl` for anything over the
-# network, `less` because git's pager is unusable without it, `patch` for
-# applying a diff, `make` because repositories are entered through it, and
-# `file`, `unzip`, `xz-utils` for reading what it downloads. Measured at 26 MB
-# together, against a template that a tenant waits on once per sandbox.
+# The base already has grep, sed, awk, find, xargs, diff, tar, and gzip. What is
+# added is what an agent asks for and does not find, in four groups:
 #
-# Left out on the same test: `wget` (curl covers it), `tree` (find does),
-# `rsync` (nothing here copies between hosts), `openssh-client` (clones go over
-# https), a compiler (heavy, and node-pty arrives prebuilt from `deps`), and
-# editors or `htop` — an agent edits through its tools, not through a TUI.
+#   search and text     rg, fd, jq, less, tree, patch, file
+#   fetch and archive    curl, unzip, zip, p7zip-full, zstd, xz-utils,
+#                        libarchive-tools, unar
+#   documents and data   sqlite3, poppler-utils, plus the Python stack below
+#   reachability         dnsutils, iputils-ping, iproute2, netcat-openbsd
+#
+# `make` because repositories are entered through it. `fontconfig` and
+# `fonts-wqy-microhei` because a chart with CJK labels renders as boxes without
+# them, and this deployment's tenants write Chinese. `libmagic1`, `libgl1`,
+# `libglib2.0-0`, `libgomp1` are runtime dependencies of the wheels below, not
+# tools in their own right.
+#
+# Still left out, and why: `wget` (curl covers it), `rsync` (nothing here copies
+# between hosts), `openssh-client` (clones go over https), editors and `htop`
+# (an agent edits through its tools, not through a TUI), `pandoc`, `ffmpeg` and
+# `imagemagick` (each costs more than the conversions it would add), a compiler
+# (every wheel below is prebuilt for this platform; a source build is the one
+# thing a tenant has to install for itself), and database drivers (`pip` is
+# here now, and one deployment's databases are not another's).
 #
 # `tzdata` is here so the timezone below resolves to something on a slim base.
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
-       git ca-certificates procps python3 tzdata \
-       curl jq ripgrep less patch make file unzip xz-utils \
+       git ca-certificates procps tzdata make \
+       curl jq ripgrep fd-find less tree patch file \
+       unzip zip p7zip-full zstd xz-utils libarchive-tools unar \
+       sqlite3 poppler-utils \
+       dnsutils iputils-ping iproute2 netcat-openbsd \
+       fontconfig fonts-wqy-microhei \
+       python3 python3-venv libmagic1 libgl1 libglib2.0-0 libgomp1 \
+  && ln -sf "$(command -v fdfind)" /usr/local/bin/fd \
+  && fc-cache -f \
   && rm -rf /var/lib/apt/lists/*
+
+# A Python an agent can actually install into.
+#
+# Debian 12 marks its system Python externally managed (PEP 668), so
+# `pip install` there fails by design and `--break-system-packages` is a way of
+# saying the design was wrong. A virtualenv on PATH answers both halves: the
+# stack below is present without asking, and a tenant who needs something else
+# gets an ordinary `pip install` that cannot damage the distribution's Python.
+#
+# What is in it is what an agent is asked to do with files it is given —
+# spreadsheets, PDFs, tabular data, charts, archives — and nothing about any
+# particular business. Deliberately absent: scipy and scikit-learn, which
+# together cost more than everything here combined and are one `pip install`
+# away; and every database driver, for the same reason.
+ENV VIRTUAL_ENV=/opt/agent-python
+ENV PATH=/opt/agent-python/bin:$PATH
+#
+# The index is written to /etc/pip.conf rather than passed on the command line,
+# so a tenant's own `pip install` reaches the same mirror this build did. A
+# deployment far from PyPI that only mirrored the build would leave every
+# tenant waiting on the default index.
+ARG PIP_INDEX_URL=
+RUN if [ -n "$PIP_INDEX_URL" ]; then \
+      printf '[global]\nindex-url = %s\n' "$PIP_INDEX_URL" > /etc/pip.conf; \
+    fi
+RUN python3 -m venv "$VIRTUAL_ENV" \
+  && pip install --no-cache-dir --upgrade pip \
+  && pip install --no-cache-dir --retries 5 --timeout 120 \
+       pandas pyarrow duckdb sqlalchemy tabulate \
+       openpyxl xlsxwriter xlrd pyxlsb odfpy \
+       pdfplumber pillow matplotlib plotly \
+       lxml beautifulsoup4 markdownify jinja2 \
+       python-magic py7zr rarfile zstandard charset-normalizer requests \
+  && find "$VIRTUAL_ENV" -name '__pycache__' -type d -prune -exec rm -rf {} + \
+  && rm -rf /root/.cache/pip
+
+# Matplotlib without a display, and with a writable place for its font cache.
+# Absent both, the first chart an agent draws either fails to pick a backend or
+# rebuilds the font cache into a directory it may not own.
+ENV MPLBACKEND=Agg
+ENV MPLCONFIGDIR=/root/.config/matplotlib
+
+# OfficeCLI: one binary that reads and writes the formats people actually
+# attach — xlsx, docx, pptx, pdf — without a headless office suite behind it.
+# The Python stack above reads those formats; this is what edits them.
+#
+# Pinned by version AND checksum, from the vendor's own CDN because it answers
+# from inside China where GitHub releases often do not. `OFFICECLI_SKIP_UPDATE`
+# because a tenant's sandbox must not fetch a new binary for itself: what runs
+# here is what the template was built from, and egress is fenced anyway.
+ARG OFFICECLI_VERSION=v1.0.144
+ARG OFFICECLI_SHA256_AMD64=32ef7a21a54a4ca6c9806bf5e9f3d32bfb1291017329c55044cb2aac71822eb8
+ARG OFFICECLI_SHA256_ARM64=56ec2c3114b66f6490888b6778cbb8413a65911a26cacc7207f29e13424966da
+ARG TARGETARCH
+ENV OFFICECLI_SKIP_UPDATE=1
+RUN set -eux; \
+    case "${TARGETARCH:-amd64}" in \
+      amd64) asset=officecli-linux-x64;   sum="$OFFICECLI_SHA256_AMD64" ;; \
+      arm64) asset=officecli-linux-arm64; sum="$OFFICECLI_SHA256_ARM64" ;; \
+      *) echo "unsupported OfficeCLI architecture: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSL --retry 3 -o /usr/local/bin/officecli \
+      "https://d.officecli.ai/releases/download/${OFFICECLI_VERSION}/${asset}"; \
+    echo "${sum}  /usr/local/bin/officecli" | sha256sum -c -; \
+    chmod 0755 /usr/local/bin/officecli; \
+    officecli --version
+
+# pnpm and yarn, for a repository that is entered through one of them. Corepack
+# ships with node; enabling it costs two shims rather than two installs.
+#
+# The registry is written to npm's global config rather than to a home
+# directory: `HOME` is the tenant's volume, so a per-user npmrc would be
+# something every sandbox writes for itself and nothing the image can promise.
+# pnpm reads the same file.
+ARG NPM_REGISTRY=
+RUN corepack enable \
+ && if [ -n "$NPM_REGISTRY" ]; then npm config set --location=global registry "$NPM_REGISTRY"; fi
 
 ENV NODE_ENV=production
 

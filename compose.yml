@@ -150,6 +150,7 @@ services:
       args:
         APT_MIRROR: ${APT_MIRROR:-}
         NPM_REGISTRY: ${NPM_REGISTRY:-}
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-}
         TZ: ${DEPLOYMENT_TZ:-UTC}
     image: dsh-sandbox:latest
     profiles: [build]

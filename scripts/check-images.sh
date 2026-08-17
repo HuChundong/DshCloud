@@ -96,6 +96,59 @@ check 'the published frontend is installed' present "$frontend"
 entry=$(docker run --rm --entrypoint sh "$SANDBOX" -c 'test -f "$DSH_BIN" && echo present || echo missing' 2>/dev/null || echo error)
 check 'DSH_BIN names a file that exists' present "$entry"
 
+# What the sandbox promises a tenant's agent. A missing tool is not a build
+# failure and not a boot failure — it is a tool call that fails halfway through
+# somebody's task, which is the worst place to find out.
+missing=$(docker run --rm --entrypoint sh "$SANDBOX" -c '
+  for tool in git curl jq rg fd tree file patch make less \
+              unzip zip 7z zstd bsdtar unar \
+              sqlite3 pdftotext officecli dig ping ip nc \
+              python3 pip node npm pnpm yarn; do
+    command -v "$tool" >/dev/null 2>&1 || printf "%s " "$tool"
+  done
+' 2>/dev/null || echo docker-error)
+check 'every tool the image promises resolves' '' "$missing"
+
+# The wheels, imported rather than merely present: a wheel whose native
+# dependency is absent installs cleanly and raises on import.
+MODULES="pandas pyarrow duckdb sqlalchemy openpyxl xlsxwriter xlrd pyxlsb odf"
+MODULES="$MODULES pdfplumber PIL matplotlib plotly lxml bs4 markdownify jinja2"
+MODULES="$MODULES magic py7zr rarfile zstandard requests"
+stack=$(docker run --rm --entrypoint python3 -e "MODULES=$MODULES" "$SANDBOX" \
+  -c 'import importlib.util, os; names = os.environ["MODULES"].split(); missing = [n for n in names if importlib.util.find_spec(n) is None]; print(" ".join(missing) if missing else "all")' \
+  2>/dev/null || echo docker-error)
+check 'the python stack imports' all "$stack"
+
+# pip must install into the virtualenv, not fail against Debian's externally
+# managed system Python — the whole reason the venv is there.
+pip_home=$(docker run --rm --entrypoint sh "$SANDBOX" -c \
+  'python3 -c "import sys; print(\"venv\" if sys.prefix != sys.base_prefix else \"system\")"' 2>/dev/null || echo error)
+check 'python runs inside the virtualenv' venv "$pip_home"
+
+# A chart with Chinese labels renders as boxes without a CJK face, and nothing
+# about that failure says "font".
+cjk=$(docker run --rm --entrypoint sh "$SANDBOX" -c \
+  'fc-list :lang=zh 2>/dev/null | grep -c . | head -1' 2>/dev/null || echo 0)
+check 'a CJK font is installed' 1 "$([ "${cjk:-0}" -gt 0 ] && echo 1 || echo 0)"
+
+# The one tool here that is a downloaded binary rather than a package: a
+# truncated download passes `command -v` and fails on first use.
+office=$(docker run --rm --entrypoint officecli "$SANDBOX" --version 2>/dev/null | head -1 | grep -c . || echo 0)
+check 'officecli runs' 1 "$office"
+
+# Both package managers must point somewhere before a tenant reaches for them.
+# What they point AT is the deployment's choice — a mirror close to the host, or
+# the public default — but an empty registry is a tenant discovering on their
+# first install that this image never had one.
+registry=$(docker run --rm --entrypoint npm "$SANDBOX" config get registry 2>/dev/null | tr -d '\r')
+check 'npm has a registry' 1 "$([ -n "$registry" ] && echo 1 || echo 0)"
+printf '        npm  -> %s\n' "${registry:-unset}"
+
+index=$(docker run --rm --entrypoint sh "$SANDBOX" -c \
+  'pip config get global.index-url 2>/dev/null || echo https://pypi.org/simple' | tr -d '\r')
+check 'pip has an index' 1 "$([ -n "$index" ] && echo 1 || echo 0)"
+printf '        pip  -> %s\n' "${index:-unset}"
+
 echo
 echo "=== the gateway image ==="
 
