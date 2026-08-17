@@ -167,5 +167,37 @@ console.log('\n=== the two questions "idle" turns out to be ===')
   check('reclaims one whose tunnel never arrived', () => { assert.deepEqual(released, ['alice']) })
 }
 
+console.log('\n=== coming back ===')
+
+{
+  // Closed the tab, then reopened it before the short TTL ran out. Reopening
+  // is requests and a fresh event socket, so both clocks move and the ceiling
+  // goes back to the long one — there is no lifetime counted from creation.
+  const { manager, released } = managerWith({
+    lastUsedAt: 4 * MINUTE, lastActiveAt: 4 * MINUTE, attached: false, busy: false,
+  })
+  await manager.reapIdle()
+  check('a tab closed four minutes ago is still there', () => {
+    assert.deepEqual(released, [])
+  })
+  // What reopening does to the record: a request touches it and the socket
+  // attaches.
+  manager.byUser.get('alice').lastUsedAt = Date.now()
+  manager.options.presenceOf = () => ({ attached: true, busy: false })
+  manager.options.lastActiveAt = () => Date.now()
+  await manager.reapIdle()
+  check('and reopening puts it back on the long TTL', () => {
+    assert.deepEqual(released, [])
+  })
+  // Twenty minutes later it is still inside the idle TTL, which it would not
+  // have been had the clock kept running from before the tab closed.
+  manager.byUser.get('alice').lastUsedAt = Date.now() - 20 * MINUTE
+  manager.options.lastActiveAt = () => Date.now() - 20 * MINUTE
+  await manager.reapIdle()
+  check('twenty minutes after that, still not reclaimed', () => {
+    assert.deepEqual(released, [])
+  })
+}
+
 console.log(failures === 0 ? '\n空闲回收检查全部通过' : `\n${failures} 项失败`)
 process.exit(failures === 0 ? 0 : 1)
