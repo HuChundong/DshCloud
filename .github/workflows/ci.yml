@@ -49,6 +49,13 @@ jobs:
       - name: Documentation
         run: node scripts/check-docs.mjs
 
+      # The upload store, which needs only the tree: names that traverse, chunks
+      # that overrun, a second file of one name on one day. The acceptance suite
+      # sends a real file through the real tunnel; it would never think to
+      # produce these.
+      - name: Uploads
+        run: node scripts/check-uploads.mjs
+
       # Interpolation errors and malformed overlays surface here rather than on
       # a deployment host. The values are placeholders: `config` resolves the
       # files, it does not start anything.

@@ -256,6 +256,66 @@ so silence is real silence and an abandoned browser tab still ages out on time.
 If a keepalive is ever added to either end, this signal stops reclaiming
 anything.
 
+## The one capability signal, and the surfaces that ignore it
+
+The harness knows perfectly well that a container has no desktop:
+`host.describe().canOpenPath` asks the platform and finds Linux with no display
+server. Two surfaces consult it and degrade correctly — the agent-preset page
+offers "show location" instead of "open location", and the deliverables row
+omits its "show in folder" action. The rest do not, and each is a control that
+cannot work in any sandbox:
+
+- Settings' "Open configuration file" gates on `settings.describe().hasDocument`,
+  which is computed as `documentPath !== undefined` — whether the file exists,
+  which it always does. The identically named field on `agentPreset.list` is
+  computed as `canOpenPaths()`. One spelling is wrong, and it is not obvious
+  from either call site which.
+- `ui-conversation` passes an `openFile` into its chat view that calls
+  `host.openPath` unconditionally, so every produced-file chip and every inline
+  path reference in a closing message is a dead link. The failure is swallowed
+  by a `.catch(() => {})` whose comment says the native application will surface
+  its own error — which is true, and there is no native application.
+
+The sharpest evidence that this is an oversight rather than a decision: the
+deliverables package gates its "show in folder" action on `canOpenPath` and does
+not gate the file chips two lines above it.
+
+The wrong conclusion first: this was read as something to hide, and the
+sign-out plugin shadowed the Settings action with an empty cell for several
+weeks. Hiding a control is the right move only when nothing can replace it. Here
+something could — the document itself — and the shadowing had also quietly
+attached a third subject to a package named for one, which is what eventually
+forced the split into `dsh-sandbox-host` and `dsh-tenant-account`.
+
+What is genuinely out of reach is the chat view's `openFile`: it is injected by
+the package that owns the view, not offered as a slot, so a plugin can only
+replace the whole view. That is an upstream issue and a limitation recorded
+here.
+
+## The shared `/api` channel takes exactly one interceptor
+
+dsh offers two ways to add RPC endpoints: `connection.rpc.intercept('/api', …)`,
+which claims endpoints on the channel the browser already talks to, and
+`connection.rpc.handle('/<name>', …)`, which registers a channel of your own.
+The first is obviously better — no new route, no gateway change, no nginx
+location — and it is unavailable. There is room for one interceptor on `/api`,
+and dsh's own `typert-gateway` takes it in the base bundle. A second
+registration throws at mount.
+
+That failure would have been loud, which is the only good thing about it: it
+lands during composition rather than on the first upload. But it is invisible
+from the contract — `intercept` is a documented public method and nothing in its
+signature says it is single-occupancy — so the design was written against it
+before a read of `rpc-host.ts` said otherwise.
+
+A channel of one's own turned out to be the better shape anyway. `/files` is
+visibly its own plane at every layer it crosses: an nginx location, a branch in
+the gateway's routing, a route in the sandbox. Endpoints hidden inside `/api`
+would have been none of those things.
+
+Note also what the channel name may be: `/^\/[A-Za-z0-9._~-]+$/`. One segment.
+`/api/files` is not a legal channel, so a plane cannot be nested under another.
+
 ## What generalizes
 
 - **A snapshot cannot hold what is only knowable later.** Everything
@@ -273,3 +333,8 @@ anything.
   benchmark said metadata was slow; it was measuring `fork`.
 - **A green build proves nothing about resolution.** Symlinks, relative `file:` paths,
   and name-resolved plugins all build fine and fail at first import.
+- **Hide a control only when nothing can replace it.** "Open configuration file"
+  had a replacement — the file's contents — and hiding it delayed finding that
+  for weeks.
+- **A public method is not necessarily an available one.** `rpc.intercept` is
+  documented, exported, and already taken.

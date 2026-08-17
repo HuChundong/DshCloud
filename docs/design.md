@@ -283,7 +283,7 @@ a shell.
 
 Sign-out is the deployment's, not dsh's: the harness has no notion of the
 gateway's tenants, so nothing in its own composition can end a session.
-[`packages/dsh-gateway-logout`](../packages/dsh-gateway-logout) adds an Account page to
+[`packages/dsh-tenant-account`](../packages/dsh-tenant-account) adds an Account page to
 Settings — the caller's name from `/whoami`, and a control that posts to
 `/logout`, which revokes the session and releases their sandbox.
 
@@ -302,18 +302,79 @@ no client half at all.
 
 ## What a container cannot do
 
-Settings ships an "Open configuration file" action that asks the host to open
-the settings file on a desktop. There is none in a container, and dsh says so —
-`host.describe` reports `canOpenPath: false` — but the control does not consult
-that, so it stayed visible and answered every click with "Could not open
-configuration file". The account plugin shadows that cell with nothing. Every
-setting the file holds is editable in the sections beside it, so a tenant here
-loses nothing.
+dsh is built for a host on the desk of the person using it. The browser and the
+backend share a filesystem there, so a path is enough: a file worth talking
+about is already reachable, and a document worth reading opens in whatever the
+desktop associates with it. Moving the backend into a sandbox takes that premise
+away, and several surfaces are built on it.
 
-Shadowing takes a *different* `priority`, not the same one: sharing an id at
-equal priority is refused outright, which fails the whole plugin rather than the
-one cell. `priority` is also not `order` — order is position within a cell,
+The harness has one signal for this — `host.describe().canOpenPath`, which is
+already false here, because it asks the platform and finds Linux with no display
+server. `sandbox/cordis.patch.yml` states it outright anyway, as `nativeOpen:
+false` on the `api-gateway` entry: the detected answer is correct by coincidence
+of the base image, and anything that later put a DISPLAY into this container
+would flip it back.
+
+Where a surface consults that signal, it already degrades: the agent-preset page
+offers "show location" instead of "open location", and the deliverables row
+omits "show in folder" entirely. Where a surface does not, it is a dead control
+in every sandbox:
+
+- **Settings' "Open configuration file"** gates on
+  `settings.describe().hasDocument`, which reports whether the file *exists* —
+  it always does — rather than whether anything can open it. `agentPreset.list`
+  spells the same field `canOpenPaths()`. One of the two is wrong.
+- **File links in the transcript** — the produced-files row a turn ends with,
+  and the inline path references in its prose — call `openFile` unconditionally,
+  and the failure is swallowed by a `.catch(() => {})`.
+
+`dsh-sandbox-host` replaces the first with the capability it can actually
+provide: a Configuration page that shows the document, since a document is what
+a person here can be given, and a document does not fit in the header's action
+row. The header cell it vacated is left empty — the gesture moved, it was not
+hidden.
+
+The second is not reachable from a plugin: `openFile` is injected by
+`ui-conversation` into its own chat view, not offered as a slot, so replacing it
+means replacing the whole view. That is an upstream issue and a documented
+limitation, not a patch layer; see
+[sandbox-pitfalls](sandbox-pitfalls.md).
+
+Shadowing a cell takes a *different* `priority`, not the same one: sharing an id
+at equal priority is refused outright, which fails the whole plugin rather than
+the one cell. `priority` is also not `order` — order is position within a cell,
 priority is the cell's shadowing rank, and the lowest renders.
+
+## Getting a file into a sandbox
+
+On a local host nobody uploads anything: the person names a path and the agent
+reads it. Here the path they can name is on the wrong machine, so the deployment
+has to produce one — which is exactly what the upload does. The committed path
+goes into the composer draft, and from there it is an ordinary message about an
+ordinary file. Nothing new reaches the model: no content block, no provider
+contract, no agreement with the harness about what an attachment is. (dsh's own
+attachment plane is images only, and says so — generic files are deferred
+upstream pending a lifecycle and provider contract.)
+
+The endpoints live on `/files`, a channel of dsh's own RPC registry, and not on
+`/api`. `/api` accepts exactly one interceptor and dsh's `typert-gateway` holds
+it; a second registration throws at mount. A channel of its own costs one nginx
+location and one line in the gateway's routing, both of which treat it exactly
+as they treat `/api` — authenticate the caller, hand it to their sandbox, know
+nothing about what is on it.
+
+Uploads are chunked at 4 MiB, and the body limit is not why. dsh accepts 160 MiB
+and nginx is set to 200. The tunnel is a single WebSocket carrying every request
+as base64 frames, so a file sent whole holds it for the duration and every other
+call queues behind it.
+
+Bytes land in a staging file and become visible only on commit — a half-written
+file an agent could pick up reads as a complete one — and they are published by
+hard link, which fails on collision rather than overwriting. Two files of one
+name uploaded on one day are two files. The destination is
+`<workspace>/uploads/<date>/`, and `/workspace` is a symlink onto the tenant's
+volume whenever they have one, so an upload outlives the sandbox that received
+it.
 
 ## Permissions inside a sandbox
 

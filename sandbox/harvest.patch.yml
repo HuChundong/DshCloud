@@ -4,9 +4,22 @@
 # and no sandbox identity to present, and the tunnel plugin fails loud without
 # them. The tunnel contributes no client half, so leaving it out cannot change
 # the boot manifest this harvest exists to capture.
+#
+# Everything that does contribute a client half has to be here. The harvest is
+# what the web deployment serves to every tenant, so a plugin missing from this
+# file is a plugin whose browser half no tenant ever loads — while its host half
+# runs in every sandbox, answering calls the interface never makes.
 
-# The deployment's sign-out control. dsh has no notion of the gateway's
-# sessions, so nothing in its own composition offers a way to end one.
+# The file plane and the configuration page: what a browser needs when the
+# backend it talks to is on another machine. Its host half is inert here — it
+# registers a route nobody calls — and its client half is the point.
+- insert:
+    - id: sandbox-host
+      name: dsh-sandbox-host
+
+# The tenant's account: who is signed in, how to sign out, and the way in to the
+# console. dsh has no notion of the gateway's sessions, so nothing in its own
+# composition offers a way to end one.
 #
 # Installed into the profile's node_modules by the image build, because the
 # client-module registry resolves a plugin's package.json from the config
@@ -14,8 +27,8 @@
 # resolve by name. A path-loaded entry mounts its host half and contributes no
 # client half at all.
 - insert:
-    - id: gateway-logout
-      name: dsh-gateway-logout
+    - id: tenant-account
+      name: dsh-tenant-account
 
 # The client hot-reload channel. Its SSE endpoint, /plugins/events, is the one
 # frontend path that is not a static artifact — the browser opens it and keeps
@@ -28,3 +41,11 @@
 # on a per-tenant component — the one thing the split exists to prevent.
 - id: client-hmr
   disabled: true
+
+# Stated here as well as in the sandbox patch, so the two compositions differ
+# only by the tunnel. It does not change which client plugins compose, but a
+# harvest that disagreed with the sandbox about anything would be a harvest
+# nobody could reason about.
+- id: api-gateway
+  config:
+    nativeOpen: false

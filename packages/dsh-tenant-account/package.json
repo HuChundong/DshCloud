@@ -1,0 +1,18 @@
+{
+  "name": "dsh-tenant-account",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Who is signed in, how to stop being signed in, and what this deployment says on the way in.",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "client": {
+      "inject": ["slots"],
+      "platform": "web"
+    }
+  }
+}

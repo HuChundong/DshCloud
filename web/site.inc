@@ -31,6 +31,25 @@ location /api/ {
   proxy_buffering off;
 }
 
+# The file plane. A second location rather than a widened `/api/`, because it is
+# a second channel: `dsh-sandbox-host` registers `/files` with dsh's own RPC
+# channel registry, which `/api` could not host — that channel accepts exactly
+# one interceptor and dsh's `typert-gateway` already holds it.
+#
+# No upgrade headers: nothing here is a WebSocket. The timeouts match `/api/`
+# anyway, since a chunk crosses the same tunnel and a tenant on a slow link
+# should not have an upload cut at sixty seconds. `client_max_body_size` above
+# already covers a chunk many times over.
+location /files/ {
+  proxy_pass http://gateway;
+  proxy_http_version 1.1;
+  proxy_set_header Host $host;
+  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  proxy_read_timeout 1h;
+  proxy_send_timeout 1h;
+  proxy_buffering off;
+}
+
 # `X-Forwarded-Proto` decides whether the gateway marks its token cookies
 # `Secure`. It is trustworthy only because nothing but this nginx can reach the
 # gateway's port.

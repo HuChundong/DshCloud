@@ -1,8 +1,16 @@
 # Patch layer for the sandbox composition.
 #
 # Applied over the web profile by the sandbox entrypoint. It exists to add what
-# this deployment needs and strip what a shared multi-tenant deployment must not
-# offer a tenant.
+# this deployment needs, strip what a shared multi-tenant deployment must not
+# offer a tenant, and state one thing about this host that the harness would
+# otherwise have to guess.
+#
+# It stays this short on purpose. Everything with behaviour lives in the three
+# plugins below, each of which follows a different fact about this deployment —
+# the tunnel follows the transport, `sandbox-host` follows the backend being on
+# a machine the tenant cannot reach, and `tenant-account` follows there being
+# tenants at all. What cannot live in a plugin is which plugins are mounted and
+# what another entry is configured to be, which is what a patch layer is for.
 
 # The tunnel that carries this sandbox's /api traffic to the gateway. It runs
 # inside dsh rather than beside it: as a plugin, `inject` states when the
@@ -13,7 +21,7 @@
 # plugin mounts its host half and contributes no client half, because the
 # client-module registry resolves a plugin's package.json from the config tree's
 # baseUrl and scans only what it can resolve by name. This one contributes no
-# client half either way, but naming it keeps one rule for both of ours.
+# client half either way, but naming it keeps one rule for all three of ours.
 #
 # `insert` rather than a bare entry: a patch layer targets existing ids, so a
 # new plugin has to be inserted explicitly.
@@ -21,8 +29,22 @@
     - id: gateway-tunnel
       name: dsh-gateway-tunnel
 
-# The deployment's sign-out control. dsh has no notion of the gateway's
-# sessions, so nothing in its own composition offers a way to end one.
+# What dsh needs in order to be usable from a browser that is not on the same
+# machine as its backend: the file plane a tenant uploads through, and the
+# configuration document read back instead of handed to a desktop that is not
+# there.
+#
+# It registers its own `/files` RPC channel rather than adding endpoints to
+# `/api`, because `/api` accepts exactly one interceptor and dsh's own
+# `typert-gateway` holds it. `web/site.inc` and the gateway route that channel
+# the same way they route `/api`.
+- insert:
+    - id: sandbox-host
+      name: dsh-sandbox-host
+
+# The tenant's account: who is signed in, how to sign out, the way in to the
+# console for whoever administers this deployment, and the onboarding steps a
+# deployment with its own sign-in page has already said.
 #
 # Installed into the profile's node_modules by the image build, because the
 # client-module registry resolves a plugin's package.json from the config
@@ -30,8 +52,8 @@
 # resolve by name. A path-loaded entry mounts its host half and contributes no
 # client half at all.
 - insert:
-    - id: gateway-logout
-      name: dsh-gateway-logout
+    - id: tenant-account
+      name: dsh-tenant-account
 
 # The client hot-reload channel. Its SSE endpoint, /plugins/events, is the one
 # frontend path that is not a static artifact — the browser opens it and keeps
@@ -44,3 +66,19 @@
 # on a per-tenant component — the one thing the split exists to prevent.
 - id: client-hmr
   disabled: true
+
+# What this host can and cannot hand to a desktop, stated rather than detected.
+#
+# `canOpenPath` decides whether the harness offers gestures that end at a
+# native opener — the agent-preset roster's "open location", the deliverables
+# row's "show in folder". Left unset, dsh asks the platform, and on this image
+# the answer is already the right one: Linux with no DISPLAY and no
+# WAYLAND_DISPLAY cannot open anything.
+#
+# It is set anyway, because that correct answer is a coincidence of the base
+# image. Anything that later put a display server, an Xvfb, or a stray DISPLAY
+# into this container would flip the harness back to offering a person controls
+# that open windows nobody is looking at.
+- id: api-gateway
+  config:
+    nativeOpen: false

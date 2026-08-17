@@ -382,6 +382,70 @@ if docker compose exec -T gateway node -e 'import("/app/gateway/src/egress.js").
 fi
 
 echo
+echo '=== 6c. The file plane: a browser puts a file into its own sandbox ==='
+# A second plane, and nothing above touches it. `dsh-sandbox-host` registers
+# `/files` with dsh's own RPC channel registry rather than adding endpoints to
+# `/api`, because `/api` accepts exactly one interceptor and dsh holds it — so
+# the nginx location, the gateway's forwarding rule, and the sandbox's own route
+# are all new, and all three are silent when they are wrong.
+rpc() {  # rpc <cookiejar> <endpoint> <payload> -> the response body
+  curl -s -m 120 -b "$1" -X POST "$GATEWAY/files/$2" -H 'Content-Type: application/json' \
+    -d "{\"type\":\"client-request\",\"rpcId\":\"verify-$2\",\"method\":\"$2\",\"payload\":$3}"
+}
+
+check 'the file plane refuses an anonymous caller' 401 \
+  "$(curl -s -o /dev/null -w '%{http_code}' -m 30 -b "$JAR_NONE" -X POST "$GATEWAY/files/upload.begin" \
+      -H 'Content-Type: application/json' \
+      -d '{"type":"client-request","rpcId":"v","method":"upload.begin","payload":{}}')"
+
+# The name carries a traversal because a filename is a value from the person's
+# own machine, and this is the one place it crosses into a path.
+MARKER="dsh-cloud-upload-$$"
+PROBE="verify-probe-$$.txt"
+BEGUN=$(rpc "$JAR_A" upload.begin "{\"name\":\"../../etc/$PROBE\",\"size\":${#MARKER}}")
+UPLOAD_ID=$(printf '%s' "$BEGUN" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
+check 'an upload can be begun' 1 "$([ -n "$UPLOAD_ID" ] && echo 1 || echo 0)"
+
+rpc "$JAR_A" upload.chunk \
+  "{\"id\":\"$UPLOAD_ID\",\"data\":\"$(printf '%s' "$MARKER" | base64 | tr -d '\n')\"}" > /dev/null
+COMMITTED=$(rpc "$JAR_A" upload.commit "{\"id\":\"$UPLOAD_ID\"}")
+UPLOAD_PATH=$(printf '%s' "$COMMITTED" | sed -n 's/.*"path":"\([^"]*\)".*/\1/p')
+
+check 'it lands under the tenant workspace' 1 \
+  "$(case "$UPLOAD_PATH" in */workspace/uploads/*) echo 1 ;; *) echo 0 ;; esac)"
+check 'the name became one path segment' "$PROBE" "$(basename "$UPLOAD_PATH")"
+ALICE_BOX=$(sandbox_handles_of "$ALICE" | head -1)
+check 'the bytes are in the sandbox, whole' "$MARKER" \
+  "$(sandbox_sh "$ALICE_BOX" "cat '$UPLOAD_PATH' 2>/dev/null" | tr -d '\r')"
+# Nothing is published before commit, so a staging file left behind is a file an
+# agent could read as if it were finished.
+check 'nothing is left staged' 0 \
+  "$(sandbox_sh "$ALICE_BOX" 'ls /workspace/uploads/.staging 2>/dev/null | wc -l' | tr -d ' \r')"
+check 'an unknown upload id is refused' 1 \
+  "$(rpc "$JAR_A" upload.commit '{"id":"no-such-upload"}' | grep -c '"ok":false')"
+
+# The plane carries no tenant identity of its own — the gateway decides whose
+# sandbox a request enters, exactly as it does for /api. If it did not, this
+# file would be in Alice's.
+BOB_PROBE="verify-bob-$$.txt"
+BOB_BEGUN=$(rpc "$JAR_B" upload.begin "{\"name\":\"$BOB_PROBE\",\"size\":${#MARKER}}")
+BOB_ID=$(printf '%s' "$BOB_BEGUN" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
+rpc "$JAR_B" upload.chunk \
+  "{\"id\":\"$BOB_ID\",\"data\":\"$(printf '%s' "$MARKER" | base64 | tr -d '\n')\"}" > /dev/null
+rpc "$JAR_B" upload.commit "{\"id\":\"$BOB_ID\"}" > /dev/null
+check "bob's upload is not in alice's sandbox" 0 \
+  "$(sandbox_sh "$ALICE_BOX" "ls /workspace/uploads/*/$BOB_PROBE 2>/dev/null | wc -l" | tr -d ' \r')"
+check "and is in bob's" 1 \
+  "$(sandbox_sh "$(sandbox_handles_of "$BOB" | head -1)" "ls /workspace/uploads/*/$BOB_PROBE 2>/dev/null | wc -l" | tr -d ' \r')"
+
+# The configuration document, which is what the Settings page shows in place of
+# the control that would have handed it to a desktop.
+DOCUMENT=$(rpc "$JAR_A" document.read '{}')
+check 'the configuration document reads back' 1 "$(printf '%s' "$DOCUMENT" | grep -c '"ok":true')"
+check 'and names an absolute path in the sandbox' 1 \
+  "$(printf '%s' "$DOCUMENT" | grep -c '"path":"/')"
+
+echo
 echo '=== 7-10. WebSocket downlinks, a real model turn, and tenant isolation ==='
 echo '     (run inside the gateway container, the one place with ws installed)'
 # The shared sign-in goes in first: the three suites import it, and it is what
@@ -489,11 +553,14 @@ check 'GET / still answers' 200 \
   "$(curl -s -o /dev/null -w '%{http_code}' -m 30 -b "$JAR_A" "$GATEWAY/")"
 check 'it carries the boot manifest' 1 "$(printf '%s' "$SHELL_HTML" | grep -c '__DSH_BOOT__')"
 BUNDLE=$(printf '%s' "$SHELL_HTML" | grep -o '/plugins/[^"?]*client\.js' | head -1)
-# The sign-out control is a real client plugin, so it must appear in the graph
-# the shell boots from — a path-loaded entry mounts its host half and
-# contributes no client half at all, which is silent rather than loud.
-check 'the sign-out plugin is in the boot manifest' 1 \
-  "$(printf '%s' "$SHELL_HTML" | grep -c 'dsh-gateway-logout')"
+# Both of this project's client plugins have to appear in the graph the shell
+# boots from. A path-loaded entry mounts its host half and contributes no client
+# half at all, and a plugin left out of the harvest patch has a host half in
+# every sandbox and a browser half no tenant ever loads — both silent.
+for plugin in dsh-sandbox-host dsh-tenant-account; do
+  check "$plugin is in the boot manifest" 1 \
+    "$(printf '%s' "$SHELL_HTML" | grep -c "$plugin")"
+done
 check 'a client bundle answers too' 200 \
   "$(curl -s -o /dev/null -w '%{http_code}' -m 30 -b "$JAR_A" "$GATEWAY$BUNDLE")"
 # The decisive part: none of the above may have started a sandbox. If the shell

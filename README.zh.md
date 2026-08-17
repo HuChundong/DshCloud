@@ -81,7 +81,9 @@ sandbox/                沙箱镜像——入口，以及 dsh 组合增加与剥
 packages/               本仓库拥有的 npm 包
   tunnel-protocol/        隧道两端共用的帧协议
   dsh-gateway-tunnel/     cordis 插件：把沙箱的 /api 流量送出去
-  dsh-gateway-logout/     cordis 插件：退出登录控件，host 与 client 两半
+  dsh-sandbox-host/       cordis 插件：后端在另一台机器上时浏览器需要的东西——
+                          上传，以及配置文件被读出来而不是被打开
+  dsh-tenant-account/     cordis 插件：谁登录着，以及怎么退出
 
 integrations/           独立存在，抽走不需要改这里一行
   cube-volume-juicefs/    基于 JuiceFS over S3 的 CubeSandbox VolumePlugin

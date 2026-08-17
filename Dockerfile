@@ -9,7 +9,7 @@
 #
 # Stages:
 #   deps     one npm install, shared by everything below
-#   sandbox  one tenant's dsh, beside the tunnel plugin
+#   sandbox  one tenant's dsh, beside this project's three plugins
 #   shell    boot the composition once and save what it serves
 #   web      nginx over the frontend build and that shell
 #   gateway  the authenticating front door; no harness code at all
@@ -125,7 +125,7 @@ ENV NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt
 
 # Warm the web profile at build time; it otherwise initializes on first boot,
 # putting that work on the path of the tenant's first request. It also creates
-# the profile directory the two plugins below are installed into.
+# the profile directory the plugins below are installed into.
 RUN node "$DSH_BIN" web --dump-config > /dev/null 2>&1 || true
 
 # This project's own halves of the composition, installed into the profile
@@ -148,7 +148,9 @@ COPY packages /src/packages
 # plugin and everything it needs under the profile, where the registry looks.
 RUN npm install --omit=dev --no-audit --no-fund --install-links \
       --prefix /root/.dsh/profiles/web \
-      /src/packages/dsh-gateway-tunnel /src/packages/dsh-gateway-logout \
+      /src/packages/dsh-gateway-tunnel \
+      /src/packages/dsh-sandbox-host \
+      /src/packages/dsh-tenant-account \
   && rm -rf /root/.npm /src
 
 # Project the environment above into a file the entrypoint sources.

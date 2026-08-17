@@ -24,9 +24,24 @@ issue and a documented limitation here — not a patch layer that silently forks
 
 ## Everything added to DSH is a cordis plugin
 
-Two plugins exist today: `dsh-gateway-tunnel` carries a sandbox's `/api` traffic
-out to the gateway, and `dsh-gateway-logout` adds the sign-out control. A third
-belongs beside them, not inside the harness.
+Three plugins exist today, and which one a change belongs in is decided by one
+question: **take the gateway away — is this still needed?**
+
+- `dsh-gateway-tunnel` carries a sandbox's `/api` traffic out to the gateway.
+  It follows the transport.
+- `dsh-sandbox-host` supplies what a browser needs when the backend is on a
+  machine the person cannot reach: the `/files` upload channel, and the settings
+  document read back instead of handed to a desktop that is not there. Every
+  line of it survives the gateway's removal, which is why it is not more surface
+  on the other two — and why it would be usable by anyone running dsh remotely.
+- `dsh-tenant-account` is who is signed in, how to sign out, the way in to the
+  console, and the onboarding steps a deployment with its own sign-in page has
+  already said. None of it means anything without the gateway.
+
+A fourth belongs beside them, not inside the harness. A change that fits none of
+the three is a sign the question above has a new answer, not that one of them
+should grow a second subject — `dsh-gateway-logout` was renamed when it had
+three.
 
 Four rules, each of which has broken:
 
@@ -82,12 +97,13 @@ The rules that are not obvious from the listing:
 
 ## What to run before pushing
 
-CI runs the first three. Run them locally when the change touches what they
-cover, rather than all of them every time:
+CI runs all four. Run them locally when the change touches what they cover,
+rather than all of them every time:
 
 ```sh
 npx oxlint                     # JavaScript
 node scripts/check-docs.mjs    # links, bilingual pairing, section alignment
+node scripts/check-uploads.mjs # the upload store, from the tree alone
 scripts/check-images.sh        # after a build: what resolves, and what loads
 ```
 

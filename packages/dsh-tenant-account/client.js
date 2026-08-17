@@ -1,5 +1,5 @@
 /**
- * Account section, browser half.
+ * The tenant's account, browser half.
  *
  * Registered into `settings.section`, the list slot the Settings shell declares
  * for its pages, so the account lives where every other configuration page
@@ -16,12 +16,12 @@
  * package needs no build step.
  */
 window.__ModuleLoader__.load({
-  id: 'dsh-gateway-logout',
+  id: 'dsh-tenant-account',
   factory: (require) => {
     const React = require('react')
 
     /** Class the rule below is scoped to; nothing else in the page uses it. */
-    const BUTTON_CLASS = 'dsh-gateway-logout-button'
+    const BUTTON_CLASS = 'dsh-tenant-account-button'
 
     /**
      * The shell's New Session button, matched.
@@ -182,27 +182,7 @@ window.__ModuleLoader__.load({
             { name: 'settings.section', id: 'account', order: 900, label: '账户' },
             AccountSection,
           )),
-          'gateway-logout: settings account section',
-        )
-
-        // Shadow the shipped `open-document` action with nothing. It asks the
-        // host to open the settings file on a desktop; there is none in a
-        // container, and dsh says so — `host.describe` reports
-        // `canOpenPath: false`. The control does not consult that, so it stays
-        // visible and answers every click with "Could not open configuration
-        // file". Every setting the file holds is editable in the sections
-        // beside it, so retiring it costs a tenant here nothing.
-        //
-        // `priority`, not `order`: order is nav position within a cell, while
-        // priority is the cell's shadowing rank — ascending, lowest renders,
-        // and a second registration at the same id and priority throws rather
-        // than silently winning.
-        ctx.effect(
-          () => ctx.slots.inject('settings.action', () => ctx.slots.register(
-            { name: 'settings.action', id: 'open-document', priority: -1 },
-            () => null,
-          )),
-          'gateway-logout: retire the open-document action',
+          'tenant-account: settings account section',
         )
 
         // Retire the onboarding steps.
@@ -228,7 +208,7 @@ window.__ModuleLoader__.load({
               { name: 'settings.onboarding', id: step, priority: -1 },
               Skip,
             )),
-            `gateway-logout: retire the ${step} onboarding step`,
+            `tenant-account: retire the ${step} onboarding step`,
           )
         }
       },

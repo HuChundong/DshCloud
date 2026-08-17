@@ -98,7 +98,10 @@ sandbox/                the sandbox image — entrypoint, and what the dsh
 packages/               the npm packages this repository owns
   tunnel-protocol/        the frame protocol both ends of the tunnel speak
   dsh-gateway-tunnel/     cordis plugin: a sandbox's /api traffic, carried out
-  dsh-gateway-logout/     cordis plugin: the sign-out control, host and client
+  dsh-sandbox-host/       cordis plugin: what a browser needs when the backend
+                          is on another machine — uploads, and the settings
+                          document read rather than opened
+  dsh-tenant-account/     cordis plugin: who is signed in, and how to stop
 
 integrations/           stands alone; could leave without changing a line here
   cube-volume-juicefs/    a CubeSandbox VolumePlugin backed by JuiceFS over S3

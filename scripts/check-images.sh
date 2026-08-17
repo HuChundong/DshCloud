@@ -37,14 +37,14 @@ echo "=== the sandbox image ==="
 resolved=$(docker run --rm --entrypoint node "$SANDBOX" -e "
   const { createRequire } = require('module')
   const req = createRequire('$PROFILE/package.json')
-  const names = ['dsh-gateway-tunnel', 'dsh-gateway-logout', 'dsh-tunnel-protocol']
+  const names = ['dsh-gateway-tunnel', 'dsh-sandbox-host', 'dsh-tenant-account', 'dsh-tunnel-protocol']
   let ok = 0
   for (const name of names) {
     try { req.resolve(name); ok += 1 } catch { console.error('unresolved: ' + name) }
   }
   console.log(ok)
 " 2>/dev/null || echo 0)
-check 'every package resolves from the profile' 3 "$resolved"
+check 'every package resolves from the profile' 4 "$resolved"
 
 # Under the profile itself, not a symlink into the source tree: a link resolves
 # here and takes the plugin's own dependencies with it to the wrong place.
@@ -63,6 +63,29 @@ loaded=$(docker run --rm --entrypoint node "$SANDBOX" -e "
     .catch((error) => console.log('failed: ' + error.message))
 " 2>/dev/null || echo error)
 check 'the tunnel plugin loads' loaded "$loaded"
+
+# Both halves of the adaptation plugin, because they fail differently. The host
+# half is an ordinary import; the client half is a script the shell runs against
+# a module loader that does not exist under node, so it is parsed rather than
+# executed — which is exactly the failure a build cannot see, since nothing in
+# this repository ever compiles it.
+adapter=$(docker run --rm --entrypoint node "$SANDBOX" -e "
+  import('$PROFILE/node_modules/dsh-sandbox-host/index.js')
+    .then((m) => console.log(['apply', 'inject', 'name'].every((k) => k in m) ? 'loaded' : 'incomplete'))
+    .catch((error) => console.log('failed: ' + error.message))
+" 2>/dev/null || echo error)
+check 'the sandbox-host plugin loads' loaded "$adapter"
+
+for half in dsh-sandbox-host dsh-tenant-account; do
+  parsed=$(docker run --rm --entrypoint node "$SANDBOX" -e "
+    const { readFileSync } = require('fs')
+    try {
+      new Function(readFileSync('$PROFILE/node_modules/$half/client.js', 'utf8'))
+      console.log('parses')
+    } catch (error) { console.log('failed: ' + error.message) }
+  " 2>/dev/null || echo error)
+  check "the $half client half parses" parses "$parsed"
+done
 
 # Named in the Dockerfile rather than reached through the CLI package, so a
 # dependency-graph change upstream cannot quietly remove the frontend.
