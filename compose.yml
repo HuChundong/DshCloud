@@ -19,7 +19,7 @@ services:
       args:
         APT_MIRROR: ${APT_MIRROR:-}
         NPM_REGISTRY: ${NPM_REGISTRY:-}
-        TZ: ${SANDBOX_TZ:-UTC}
+        TZ: ${DEPLOYMENT_TZ:-UTC}
     image: dsh-web:latest
     # The user-facing entry: static bytes are answered here from disk, and only
     # the session-bearing surface is proxied to the gateway.
@@ -93,6 +93,10 @@ services:
     environment:
       # Which runtime provides a tenant's machine. `cube` is CubeSandbox, the
       # real one; `docker` is the simulation a laptop can run.
+      # The clock the console renders times in. Server-rendered, so without it
+      # an administrator reads every timestamp in UTC while the sandboxes it
+      # lists run on the deployment's own time.
+      TZ: ${DEPLOYMENT_TZ:-UTC}
       SANDBOX_RUNTIME: ${SANDBOX_RUNTIME:-docker}
       SANDBOX_IMAGE: dsh-sandbox:latest
       SANDBOX_NETWORK: ${COMPOSE_NETWORK:-dsh-multitenant_dsh-net}
@@ -146,7 +150,7 @@ services:
       args:
         APT_MIRROR: ${APT_MIRROR:-}
         NPM_REGISTRY: ${NPM_REGISTRY:-}
-        TZ: ${SANDBOX_TZ:-UTC}
+        TZ: ${DEPLOYMENT_TZ:-UTC}
     image: dsh-sandbox:latest
     profiles: [build]
     networks: [dsh-net]

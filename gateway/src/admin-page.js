@@ -28,6 +28,9 @@ import { describeKey } from './settings.js'
  * @returns {string} the rendered time.
  */
 function when(at) {
+  // The deployment's clock, not the reader's: rendered on the server, where
+  // `TZ` says which one that is. Node carries its own zone data, so the
+  // variable is enough — the image needs no `tzdata` for this to be right.
   const date = new Date(at)
   const pad = (value) => String(value).padStart(2, '0')
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
