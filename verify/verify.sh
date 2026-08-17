@@ -205,7 +205,17 @@ else
 fi
 
 echo
-echo '=== 0b. The idle sweep ==='
+echo '=== 0b. What a refresh token does when a browser wakes ==='
+echo '     (the failure needs simultaneous requests, not elapsed time)'
+if docker compose cp verify-refresh.mjs gateway:/app/verify-refresh.mjs > /dev/null 2>&1; then
+  docker compose exec -T gateway node /app/verify-refresh.mjs || NODE_FAIL=1
+else
+  echo '  FAIL  could not copy the check into the gateway container'
+  NODE_FAIL=1
+fi
+
+echo
+echo '=== 0c. The idle sweep ==='
 echo '     (a decision about elapsed time, driven directly rather than waited out)'
 echo '     (runs in the gateway container, the one place with node and the sources)'
 if docker compose cp verify-idle.mjs gateway:/app/verify-idle.mjs > /dev/null 2>&1; then
