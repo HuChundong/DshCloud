@@ -23,6 +23,7 @@ window.__ModuleLoader__.load({
   id: 'dsh-sandbox-host',
   factory: (require) => {
     const React = require('react')
+    const ReactDom = require('react-dom')
 
     // ---------------------------------------------------------------- wire --
 
@@ -144,10 +145,10 @@ window.__ModuleLoader__.load({
           return () => { listeners.delete(listener) }
         },
         snapshot: () => rows,
-        add(file) {
+        add(file, sessionId) {
           const key = nextKey
           nextKey += 1
-          rows = [...rows, { key, name: file.name, size: file.size, sent: 0 }]
+          rows = [...rows, { key, sessionId, name: file.name, size: file.size, sent: 0 }]
           emit()
           return key
         },
@@ -206,7 +207,7 @@ window.__ModuleLoader__.load({
      */
     const sendFiles = (files) => {
       for (const file of files) {
-        const key = store.add(file)
+        const key = store.add(file, composer.sessionId)
         queue = queue
           .then(() => upload(file, (sent) => { store.update(key, { sent }) }))
           .then((published) => {
@@ -272,11 +273,12 @@ window.__ModuleLoader__.load({
      * themes without this file knowing either.
      */
     const STYLE = `
-      .${P}-cards { display: flex; flex-direction: column; gap: 6px; padding: 4px 14px 2px; }
+      .${P}-cards { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 14px 0; }
       .${P}-card {
-        display: flex;
+        display: inline-flex;
         align-items: center;
-        gap: 10px;
+        max-width: 16rem;
+        gap: 8px;
         padding: 6px 10px;
         border: 1px solid var(--dsw-alias-border-l2, rgb(0 0 0 / 10%));
         border-radius: 10px;
@@ -285,7 +287,7 @@ window.__ModuleLoader__.load({
         line-height: 18px;
       }
       .${P}-icon { flex: none; color: var(--dsw-alias-label-secondary, #81858c); }
-      .${P}-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+      .${P}-text { flex: 0 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
       .${P}-name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
       .${P}-meta { color: var(--dsw-alias-label-secondary, #81858c); font-size: 12px; line-height: 16px; }
       .${P}-fail { color: var(--dsw-alias-label-error, #c0392b); }
@@ -357,14 +359,12 @@ window.__ModuleLoader__.load({
      * The slot this registers into (`conversation.input.dock`) paints a row
      * ABOVE the composer card, and dsh's image thumbnails sit INSIDE it, above
      * the textarea. That seat — `accessory` on the composer bar's owner props —
-     * is not a slot, so the node this returns is moved into place: the card is
-     * a flex column of `overlayAnchor`, the scroll region holding the textarea,
-     * and the tool row, and an attachment belongs immediately before the scroll
-     * region.
+     * is not a slot, so this puts a container of its own where the rail lives
+     * and renders into it through a portal.
      *
      * A forgery, like the spliced `+` group, and reported upstream with it. It
      * keys on the textarea rather than on the card's hashed class name, and it
-     * re-seats itself when React replaces the container.
+     * re-seats its container when React rebuilds the composer.
      *
      * @param {object} props - the session standard kit.
      * @returns {object|null} the cards, or nothing to show.
@@ -373,25 +373,43 @@ window.__ModuleLoader__.load({
       const rows = useRows()
       const [dragging, setDragging] = React.useState(false)
       const running = useSession((state) => state.running) ?? false
-      const host = React.useRef(null)
+      const [seat, setSeat] = React.useState(null)
+      // Cards belong to the session they were uploaded from; the store is one
+      // module-level list shared by every scope that mounts this.
+      const mine = rows.filter((row) => row.sessionId === sessionId)
 
       composer.sessionId = sessionId
 
-      // Move the node into the composer card, and put it back if React ever
-      // rebuilds the container out from under it.
+      // A container of our own, placed in the composer card and filled through
+      // a portal.
+      //
+      // Moving React's OWN node there instead is what froze the page: React
+      // still believes the node is a child of the dock container, and the first
+      // time it unmounts the entry — which happens when the composer is rebuilt
+      // on the blank-to-active flip — `removeChild` throws on a node that is no
+      // longer there, and it throws again on every retry. A portal inverts it:
+      // React renders into a container it does not own the position of, and
+      // this side owns nothing React renders.
       React.useEffect(() => {
-        const seat = () => {
-          const node = host.current
-          if (node === null) return
+        const container = document.createElement('div')
+        container.dataset.dshSandboxHost = 'attachments'
+        const place = () => {
           const scroll = document.querySelector('textarea')?.parentElement?.parentElement
           if (scroll === undefined || scroll === null) return
-          if (node.parentElement === scroll.parentElement && node.nextElementSibling === scroll) return
-          scroll.before(node)
+          // Parent only, never adjacency: two mounted session scopes would each
+          // demand the slot immediately before the textarea and shove the other
+          // out of it forever.
+          if (container.parentElement === scroll.parentElement) return
+          scroll.before(container)
+          setSeat(container)
         }
-        seat()
-        const observer = new MutationObserver(seat)
+        place()
+        const observer = new MutationObserver(place)
         observer.observe(document.body, { subtree: true, childList: true })
-        return () => { observer.disconnect() }
+        return () => {
+          observer.disconnect()
+          container.remove()
+        }
       }, [])
 
       // The turn claims the notices, so the cards have nothing left to say.
@@ -448,18 +466,18 @@ window.__ModuleLoader__.load({
         store.remove(row.key)
       }
 
-      const body = !dragging && rows.length === 0
+      const body = !dragging && mine.length === 0
         ? null
         : React.createElement(
           'div',
           { className: `${P}-cards` },
           React.createElement(Style),
-          dragging && rows.length === 0 && React.createElement(
+          dragging && mine.length === 0 && React.createElement(
             'div',
             { className: `${P}-drop` },
             '松手即可上传到你的沙箱',
           ),
-          ...rows.map((row) => {
+          ...mine.map((row) => {
             const done = row.path !== undefined
             const failed = row.error !== undefined
             return React.createElement(
@@ -500,10 +518,7 @@ window.__ModuleLoader__.load({
           }),
         )
 
-      // The wrapper is always rendered, empty or not: it is the node the effect
-      // above seats inside the composer card, and a null return would take that
-      // seat away every time the last card goes.
-      return React.createElement('div', { ref: host }, body)
+      return seat === null ? null : ReactDom.createPortal(body, seat)
     }
 
     // ------------------------------------------------------- the + splicing --

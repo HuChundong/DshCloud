@@ -364,7 +364,17 @@ one sits next to something it does offer.
   most common row.
 
 Two of the three are answered here by forgery: a second panel drawn above the
-real `+` menu, and the card's DOM node moved into the composer after render.
+real `+` menu, and a container of this plugin's own placed where the image rail
+sits, filled through a React portal.
+
+The card started as the second half of that sentence done wrong — React's own
+node, moved. It froze the page, and only on the gesture that matters: upload,
+then send. React still believes a moved node is a child of the container it
+rendered it into, so the first unmount — the composer is rebuilt on the
+blank-to-active flip — calls `removeChild` on a node that is no longer there,
+throws, and throws again on every retry. A portal inverts the ownership: React
+renders into a container whose position it does not own, and this side owns
+nothing React renders.
 Both key on ARIA roles (`[role=listbox]`, `aria-expanded`, the textarea) rather
 than on hashed CSS-module names, and both copy the real element's *computed*
 style instead of restating it, so a theme change or an upstream restyle carries
@@ -419,6 +429,9 @@ the client already has.
 - **The seat you can reach is not always the seat you want.** The draft is the
   only writable part of the composer, which is why it took two tries to look for
   the agent inbox.
+- **Never move a node React rendered.** Give React a container and a portal
+  instead; a stolen node survives until the first unmount and then freezes the
+  page.
 - **Read `inject` against every use of `ctx`, not the ones at startup.** A
   service used on one rare path is one the happy path cannot prove.
 - **A failure that looks like a normal event is the kind that lasts.** "The
