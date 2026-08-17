@@ -75,7 +75,7 @@ export async function handleConsole(path, req, res, deps) {
   if (path === '/admin/invites') {
     const minted = await deps.invites.mint(Number(form.get('count') ?? 1), account.email)
     console.log(`gateway: ${account.email} minted ${minted.length} invite(s)`)
-    backToConsole(res, `已生成 ${minted.length} 个邀请码。`)
+    backToConsole(res, `已生成 ${minted.length} 个邀请码。`, req)
     return
   }
   if (path === '/admin/model') {
@@ -87,18 +87,18 @@ export async function handleConsole(path, req, res, deps) {
     // corrected the endpoint beside it.
     const apiKey = (form.get('apiKey') ?? '').trim() === '' ? current.apiKey : form.get('apiKey').trim()
     if (baseUrl === '' || apiKey === '') {
-      backToConsole(res, '接口地址和密钥都不能为空。')
+      backToConsole(res, '接口地址和密钥都不能为空。', req)
       return
     }
     await deps.settings.setModelCredential(baseUrl, apiKey, account.email)
     console.log(`gateway: ${account.email} updated the model credential`)
-    backToConsole(res, '已保存。已在运行的沙箱不受影响，新建的会用它。')
+    backToConsole(res, '已保存。已在运行的沙箱不受影响，新建的会用它。', req)
     return
   }
   if (path === '/admin/invites/discard') {
     const code = normalizeInvite(form.get('code') ?? '')
     const discarded = await deps.invites.discard(code)
-    backToConsole(res, discarded ? `邀请码 ${code} 已删除。` : '该邀请码不存在。')
+    backToConsole(res, discarded ? `邀请码 ${code} 已删除。` : '该邀请码不存在。', req)
     return
   }
 
@@ -106,7 +106,7 @@ export async function handleConsole(path, req, res, deps) {
   // An administrator acting on their own account can lock the deployment out of
   // its own console, so the page does not offer it and this refuses it.
   if (email === account.email) {
-    backToConsole(res, '不能对当前登录的账号执行该操作。')
+    backToConsole(res, '不能对当前登录的账号执行该操作。', req)
     return
   }
 
@@ -157,7 +157,7 @@ export async function handleConsole(path, req, res, deps) {
     }
   }
   console.log(`gateway: ${account.email} — ${notice ?? `no such account ${email}`}`)
-  backToConsole(res, notice)
+  backToConsole(res, notice, req)
 }
 
 /**
@@ -172,7 +172,19 @@ export async function handleConsole(path, req, res, deps) {
  * @param {import('node:http').ServerResponse} res - the response.
  * @param {string} [notice] - what happened, to show once on arrival.
  */
-function backToConsole(res, notice) {
+function backToConsole(res, notice, req) {
+  // Answered in place when the page asked in place. An action is a request,
+  // not a destination, so navigating to one puts its outcome in the address
+  // bar — where a refresh replays the notice for something that happened once
+  // and is already done.
+  //
+  // The redirect stays for a form posted without scripting, which has nowhere
+  // else to put the answer.
+  if (req?.headers['x-console-action'] === 'fetch') {
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
+    res.end(JSON.stringify({ notice: notice ?? null }))
+    return
+  }
   const query = notice === undefined ? '' : `?done=${encodeURIComponent(notice)}`
   res.writeHead(303, { Location: `/admin${query}` })
   res.end()

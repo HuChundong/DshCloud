@@ -334,14 +334,13 @@ ${inviteRows}
   (function () {
     var dialog = document.getElementById('confirm')
     var text = document.getElementById('confirm-text')
-    var pending = null
 
     document.addEventListener('submit', function (event) {
       var form = event.target
-      var message = form.dataset && form.dataset.confirm
-      if (!message || form === pending) return
+      if (!form.action || form.method.toLowerCase() !== 'post') return
       event.preventDefault()
-      pending = null
+      var message = form.dataset && form.dataset.confirm
+      if (!message) { run(form); return }
       text.textContent = message
       dialog.returnValue = 'cancel'
       dialog.showModal()
@@ -354,12 +353,51 @@ ${inviteRows}
       dialog.close()
       if (value !== 'go') return
       var form = document.getElementById(dialog.dataset.form)
-      if (!form) return
-      // Re-submitted through the same listener, which lets it past by
-      // recognising the form it just asked about.
-      pending = form
-      form.submit()
+      if (form) run(form)
     })
+
+    // An action is a request, not a destination. Posting the form navigates,
+    // which puts the outcome in the address bar and replays it on refresh; this
+    // sends the same request without leaving the page, then reloads the console
+    // into the same URL it was already on.
+    function run(form) {
+      fetch(form.action, {
+        method: 'POST',
+        headers: { 'X-Console-Action': 'fetch' },
+        body: new URLSearchParams(new FormData(form)),
+      }).then(function (response) {
+        // A session that expired mid-visit answers with the login page rather
+        // than an outcome. Submitting normally is what gets the person there.
+        if (!response.ok) { form.submit(); return }
+        return response.json().then(function (body) { return refresh(body.notice) })
+      }).catch(function () { form.submit() })
+    }
+
+    // The console re-read from the server rather than patched here, so what is
+    // on screen is what it would serve — one description of the page, not two.
+    function refresh(notice) {
+      return fetch('/admin', { headers: { Accept: 'text/html' } })
+        .then(function (response) { return response.text() })
+        .then(function (html) {
+          var fresh = new DOMParser().parseFromString(html, 'text/html')
+          var main = fresh.querySelector('main')
+          if (main) document.querySelector('main').replaceWith(main)
+          announce(notice)
+        })
+    }
+
+    // The toast the server would have rendered, raised here because the page
+    // never reloaded to receive one.
+    function announce(notice) {
+      if (!notice) return
+      var existing = document.querySelector('.toast')
+      if (existing) existing.remove()
+      var node = document.createElement('div')
+      node.className = 'toast'
+      node.textContent = notice
+      document.body.appendChild(node)
+      setTimeout(function () { node.remove() }, 4000)
+    }
   })()
 </script>
 <footer>DeepSeek Harness · 自建部署${release}</footer>
