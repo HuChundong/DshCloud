@@ -284,7 +284,7 @@ nginx location、网关路由里的一个分支、沙箱里的一条路由。藏
 按哈希后的 CSS-module 类名；两者都**读取真元素的计算样式**而不是照抄一遍，所以换主题、上游
 改版都能跟上。两者都扛不住组合器结构本身的变化，也都会在那些座位真的出现的那天被删掉。
 
-第三样没有伪造。三条一起报在了 [discussion 2729](https://github.com/deepseek-ai/deepseek-harness/discussions/2729)。
+第三样没有伪造。三条一起报在了 [discussion 2741](https://github.com/deepseek-ai/deepseek-harness/discussions/2741)。
 
 ## 「写进草稿」不等于「告诉 agent」
 

@@ -372,7 +372,7 @@ across. Neither survives a change to the composer's shape, and both go away the
 day the seats exist.
 
 The third was not forged. Reported with the others at
-[discussion 2729](https://github.com/deepseek-ai/deepseek-harness/discussions/2729).
+[discussion 2741](https://github.com/deepseek-ai/deepseek-harness/discussions/2741).
 
 ## Writing into the draft is not the same as telling the agent
 
