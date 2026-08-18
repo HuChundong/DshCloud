@@ -343,7 +343,6 @@ window.__ModuleLoader__.load({
         border-top: 1px solid var(--dsw-alias-border-l2, rgb(0 0 0 / 8%));
         margin-top: 4px;
       }
-      .${P}-sandbox-rail { display: flex; justify-content: center; width: 100%; padding: 6px 0 2px; }
       .${P}-sandbox-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
       .${P}-sandbox-title { font-size: 12px; color: var(--dsw-alias-label-secondary, #81858c); line-height: 16px; }
       .${P}-sandbox-state {
@@ -837,16 +836,13 @@ window.__ModuleLoader__.load({
       const gb = (bytes) => `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`
       const asText = (part) => (part ? `${gb(part.usedBytes)} / ${gb(part.totalBytes)}` : '未知')
 
-      // Collapsed to a 56px rail there is room for the dot and nothing else;
-      // the rings would be three unreadable circles.
-      if (!wide) {
-        return React.createElement(
-          'div',
-          { className: `${P}-sandbox-rail`, title: `沙箱 ${text}` },
-          React.createElement(Style),
-          React.createElement('span', { className: `${P}-dot`, style: { background: dot } }),
-        )
-      }
+      // Nothing at all on the 56px rail. A lone dot there was the first cut,
+      // and it read as a stray mark: with no label beside it, nothing says the
+      // colour is about a sandbox, and the three rings it stood in for cannot
+      // fit at that width either. The row returns when the column does — which
+      // is also what the shell's own chrome does with everything it cannot
+      // render narrow.
+      if (!wide) return null
 
       return React.createElement(
         'div',

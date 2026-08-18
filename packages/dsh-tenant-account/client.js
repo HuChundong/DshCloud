@@ -178,8 +178,9 @@ window.__ModuleLoader__.load({
       .${U}-row {
         display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0;
       }
+      .${U}-row[data-wide='false'] { justify-content: center; gap: 0; }
       .${U}-avatar {
-        flex: none; width: 24px; height: 24px; border-radius: 50%;
+        flex: none; width: 26px; height: 26px; border-radius: 50%;
         display: inline-flex; align-items: center; justify-content: center;
         background: var(--dsw-alias-fill-secondary, rgb(0 0 0 / 6%));
         color: var(--dsw-alias-label-primary, inherit);
@@ -271,13 +272,17 @@ window.__ModuleLoader__.load({
       }
 
       const label = who.username === '' ? '—' : who.username
-      const initial = who.username === '' ? '?' : [...who.username][0]
+      // The address's first letter, which is the only part of it that fits on
+      // the 56px rail. A question mark while it loads would be a different
+      // claim — that nobody is signed in — so an empty circle waits instead.
+      const initial = who.username === '' ? '' : [...who.username][0]
 
       return React.createElement(
         'div',
         {
           ref: host,
           className: `${U}-row`,
+          'data-wide': String(wide === true),
           // The owner's button opens Settings on click. This seat is the whole
           // account control now, so that gesture belongs to the menu instead —
           // and capture-phase is what stops the click before the owner sees it.
@@ -289,7 +294,13 @@ window.__ModuleLoader__.load({
             const anchor = host.current?.closest('button') ?? host.current
             const rect = anchor?.getBoundingClientRect()
             setMenu(menu === null && rect
-              ? { left: rect.left, bottom: window.innerHeight - rect.top + 6 }
+              // On the rail the button is 40-odd pixels wide and a menu aligned
+              // to its left edge would hang off the column; there, it opens
+              // beside the rail instead of above it.
+              ? {
+                left: wide === true ? rect.left : rect.right + 8,
+                bottom: wide === true ? window.innerHeight - rect.top + 6 : window.innerHeight - rect.bottom,
+              }
               : null)
           },
         },

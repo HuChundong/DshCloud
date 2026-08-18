@@ -458,6 +458,11 @@ looking. A push would have cost a frame kind in the tunnel protocol and
 per-tenant state in the gateway; a poll costs one small round trip and nothing
 when no tab is open.
 
+Collapsed to the 56px rail the row renders nothing at all. A lone status dot
+was the first cut and it read as a stray mark: with no label beside it nothing
+says the colour is about a sandbox, and the three rings it stood in for do not
+fit at that width either.
+
 Whether the sandbox is RUNNING is deliberately not part of that answer. A
 sandbox that is not running answers nothing at all, and the gateway already
 says so with a 503 — so the state is read from whether the call arrives, which
