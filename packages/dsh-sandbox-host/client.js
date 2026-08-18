@@ -30,6 +30,55 @@ window.__ModuleLoader__.load({
     /** The channel the host half owns. One path segment; see its module note. */
     const CHANNEL = '/files'
 
+    /** Marks a nav label that brought its own glyph. */
+    const NAV_GLYPH = 'dsh-settings-nav-glyph'
+
+    /** Hides the panel's fallback gear on any cell whose label brought one. */
+    const NAV_GLYPH_CSS = `
+      button:has(> span > .${NAV_GLYPH}) > svg { display: none; }
+    `
+
+    /**
+     * A settings-nav label that carries its own glyph.
+     *
+     * The panel picks its nav icon from a hardcoded list of three section ids
+     * and gives everything else the same gear, and its registration contract
+     * has no icon field — but `resolveSlotLabel` is `typeof x === 'function' ?
+     * x() : x`, so a label is passed through verbatim and may be a node. The
+     * glyph therefore rides in on the label, inside the span the panel renders
+     * it into.
+     *
+     * The rule that hides the fallback gear is mounted separately rather than
+     * from inside this label: a style tag here would put its CSS into the nav
+     * cell's `textContent`, which is the cell's accessible name — a screen
+     * reader would read the stylesheet out. It is written structurally — a
+     * button whose label holds our marker, hide the svg that is its own direct
+     * child — so it names no content-hashed class and survives the panel's
+     * styles being rebuilt. If upstream ever changes that shape the worst case
+     * is two glyphs, not a broken page.
+     *
+     * @param {string} d - the path data for a 16px glyph.
+     * @param {string} text - the section name.
+     * @returns {object} the label node.
+     */
+    const navLabel = (d, text) => React.createElement(
+      React.Fragment,
+      null,
+      React.createElement(
+        'span',
+        { className: NAV_GLYPH, style: { display: 'inline-flex', alignItems: 'center', gap: '8px' } },
+        React.createElement('svg', {
+          width: 16, height: 16, viewBox: '0 0 16 16', fill: 'none',
+          style: { flex: 'none' }, 'aria-hidden': true,
+        }, React.createElement('path', {
+          d, stroke: 'currentColor', strokeWidth: 1.3,
+          strokeLinecap: 'round', strokeLinejoin: 'round',
+        })),
+        text,
+      ),
+    )
+
+
     /**
      * The plugin context, captured at mount.
      *
@@ -347,7 +396,14 @@ window.__ModuleLoader__.load({
       /* The same card the sidebar's own rows take under the pointer, at the
          radius they use. Nothing here is clickable, so the cursor is left
          alone: the tint says "these figures are one thing", not "press me". */
-      .${P}-sandbox:hover { background: var(--dsw-alias-button-ghost-active-fill, rgb(235 238 242)); }
+      /* The wash the shell uses for its own hoverable rows, not a solid fill.
+          The account row directly below this one is inside the shell's Settings
+          button and hovers with that wash; a solid fill here made two rows in
+          one column light up at visibly different strengths. Solid tokens are
+          also a trap on this palette — ghost-active-fill and elevated-fill are
+          the same colour in dark, so a fill can silently equal its own
+          background. An overlay cannot. */
+      .${P}-sandbox:hover { background: var(--dsw-alias-interactive-bg-hover, rgb(0 0 0 / 5%)); }
       .${P}-sandbox-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
       .${P}-sandbox-title { font-size: 12px; color: var(--dsw-alias-label-tertiary, #81858c); line-height: 16px; }
       .${P}-sandbox-state {
@@ -900,6 +956,164 @@ window.__ModuleLoader__.load({
      *
      * @returns {object} the page.
      */
+    /**
+     * The sandbox, in the settings panel.
+     *
+     * The sidebar row says whether the machine is alive in the corner of a
+     * person's eye; this says what it actually is, at a size where the figures
+     * can be read rather than inferred from the fill of a 16px ring. Pressing
+     * that row is what opens this panel.
+     *
+     * Belongs to this plugin rather than to `dsh-tenant-account` by the same
+     * test as everything else here: take the gateway away and a person running
+     * dsh remotely still has a sandbox, still fills its disk, and still wants
+     * to know which of the two it is.
+     *
+     * @returns {object} the section.
+     */
+    const SandboxSection = () => {
+      const [state, setState] = React.useState({ status: 'unknown', stats: null })
+
+      React.useEffect(() => {
+        let live = true
+        let timer
+        const tick = async () => {
+          try {
+            const stats = await call('sandbox.stats', {})
+            if (live) setState({ status: 'running', stats })
+          } catch {
+            // As in the sidebar row: a sandbox that is not running answers
+            // nothing, so the failure IS the status rather than an error.
+            if (live) setState((current) => ({ status: 'starting', stats: current.stats }))
+          }
+          if (live) timer = setTimeout(() => { void tick() }, STATS_INTERVAL_MS)
+        }
+        void tick()
+        return () => { live = false; clearTimeout(timer) }
+      }, [])
+
+      const { status, stats } = state
+      const secondary = { color: 'var(--dsw-alias-label-tertiary, #81858c)', fontSize: '13px' }
+      const heading = { margin: '0 0 2px', fontSize: '13px', fontWeight: 500, color: 'var(--dsw-alias-label-secondary, #4c5157)' }
+
+      const gb = (bytes) => `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`
+      const ratio = (part) => (part && part.totalBytes > 0 ? part.usedBytes / part.totalBytes : null)
+
+      /**
+       * One measured figure: what it is, how much of it, and a bar.
+       *
+       * The bar is the same fact as the number beside it, not extra
+       * information — it exists so that "nearly full" is legible without
+       * reading two numbers and dividing them.
+       *
+       * @param {object} props - `label`, `value` text, and `fill` in 0..1 or null.
+       * @returns {object} the row.
+       */
+      const Meter = ({ label, value, fill }) => React.createElement(
+        'div',
+        { style: { display: 'flex', flexDirection: 'column', gap: '6px' } },
+        React.createElement(
+          'div',
+          { style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '12px' } },
+          React.createElement('span', { style: { fontSize: '13px' } }, label),
+          React.createElement(
+            'span',
+            { style: { ...secondary, fontVariantNumeric: 'tabular-nums' } },
+            value,
+          ),
+        ),
+        React.createElement(
+          'div',
+          {
+            style: {
+              height: '4px', borderRadius: '999px', overflow: 'hidden',
+              background: 'var(--dsw-alias-border-l1, rgb(0 0 0 / 6%))',
+            },
+          },
+          React.createElement('div', {
+            style: {
+              // Null reads as an empty track rather than a zero-width fill,
+              // which is the same pixels and a different claim; the figure
+              // beside it already says the measurement is not in yet.
+              width: `${String(Math.round((fill ?? 0) * 100))}%`,
+              height: '100%',
+              borderRadius: '999px',
+              background: 'var(--dsw-alias-label-primary, #1a1a1a)',
+              transition: 'width .4s ease',
+            },
+          }),
+        ),
+      )
+
+      const row = (title, body) => React.createElement(
+        'div',
+        { style: { display: 'flex', flexDirection: 'column' } },
+        React.createElement('div', { style: heading }, title),
+        body,
+      )
+
+      return React.createElement(
+        'div',
+        { style: { display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '32rem' } },
+        row('标识', React.createElement(
+          'code',
+          { style: { ...secondary, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' } },
+          stats?.id ?? '未知',
+        )),
+        row('状态', React.createElement(
+          'div',
+          { style: { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px' } },
+          React.createElement('span', {
+            style: {
+              width: '6px', height: '6px', borderRadius: '50%',
+              background: status === 'running' ? 'var(--dsw-alias-state-success-primary, #22c55e)'
+                : status === 'starting' ? 'var(--dsw-alias-state-warn-label, #dd8629)'
+                  : 'var(--dsw-alias-border-l2, rgb(0 0 0 / 25%))',
+            },
+          }),
+          status === 'running' ? '运行中' : status === 'starting' ? '连接中' : '未知',
+          // Beside the state, because anything that acts on the machine is
+          // answering the state. Empty here: ending a sandbox is the gateway's
+          // to offer, and this plugin has no gateway to ask.
+          React.createElement('span', { className: `${P}-status-extra`, style: { marginLeft: 'auto' } }),
+        )),
+        row('用量', React.createElement(
+          'div',
+          { style: { display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '6px' } },
+          React.createElement(Meter, {
+            label: 'CPU',
+            value: stats?.cpu === null || stats?.cpu === undefined
+              ? '正在测量'
+              : `${stats.cores ? `${String(stats.cores)} 核 · ` : ''}${String(Math.round(stats.cpu * 100))}%`,
+            fill: stats?.cpu ?? null,
+          }),
+          React.createElement(Meter, {
+            label: '内存',
+            value: stats?.memory ? `${gb(stats.memory.usedBytes)} / ${gb(stats.memory.totalBytes)}` : '未知',
+            fill: ratio(stats?.memory),
+          }),
+          React.createElement(Meter, {
+            label: '磁盘',
+            value: stats?.disk ? `${gb(stats.disk.usedBytes)} / ${gb(stats.disk.totalBytes)}` : '未知',
+            fill: ratio(stats?.disk),
+          }),
+        )),
+        React.createElement(
+          'p',
+          { style: { ...secondary, margin: 0 } },
+          '这台机器只属于你：会话、工作区与文件都不与其他用户共享。闲置一段时间后它会被回收，下次打开时重新创建。',
+        ),
+        // A seat for whatever else a deployment has to say about this machine.
+        //
+        // Empty here, and this plugin never fills it: what goes in is the
+        // tenant's own environment, which needs a gateway, an account and a
+        // database — none of which exist when this plugin is used on its own.
+        // A deployment that has them portals into this; one that does not gets
+        // an empty div and a page that still reads correctly.
+        React.createElement('div', { className: `${P}-page-extra` }),
+      )
+    }
+
     const ConfigurationSection = () => {
       const [state, setState] = React.useState({ status: 'loading' })
 
@@ -1039,10 +1253,35 @@ window.__ModuleLoader__.load({
 
         ctx.effect(
           () => ctx.slots.inject('settings.section', () => ctx.slots.register(
-            { name: 'settings.section', id: 'configuration', order: 890, label: '配置文件' },
+            {
+              name: 'settings.section',
+              id: 'configuration',
+              order: 890,
+              label: navLabel('M9 1.75H4.5a1 1 0 0 0-1 1v10.5a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V5.25zM9 1.75v3.5h3.5M5.75 8.5h4.5M5.75 11h3', '配置文件'),
+            },
             ConfigurationSection,
           )),
           'sandbox-host: settings configuration section',
+        )
+
+        // Before the configuration page and before the account: what the
+        // machine IS comes ahead of what is written on it.
+        ctx.effect(
+          () => ctx.slots.inject('settings.section', () => ctx.slots.register(
+            {
+              name: 'settings.section',
+              id: 'sandbox',
+              order: 880,
+              // A cube: an isolated unit that is one tenant's, which is what a sandbox
+              // is here. The box it replaced read as a storage tray — it said
+              // "things are kept in this" where the page says "this is a machine",
+              // and every other glyph in that column is a rounded rectangle, so the
+              // one shape that is not is also the easiest to pick out.
+              label: navLabel('M8 1.75 14 5v6l-6 3.25L2 11V5zM2 5l6 3.25L14 5M8 8.25v6', '沙箱'),
+            },
+            SandboxSection,
+          )),
+          'sandbox-host: settings sandbox section',
         )
 
         // The header action seat, left empty because its capability moved to
@@ -1066,9 +1305,13 @@ window.__ModuleLoader__.load({
         ctx.effect(
           () => ctx.slots.inject('settings.action', () => ctx.slots.register(
             { name: 'settings.action', id: 'open-document', priority: -1 },
-            () => null,
+            // Nothing to see, and one thing to say: this seat renders exactly
+            // when the settings panel is open, which is when the nav rule has
+            // to be in force. It cannot ride in the label — a style tag there
+            // lands in the nav cell's accessible name.
+            () => React.createElement('style', null, NAV_GLYPH_CSS),
           )),
-          'sandbox-host: relocate the open-document action',
+          'sandbox-host: relocate the open-document action, and carry the nav rule',
         )
       },
     }

@@ -178,7 +178,11 @@ export function apply(ctx, config) {
         // gateway says so with a 503. The browser reads the status from
         // whether this call arrives, which is the only version of the question
         // that is not a guess.
-        return { ok: true, value: await metrics.read() }
+        // The identity too, which is not a measurement but is the one thing a
+        // person has to quote when reporting that their machine misbehaved.
+        // Harmless to disclose to its own owner: dialling in needs the token,
+        // which never leaves the sandbox and the gateway.
+        return { ok: true, value: { id: process.env.SANDBOX_ID ?? null, ...await metrics.read() } }
       default:
         return badRequest(`no such endpoint: ${endpoint}`)
     }
