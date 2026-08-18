@@ -77,11 +77,24 @@ adapter=$(docker run --rm --entrypoint node "$SANDBOX" -e "
 " 2>/dev/null || echo error)
 check 'the sandbox-host plugin loads' loaded "$adapter"
 
-for half in dsh-sandbox-host dsh-tenant-account; do
+# Resolved through `dsh.client.main` rather than assumed to be `client.js`,
+# because one of these is BUILT: the panel bundles xterm and ships
+# `lib/client.js`, which is gitignored and produced during the image build. A
+# check that opened `client.js` would have read the package's other half, or
+# nothing, and passed either way — while the registry served a 404 and the
+# panel simply never appeared.
+for half in dsh-sandbox-host dsh-tenant-account dsh-artifact-panel; do
   parsed=$(docker run --rm --entrypoint node "$SANDBOX" -e "
     const { readFileSync } = require('fs')
+    const path = require('path')
+    const base = '$PROFILE/node_modules/$half'
     try {
-      new Function(readFileSync('$PROFILE/node_modules/$half/client.js', 'utf8'))
+      const manifest = JSON.parse(readFileSync(base + '/package.json', 'utf8'))
+      // Declared when there is something to declare, `client.js` by convention
+      // otherwise — which is how the registry itself resolves it, and how the
+      // two hand-written halves are found.
+      const entry = manifest.dsh?.client?.main ?? 'client.js'
+      new Function(readFileSync(path.join(base, entry), 'utf8'))
       console.log('parses')
     } catch (error) { console.log('failed: ' + error.message) }
   " 2>/dev/null || echo error)
