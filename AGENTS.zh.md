@@ -132,6 +132,17 @@ ssh <host> 'cd /path/to/dshcloud && git pull --ff-only'
 `gateway/`、`web/`、`sandbox/`、`packages/` 下的任何改动，在重新构建之前抵达不了任何人，
 而改了 sandbox 还需要建新模板。只改 `verify/`、`scripts/`、`docs/` 的话，pull 即生效。
 
+**重新构建同样不等于部署。** `docker compose build` 只是把 `:latest` 这个标签挪到新镜像上；
+已经在跑的容器仍然用它被创建时的那个镜像，而 `stop` 再 `start` 重启的正是同一个容器。要用
+`up -d`——它会把镜像已经变了的容器重建——**不要**在构建之后用 `restart` 或 `stop`/`start`。
+这件事没有任何东西会提醒你：构建成功，服务恢复健康，日志一切正常，跑的还是旧代码。要紧的时候
+拿容器和标签对一下：
+
+```sh
+docker inspect <container> --format '{{.Image}}'   # 必须等于
+docker images -q --no-trunc <image>:latest
+```
+
 ## 文档
 
 每一页都是一对：英文 `X.md` 与中文 `X.zh.md`，互相链接，`##` 章节相同且顺序一致。英文是默认

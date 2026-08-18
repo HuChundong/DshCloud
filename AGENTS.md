@@ -169,6 +169,19 @@ CubeSandbox the template built from them — so a change to anything under
 rebuilt, and a sandbox change also needs a new template. A change to `verify/`,
 `scripts/`, or `docs/` takes effect on pull alone.
 
+**A rebuild is not one either.** `docker compose build` moves the `:latest` tag;
+a container already running keeps the image it was created from, and `stop` then
+`start` restarts that same container. Use `up -d` — which recreates a container
+whose image has moved — and never `restart` or `stop`/`start` after a build.
+Nothing warns about this: the build succeeds, the service comes back healthy,
+the logs look right, and the old code is still serving. Check the container
+against the tag when it matters:
+
+```sh
+docker inspect <container> --format '{{.Image}}'   # must equal
+docker images -q --no-trunc <image>:latest
+```
+
 ## Documentation
 
 Every page is a pair: `X.md` in English and `X.zh.md` in Chinese, each linking
