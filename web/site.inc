@@ -74,6 +74,86 @@ location = /sandbox/restart {
   proxy_read_timeout 5m;
 }
 
+# Two streams the panel keeps open: the sandbox's own numbers, and the changes
+# under its workspace. One location, because they are the same kind of thing —
+# a long-lived response the gateway writes to when it has something to say. One sample per sandbox is taken by
+# the gateway and fanned out to whoever is watching, so this connection stays
+# open and says nothing for seconds at a time — hence the long read timeout,
+# and `proxy_buffering off`, without which nginx holds each event until it has
+# collected enough of them to be worth forwarding.
+location ~ ^/sandbox/(stats|watch)$ {
+  proxy_pass http://gateway;
+  proxy_http_version 1.1;
+  proxy_set_header Host $host;
+  proxy_set_header X-Forwarded-Proto $scheme;
+  proxy_read_timeout 1h;
+  proxy_send_timeout 1h;
+  proxy_buffering off;
+  proxy_cache off;
+}
+
+# The panel's terminal. A WebSocket, so it needs the upgrade headers the two
+# `/api` downlinks get; without them nginx answers the handshake as an ordinary
+# request and the shell never opens. The long timeouts are what a terminal is:
+# an idle prompt sends nothing for as long as nobody types.
+location = /sandbox/pty {
+  proxy_pass http://gateway;
+  proxy_http_version 1.1;
+  proxy_set_header Host $host;
+  proxy_set_header X-Forwarded-Proto $scheme;
+  proxy_set_header Upgrade $http_upgrade;
+  proxy_set_header Connection $connection_upgrade;
+  proxy_read_timeout 1h;
+  proxy_send_timeout 1h;
+  proxy_buffering off;
+}
+
+# The right-hand panel's file plane: listing a directory, describing a path, and
+# a file's own bytes. Two locations rather than one, because they are two kinds
+# of answer — JSON about the workspace, and the bytes of one file in it.
+#
+# A prefix match, and that is the point of writing them out: the only other
+# `/sandbox` rule here is `location = /sandbox/restart`, an EXACT match, so it
+# does not cover these. Without these blocks the requests never reach the
+# gateway at all — they fall through to `try_files` and come back 404, while a
+# curl aimed straight at the gateway passes and suggests everything is fine.
+location /sandbox/fs/ {
+  proxy_pass http://gateway;
+  proxy_set_header Host $host;
+  proxy_set_header X-Forwarded-Proto $scheme;
+}
+
+# The bytes. The long read timeout matches `/api/`: the file crosses CubeProxy
+# from inside a sandbox, and a tenant on a slow link should not have a preview
+# cut at sixty seconds. `proxy_buffering off` so a large file starts arriving
+# rather than being spooled here first.
+#
+# The security headers this serves under are set by the gateway, per response,
+# because they depend on what is being served. Nothing is added or overridden
+# here — an nginx-level `add_header` would silently replace the whole set.
+# An HTML preview and everything it pulls in. A separate location from
+# `/sandbox/raw/` because it authenticates differently: the frame it loads in is
+# sandboxed to an opaque origin and sends no cookies, so the URL carries a
+# short-lived signed ticket instead. Same proxy settings; the difference is
+# entirely in what the gateway accepts.
+location /sandbox/preview/ {
+  proxy_pass http://gateway;
+  proxy_set_header Host $host;
+  proxy_set_header X-Forwarded-Proto $scheme;
+  proxy_read_timeout 1h;
+  proxy_send_timeout 1h;
+  proxy_buffering off;
+}
+
+location /sandbox/raw/ {
+  proxy_pass http://gateway;
+  proxy_set_header Host $host;
+  proxy_set_header X-Forwarded-Proto $scheme;
+  proxy_read_timeout 1h;
+  proxy_send_timeout 1h;
+  proxy_buffering off;
+}
+
 # The administrator's console. Served by the gateway, which is the only
 # component that knows who administers this deployment; an ordinary caller is
 # answered 404 there rather than 403.

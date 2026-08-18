@@ -78,12 +78,20 @@ const docker = {
       Image: process.env.SANDBOX_IMAGE ?? 'dsh-sandbox:latest',
       Labels: { [OWNER_KEY]: owner.username },
       Env: Object.entries(env).map(([key, value]) => `${key}=${value}`),
-      // The image's own entrypoint starts envd and then waits on it, which is
-      // what a CubeSandbox template has to hold and what nothing here can use.
-      // Overridden rather than made conditional in the image, so that the
-      // artifact the tenants actually run is the one that was tested.
-      Entrypoint: ['/app/sandbox/entrypoint.sh'],
-      Cmd: [],
+      // The image's own entrypoint, kept rather than overridden. It starts
+      // envd in the background and execs the command in the foreground, so
+      // passing the backend as the command gets both: the same envd on the
+      // same port a CubeSandbox has, and the same backend start this
+      // simulation always had.
+      //
+      // It used to override the entrypoint and run the backend alone, which
+      // left the simulation with no envd — and envd is the panel's entire file
+      // plane. The choice then was to write a second file plane over
+      // `docker exec` and keep two implementations of one thing true, or to
+      // give the simulation the envd it was always missing. This is the
+      // second. `Entrypoint` is unset, not restated, so the image stays the
+      // one definition of how a sandbox starts.
+      Cmd: ['/app/sandbox/entrypoint.sh'],
       HostConfig: {
         NetworkMode: process.env.SANDBOX_NETWORK ?? 'dsh-net',
         // A tenant's agent runs arbitrary commands here; these bounds keep one

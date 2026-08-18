@@ -55,6 +55,100 @@
     - id: tenant-account
       name: dsh-tenant-account
 
+# The right-hand panel. It has no host half worth the name — its data plane is
+# envd, which the gateway addresses from outside the sandbox — but the entry has
+# to be here anyway: the client-module registry only scans packages the Loader
+# mounted, so an unmounted name is a browser half no tenant ever loads.
+- insert:
+    - id: artifact-panel
+      name: dsh-artifact-panel
+
+# Which provider the models actually come from.
+#
+# The harness composes two LLM adapters and mounts the multi-provider one
+# DORMANT: `llm-pi-ai` registers no routes at all until something supplies
+# provider profiles, and the shipped default therefore falls through to
+# `llm-deepseek`, which speaks DeepSeek's own wire protocol. That is the wrong
+# protocol for this deployment's endpoint, and the symptom was not a connection
+# error but a stream whose tool calls arrived without ids or names — the agent
+# answering `unknown tool ""` to a tool it had just been told about.
+#
+# So the profile is supplied here. `opencode-go` is a route pi-ai already
+# carries a catalog for, which is why this says almost nothing: naming it takes
+# the endpoint, the wire protocol and all sixteen models with it. Enumerating
+# them — as the Models page does when a tenant configures this by hand — would
+# be a copy of that catalog to keep in step with it.
+#
+# A tenant's own settings document still wins. This is the default a sandbox
+# starts with, not a ceiling: the Models page writes `llm-pi-ai:` into
+# `$DSH_HOME/settings.yaml`, which is on their volume and overrides this
+# without a restart.
+- id: llm-pi-ai
+  config:
+    # The route is NAMED, not inferred. `MODEL_PROVIDER` says which pi-ai route
+    # serves this deployment; naming one is the whole configuration, because a
+    # catalog route already carries its endpoint, its wire protocol, and every
+    # model on it with the reasoning levels and dispatch format each one wants.
+    #
+    # It is named rather than derived from `DEEPSEEK_BASE_URL` because that
+    # variable answers a different question. It is the egress anchor — the host
+    # `egress.js` scopes the credential-injection rule to — and its DeepSeek
+    # name is historical: the endpoint behind it is not DeepSeek's own, so
+    # treating "there is a base URL" as "this is the DeepSeek adapter's route"
+    # is exactly the assumption that sent requests in the wrong protocol and
+    # got tool calls back with no id or name.
+    #
+    # Unset means no catalog covers this endpoint, so it is described by hand
+    # at whatever `DEEPSEEK_BASE_URL` points at — the development proxy's case.
+    providers: !!js >-
+      process.env.MODEL_PROVIDER
+        ? { [process.env.MODEL_PROVIDER]: { apiKeyEnv: 'DEEPSEEK_API_KEY' } }
+        : { 'dev-proxy': {
+              api: 'openai-completions',
+              displayName: '内网代理',
+              baseURL: process.env.DEEPSEEK_BASE_URL,
+              apiKeyEnv: 'DEEPSEEK_API_KEY',
+              models: [{
+                id: 'deepseek-v4-flash',
+                name: 'DeepSeek V4 Flash',
+                contextWindow: 393216,
+                maxTokens: 384000,
+                reasoningEfforts: { high: 'high', max: 'max' },
+                compat: { thinkingFormat: 'deepseek' }
+              }]
+            } }
+    #
+    # `apiKeyEnv` is a reference, not the secret. In production the sandbox is
+    # handed `injected-by-egress-policy` under that name and CubeEgress replaces
+    # the Authorization header on the way out, so the real key never enters a
+    # machine the tenant is root on.
+    #
+    # The last two fields on the hand-declared model are why the thinking-effort
+    # control exists in development at all. A hand-declared model inherits
+    # nothing from the installed catalog — "a hand-declared model has none and
+    # does not reason" — so the route came up with `reasoning: false` and the
+    # composer, correctly, offered no effort to choose. A named route says none
+    # of this because it inherits all of it.
+    #
+    # The values are the catalog's own for this model, not a guess: it offers
+    # `high` and `max` only, and dispatches them in DeepSeek's format rather
+    # than OpenAI's `reasoning_effort`. Declaring a level the endpoint does not
+    # answer to would put a control on screen that quietly does nothing.
+
+# The model a new session starts on, named for whichever route is configured
+# above. `deepseek-v4-flash` exists on both, so the model this deployment
+# defaults to does not change between development and production — only where
+# the request goes.
+- id: agent-default-model
+  config:
+    provider: !!js "process.env.MODEL_PROVIDER || 'dev-proxy'"
+    model: deepseek-v4-flash
+    # Stated, because leaving it out is not "the model's own default" — the
+    # setting simply goes missing, and a session starts at whatever the route
+    # falls back to. The picker still moves it per session; this is only where
+    # a new one begins.
+    reasoningEffort: max
+
 # The client hot-reload channel. Its SSE endpoint, /plugins/events, is the one
 # frontend path that is not a static artifact — the browser opens it and keeps
 # it open, expecting a live host to push rebuild notices.

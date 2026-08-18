@@ -30,6 +30,14 @@
     - id: tenant-account
       name: dsh-tenant-account
 
+# The right-hand panel. It has no host half worth the name — its data plane is
+# envd, which the gateway addresses from outside the sandbox — but the entry has
+# to be here anyway: the client-module registry only scans packages the Loader
+# mounted, so an unmounted name is a browser half no tenant ever loads.
+- insert:
+    - id: artifact-panel
+      name: dsh-artifact-panel
+
 # The client hot-reload channel. Its SSE endpoint, /plugins/events, is the one
 # frontend path that is not a static artifact — the browser opens it and keeps
 # it open, expecting a live host to push rebuild notices.

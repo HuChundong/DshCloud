@@ -186,6 +186,7 @@ window.__ModuleLoader__.load({
      * page; the promise is shared instead, and a reload is what refreshes it.
      */
     let asked
+    const listeners = new Set()
     const whoami = () => {
       // An unreadable answer becomes an empty one rather than a rejection, so
       // every caller can treat "not signed in" and "could not tell" alike:
@@ -197,6 +198,19 @@ window.__ModuleLoader__.load({
     }
 
     /**
+     * Ask again, and tell everyone showing the answer.
+     *
+     * The cache used to be refreshed by reloading the page, which was true
+     * while the only way to change a profile was a page that navigated away
+     * and came back. Editing in a dialog leaves the page where it is, so the
+     * answer has to be able to change under it.
+     */
+    const refreshWhoami = () => {
+      asked = undefined
+      void whoami().then(() => { for (const listener of listeners) listener() })
+    }
+
+    /**
      * Subscribe to the caller.
      * @returns {{username: string, admin: boolean, displayName: string, avatar: string}} the caller, `NOBODY` until the answer lands.
      */
@@ -204,7 +218,7 @@ window.__ModuleLoader__.load({
       const [who, setWho] = React.useState(NOBODY)
       React.useEffect(() => {
         let live = true
-        void whoami().then((body) => {
+        const load = () => void whoami().then((body) => {
           if (!live) return
           setWho({
             username: String(body?.username ?? ''),
@@ -215,7 +229,11 @@ window.__ModuleLoader__.load({
             avatar: typeof body?.avatar === 'string' ? body.avatar : '',
           })
         })
-        return () => { live = false }
+        load()
+        // Re-read when the profile is saved, so the sidebar row and the
+        // account page change under the dialog that changed them.
+        listeners.add(load)
+        return () => { live = false; listeners.delete(load) }
       }, [])
       return who
     }
@@ -317,7 +335,7 @@ window.__ModuleLoader__.load({
             style: {
               display: 'flex', flexDirection: 'column', gap: '4px',
               marginTop: '8px', paddingTop: '20px',
-              borderTop: '1px solid var(--dsh-border, rgb(0 0 0 / 8%))',
+              borderTop: '1px solid var(--dsw-alias-border-l1)',
             },
           },
           React.createElement(
@@ -358,7 +376,7 @@ window.__ModuleLoader__.load({
                   key: entry.name,
                   style: {
                     display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 0',
-                    borderBottom: '1px solid var(--dsh-border, rgb(0 0 0 / 8%))',
+                    borderBottom: '1px solid var(--dsw-alias-border-l1)',
                   },
                 },
                 React.createElement(
@@ -556,12 +574,198 @@ window.__ModuleLoader__.load({
       return ReactDom.createPortal(children, node)
     }
 
+    /** The size an avatar is stored at, matching what the sign-up page sends. */
+    const AVATAR_EDGE = 256
+
+    /**
+     * Turn a chosen image into what the gateway will store.
+     *
+     * Drawn through a canvas rather than sent as picked: the column holds a
+     * `data:` URI and is read whole on every `/whoami`, so a phone photograph
+     * would be megabytes on every page load. Square-cropped from the centre,
+     * which is how it will be displayed anyway.
+     *
+     * WebP, because that is what the sign-up page's cropper sends and what the
+     * gateway's allowed-types pattern is written around.
+     *
+     * @param {File} file - what was chosen.
+     * @returns {Promise<string>} a `data:` URI.
+     */
+    const asAvatar = async (file) => {
+      const bitmap = await createImageBitmap(file)
+      const edge = Math.min(bitmap.width, bitmap.height)
+      const canvas = document.createElement('canvas')
+      canvas.width = AVATAR_EDGE
+      canvas.height = AVATAR_EDGE
+      const context = canvas.getContext('2d')
+      context.drawImage(
+        bitmap,
+        (bitmap.width - edge) / 2, (bitmap.height - edge) / 2, edge, edge,
+        0, 0, AVATAR_EDGE, AVATAR_EDGE,
+      )
+      bitmap.close()
+      return canvas.toDataURL('image/webp', 0.85)
+    }
+
+    /**
+     * Editing the profile, without leaving the page.
+     *
+     * It used to be a link to `/profile`, which is a real page the gateway
+     * serves and has to keep: an account arrives at it before it has ever
+     * loaded this bundle, on the way in. But following it from inside the
+     * application throws the whole shell away and rebuilds it, for a change of
+     * two fields — the session's scroll position, the open panel, an unsent
+     * draft, all of it.
+     *
+     * So the same handler answers both. This posts the same form to the same
+     * route with `Accept: application/json`, which means every rule about what
+     * a name and an avatar may be is enforced in one place rather than
+     * restated here.
+     *
+     * @param {object} props - the current values, and how to close.
+     * @returns {object} the element.
+     */
+    const ProfileDialog = ({ who, onClose }) => {
+      const [name, setName] = React.useState(who.displayName)
+      const [avatar, setAvatar] = React.useState(who.avatar)
+      const [busy, setBusy] = React.useState(false)
+      const [failed, setFailed] = React.useState(undefined)
+      const field = React.useRef(null)
+      const picker = React.useRef(null)
+
+      React.useEffect(() => {
+        window.setTimeout(() => field.current?.focus(), 0)
+        const onKey = (event) => { if (event.key === 'Escape') onClose() }
+        document.addEventListener('keydown', onKey)
+        return () => { document.removeEventListener('keydown', onKey) }
+      }, [onClose])
+
+      const save = async () => {
+        setBusy(true)
+        setFailed(undefined)
+        const form = new URLSearchParams()
+        form.set('name', name)
+        // Three states, as the handler expects: leave it, replace it, remove
+        // it. An empty field cannot mean both of the last two.
+        if (avatar === '') form.set('avatar_clear', '1')
+        else if (avatar !== who.avatar) form.set('avatar', avatar)
+        try {
+          const response = await fetch('/profile', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+            body: form.toString(),
+          })
+          const payload = await response.json().catch(() => ({}))
+          if (!response.ok) {
+            setFailed(payload.error ?? `保存失败（${String(response.status)}）`)
+            setBusy(false)
+            return
+          }
+          refreshWhoami()
+          onClose()
+        } catch {
+          setFailed('保存失败，请稍后再试。')
+          setBusy(false)
+        }
+      }
+
+      const initial = initialOf(name === '' ? who.username : name)
+
+      return ReactDom.createPortal(
+        React.createElement(
+          'div',
+          {
+            className: `${U}-mask`,
+            // Its own boundary, for the same reason the menu has one: this is
+            // a second portal, and closing the menu that opened it took it out
+            // of that portal's subtree. Without this, pressing 确定 propagated
+            // up the component tree to the settings trigger and the settings
+            // panel appeared on top of the profile that had just been saved.
+            onClick: (event) => { event.stopPropagation() },
+            onPointerDown: (event) => {
+              event.stopPropagation()
+              if (event.target === event.currentTarget) onClose()
+            },
+          },
+          React.createElement('style', null, DIALOG_CSS),
+          React.createElement(
+            'div',
+            { className: `${U}-dialog`, role: 'dialog', 'aria-modal': 'true', 'aria-label': '修改个人资料' },
+            React.createElement('div', { className: `${U}-dialog-title` }, '个人资料'),
+            React.createElement(
+              'div',
+              { className: `${U}-dialog-row` },
+              React.createElement(
+                'button',
+                {
+                  type: 'button',
+                  className: `${U}-dialog-avatar`,
+                  title: '更换头像',
+                  onClick: () => picker.current?.click(),
+                },
+                avatar === ''
+                  ? initial
+                  : React.createElement('img', { src: avatar, alt: '' }),
+              ),
+              React.createElement('input', {
+                ref: picker,
+                type: 'file',
+                accept: 'image/png,image/jpeg,image/webp',
+                style: { display: 'none' },
+                onChange: (event) => {
+                  const file = event.target.files?.[0]
+                  event.target.value = ''
+                  if (file === undefined) return
+                  asAvatar(file).then(setAvatar, () => setFailed('这张图片读不出来，请换一张。'))
+                },
+              }),
+              React.createElement(
+                'div',
+                { className: `${U}-dialog-avatar-actions` },
+                React.createElement('button', {
+                  type: 'button', className: `${U}-dialog-link`, onClick: () => picker.current?.click(),
+                }, '更换头像'),
+                avatar === '' ? null : React.createElement('button', {
+                  type: 'button', className: `${U}-dialog-link`, onClick: () => setAvatar(''),
+                }, '移除'),
+              ),
+            ),
+            React.createElement('input', {
+              ref: field,
+              className: `${U}-dialog-input`,
+              value: name,
+              placeholder: '昵称',
+              'aria-label': '昵称',
+              onChange: (event) => setName(event.target.value),
+              onKeyDown: (event) => { if (event.key === 'Enter' && !busy) void save() },
+            }),
+            failed === undefined ? null : React.createElement('div', { className: `${U}-dialog-note` }, failed),
+            React.createElement(
+              'div',
+              { className: `${U}-dialog-actions` },
+              React.createElement('button', {
+                type: 'button', className: `${U}-dialog-button`, onClick: onClose,
+              }, '取消'),
+              React.createElement('button', {
+                type: 'button', className: `${U}-dialog-button`, 'data-primary': '', disabled: busy,
+                onClick: () => { void save() },
+              }, busy ? '保存中…' : '保存'),
+            ),
+          ),
+        ),
+        document.body,
+      )
+    }
+
     /** The account page: who is signed in, and how to stop being signed in. */
     const AccountSection = () => {
-      const { username, admin, displayName, avatar } = useWhoami()
+      const who = useWhoami()
+      const { username, admin, displayName, avatar } = who
+      const [editing, setEditing] = React.useState(false)
 
       const row = { display: 'flex', alignItems: 'baseline', gap: '12px', padding: '10px 0' }
-      const key = { minWidth: '5rem', color: 'var(--dsh-text-secondary, #6b6b68)', fontSize: '13px' }
+      const key = { minWidth: '5rem', color: 'var(--dsw-alias-label-secondary)', fontSize: '13px' }
 
       return React.createElement(
         'div',
@@ -572,7 +776,7 @@ window.__ModuleLoader__.load({
         // on the way in, before this bundle has ever loaded.
         React.createElement(
           'div',
-          { style: { ...row, alignItems: 'center', borderBottom: '1px solid var(--dsh-border, rgb(0 0 0 / 8%))' } },
+          { style: { ...row, alignItems: 'center', borderBottom: '1px solid var(--dsw-alias-border-l1)' } },
           React.createElement('span', { style: key }, '昵称'),
           React.createElement(
             'span',
@@ -594,21 +798,34 @@ window.__ModuleLoader__.load({
           ),
           React.createElement(
             'span',
-            { style: { flex: '1 1 auto', minWidth: 0, fontSize: '14px' } },
+            { style: { flex: '1 1 auto', minWidth: 0, fontSize: '14px', color: 'var(--dsw-alias-label-primary)' } },
             displayName === '' ? '—' : displayName,
           ),
+          // A button, not a link. `/profile` is still a real page and still
+          // has to be — an account meets it on the way in, before this bundle
+          // exists — but reaching it from inside the application would throw
+          // the whole shell away and rebuild it to change two fields.
           React.createElement(
-            'a',
-            { href: '/profile', style: { fontSize: '13px', color: 'inherit' } },
+            'button',
+            {
+              type: 'button',
+              style: {
+                padding: 0, border: 'none', background: 'transparent', cursor: 'pointer',
+                fontSize: '13px', fontFamily: 'var(--dsw-font-family)',
+                color: 'var(--dsw-alias-state-business-primary)',
+              },
+              onClick: () => setEditing(true),
+            },
             '修改',
           ),
         ),
         React.createElement(
           'div',
-          { style: { ...row, borderBottom: '1px solid var(--dsh-border, rgb(0 0 0 / 8%))' } },
+          { style: { ...row, borderBottom: '1px solid var(--dsw-alias-border-l1)' } },
           React.createElement('span', { style: key }, '当前用户'),
-          React.createElement('span', { style: { fontSize: '14px' } }, username === '' ? '—' : username),
+          React.createElement('span', { style: { fontSize: '14px', color: 'var(--dsw-alias-label-primary)' } }, username === '' ? '—' : username),
         ),
+        editing ? React.createElement(ProfileDialog, { who, onClose: () => setEditing(false) }) : null,
         // The only way in to the console, and the reason it is here: `/admin`
         // answers 404 to everyone else, so it is not linked anywhere a tenant
         // could find it — which left an administrator having to remember the
@@ -634,7 +851,11 @@ window.__ModuleLoader__.load({
           React.createElement('style', null, BUTTON_CSS),
           React.createElement(
             'button',
-            { type: 'button', onClick: signOut, className: BUTTON_CLASS },
+            // The same act as the one in the sidebar menu, so the same colour:
+            // the variant already exists on this class and was simply not asked
+            // for here, which left the page's only destructive control looking
+            // like every other button on it.
+            { type: 'button', onClick: signOut, className: BUTTON_CLASS, 'data-danger': 'true' },
             React.createElement('svg', {
               width: 16, height: 16, viewBox: '0 0 16 16', fill: 'none', 'aria-hidden': true,
             }, React.createElement('path', {
@@ -648,7 +869,7 @@ window.__ModuleLoader__.load({
             {
               style: {
                 margin: '10px 0 0', fontSize: '12px',
-                color: 'var(--dsh-text-secondary, #6b6b68)',
+                color: 'var(--dsw-alias-label-secondary)',
               },
             },
             '退出后当前会话立即失效，你的沙箱会被释放。',
@@ -659,6 +880,81 @@ window.__ModuleLoader__.load({
 
     /** Classes the rules below are scoped to; nothing else in the page uses them. */
     const U = 'dsh-tenant-account'
+
+    /**
+     * The dialog's styles.
+     *
+     * Token-driven like everything else here, and injected with the dialog
+     * rather than with the sidebar row, because nothing else in this plugin
+     * needs them until somebody edits their profile.
+     * (No backticks in this file's CSS: it is a template literal.)
+     */
+    const DIALOG_CSS = `
+      .${U}-mask {
+        /* Above the settings panel's own 1000: this dialog is opened FROM that
+           panel, so a lower layer would put it behind the thing that asked for
+           it. */
+        position: fixed; inset: 0; z-index: 1100;
+        display: flex; align-items: center; justify-content: center;
+        background: var(--dsw-alias-bg-mask-1);
+      }
+      .${U}-dialog {
+        width: min(360px, calc(100vw - 32px));
+        padding: 18px 20px 14px;
+        border-radius: 14px;
+        background: var(--dsw-alias-bg-layer-1);
+        box-shadow: var(--dsw-shadow-lv3);
+        font-family: var(--dsw-font-family);
+      }
+      .${U}-dialog-title {
+        margin-bottom: 14px;
+        color: var(--dsw-alias-label-primary);
+        font-size: 15px; font-weight: 500;
+      }
+      .${U}-dialog-row { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+      .${U}-dialog-avatar {
+        flex: none; width: 56px; height: 56px; padding: 0;
+        border: 1px solid var(--dsw-alias-border-l2); border-radius: 50%;
+        overflow: hidden; cursor: pointer;
+        display: inline-flex; align-items: center; justify-content: center;
+        background: var(--dsw-alias-button-ghost-active-fill);
+        color: var(--dsw-alias-label-secondary);
+        font-family: var(--dsw-font-family); font-size: 18px; font-weight: 600; text-transform: uppercase;
+      }
+      .${U}-dialog-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+      .${U}-dialog-avatar-actions { display: flex; gap: 10px; }
+      .${U}-dialog-link {
+        padding: 0; border: none; background: transparent;
+        color: var(--dsw-alias-state-business-primary);
+        font-family: var(--dsw-font-family); font-size: 13px; cursor: pointer;
+      }
+      .${U}-dialog-input {
+        width: 100%; height: 34px; padding: 0 10px; box-sizing: border-box;
+        border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px;
+        background: transparent; color: var(--dsw-alias-label-primary);
+        font-family: var(--dsw-font-family); font-size: 13px;
+      }
+      .${U}-dialog-input:focus { outline: none; border-color: var(--dsw-alias-state-business-primary); }
+      .${U}-dialog-note {
+        margin-top: 8px; color: var(--dsw-alias-state-error-primary);
+        font-size: 12px; line-height: 18px;
+      }
+      .${U}-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+      .${U}-dialog-button {
+        height: 32px; padding: 0 14px;
+        border: 1px solid var(--dsw-alias-border-l2); border-radius: 10px;
+        background: transparent; color: var(--dsw-alias-label-primary);
+        font-family: var(--dsw-font-family); font-size: 13px; cursor: pointer;
+      }
+      .${U}-dialog-button:hover { background: var(--dsw-alias-interactive-bg-hover); }
+      .${U}-dialog-button[data-primary] {
+        border-color: transparent;
+        background: var(--dsw-alias-button-primary-fill);
+        color: var(--dsw-alias-label-primary-foreground);
+      }
+      .${U}-dialog-button:disabled { opacity: .55; cursor: default; }
+    `
+
 
     /** Restated from the theme's own tokens, like the sign-out button above. */
     const MENU_CSS = `
@@ -704,12 +1000,6 @@ window.__ModuleLoader__.load({
       /* Cover, not contain: the crop was already chosen on the profile page and
           the image is square, so this only absorbs the rounding. */
       .${U}-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
-      .${U}-email {
-        flex: 1 1 auto; min-width: 0; overflow: hidden;
-        white-space: nowrap; text-overflow: ellipsis;
-        font-size: 14px; line-height: 20px; text-align: left;
-        color: var(--dsw-alias-label-primary, inherit);
-      }
       /* Portalled onto the document body rather than left where it is written.
           It was a child of the shell's Settings *button*, and everything that
           implies went wrong one at a time: it inherited the button's centred
@@ -719,18 +1009,16 @@ window.__ModuleLoader__.load({
           positioned already, it never needed to live there.
           (No backticks in this file's CSS: it is a template literal.) */
       .${U}-menu {
-        position: fixed; z-index: 200; min-width: 232px; padding: 4px;
+        position: fixed; z-index: 200; min-width: 232px; box-sizing: border-box; padding: 4px;
         text-align: left;
         border: 1px solid transparent;
         border-radius: 12px;
         background: var(--dsw-alias-button-elevated-fill, #fff);
-        /* The three layers the shell's own popup carries, in its order: a
-           hairline, a close ambient wash, and the drop. Two of them looked
-           like enough until they were measured side by side. */
-        box-shadow:
-          rgb(0 0 0 / 20%) 0 0 1px 0,
-          rgb(0 0 0 / 2%) 0 0 4px 0,
-          rgb(0 0 0 / 8%) 0 12px 32px 0;
+        /* The shell's own popup elevation, by its name rather than by its
+           three layers copied out. They were transcribed here once, correctly,
+           and a correct copy is still a copy: it cannot follow the token when
+           the palette moves under it. */
+        box-shadow: var(--dsw-shadow-lv3);
       }
       /* The menu's own header: the same avatar the trigger shows, at the size
           a popup can afford, over the same two facts. Repeating them is what
@@ -856,6 +1144,7 @@ window.__ModuleLoader__.load({
     const AccountRow = ({ wide }) => {
       const who = useWhoami()
       const [menu, setMenu] = React.useState(null)
+      const [editing, setEditing] = React.useState(false)
       const host = React.useRef(null)
       // Raised only while this component clicks the owner's button on purpose,
       // so the interceptor below lets that one click through to the shell.
@@ -878,6 +1167,13 @@ window.__ModuleLoader__.load({
           : {
             left: wide === true ? rect.left : rect.right + 8,
             bottom: wide === true ? window.innerHeight - rect.top + 6 : window.innerHeight - rect.bottom,
+            // Take the trigger's width, not a minimum of our own. Aligning
+            // only the left edge left the menu 10px from the column's left and
+            // 28px from its right — lopsided, and the more so beside the
+            // sandbox row above it, which sits 12px in on both sides. Matching
+            // the row it came out of is also the only version that survives
+            // the sidebar being dragged wider.
+            width: wide === true ? rect.width : undefined,
           }))
       }, [wide])
 
@@ -1008,8 +1304,31 @@ window.__ModuleLoader__.load({
           'div',
           {
             className: `${U}-menu`,
-            style: { left: `${String(menu.left)}px`, bottom: `${String(menu.bottom)}px` },
+            style: {
+              left: `${String(menu.left)}px`,
+              bottom: `${String(menu.bottom)}px`,
+              ...(menu.width === undefined ? {} : { width: `${String(menu.width)}px` }),
+            },
             role: 'menu',
+            // Contained here, at the root, and it has to be contained in
+            // REACT's terms rather than the DOM's.
+            //
+            // This menu is portalled to `document.body`, so the DOM path of a
+            // click in it is body -> html and never touches the settings
+            // trigger this seat is rendered inside. React does not care: a
+            // portal propagates through the COMPONENT tree, so that trigger's
+            // own onClick fired anyway and the settings panel opened behind the
+            // menu. The native capture listener on the button cannot help — the
+            // event never travels through it.
+            //
+            // It was stopped row by row before, which held only as long as
+            // nobody added a row. The admin link never had it and always
+            // opened settings on its way to /admin, and the dialog this menu
+            // opens had it nowhere, so saving a profile opened settings too.
+            // One boundary, at the edge of what is portalled, is the version
+            // that stays fixed.
+            onClick: (event) => { event.stopPropagation() },
+            onPointerDown: (event) => { event.stopPropagation() },
           },
           React.createElement(
             'div',
@@ -1043,9 +1362,14 @@ window.__ModuleLoader__.load({
             React.createElement(Icon, { name: 'settings' }),
             '设置',
           ),
+          // The same dialog the account page opens, for the same reason: the
+          // page it used to link to rebuilds the whole shell.
           React.createElement(
-            'a',
-            { role: 'menuitem', className: `${U}-item`, href: '/profile' },
+            'button',
+            {
+              type: 'button', role: 'menuitem', className: `${U}-item`,
+              onClick: () => { setMenu(null); setEditing(true) },
+            },
             React.createElement(Icon, { name: 'profile' }),
             '个人资料',
           ),
@@ -1069,6 +1393,7 @@ window.__ModuleLoader__.load({
             '退出登录',
           ),
         ), document.body),
+        editing ? React.createElement(ProfileDialog, { who, onClose: () => setEditing(false) }) : null,
       )
     }
 

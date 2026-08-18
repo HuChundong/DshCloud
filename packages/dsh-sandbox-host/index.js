@@ -32,7 +32,6 @@ import { readFile } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 import process from 'node:process'
-import { createMetrics } from './metrics.js'
 import { createUploads } from './uploads.js'
 
 export const name = 'sandbox-host'
@@ -75,7 +74,6 @@ export function apply(ctx, config) {
   const uploads = createUploads(root)
   // One sampler for the plugin's lifetime, because CPU is a difference between
   // two readings and a per-request sampler would have nothing to subtract.
-  const metrics = createMetrics(root)
 
   /**
    * The configuration document, prepared the way the control this replaces
@@ -172,17 +170,6 @@ export function apply(ctx, config) {
       }
       case 'document.read':
         return await readDocument()
-      case 'sandbox.stats':
-        // Whether the sandbox is RUNNING is not answered here and cannot be:
-        // a sandbox that is not running answers nothing at all, and the
-        // gateway says so with a 503. The browser reads the status from
-        // whether this call arrives, which is the only version of the question
-        // that is not a guess.
-        // The identity too, which is not a measurement but is the one thing a
-        // person has to quote when reporting that their machine misbehaved.
-        // Harmless to disclose to its own owner: dialling in needs the token,
-        // which never leaves the sandbox and the gateway.
-        return { ok: true, value: { id: process.env.SANDBOX_ID ?? null, ...await metrics.read() } }
       default:
         return badRequest(`no such endpoint: ${endpoint}`)
     }

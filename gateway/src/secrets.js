@@ -28,10 +28,10 @@
  * Names the gateway sets itself, which a tenant may not.
  *
  * The first three are the sandbox's identity and its way back to the gateway.
- * The last two are the deployment's model credential, which is deliberately
- * handed to the sandbox rather than to the browser — letting a tenant replace
- * the endpoint would turn their agent's traffic somewhere the deployment did
- * not choose.
+ * The rest describe the deployment's model, which is deliberately handed to
+ * the sandbox rather than to the browser — letting a tenant replace the
+ * endpoint, the credential, or the route that names both would turn their
+ * agent's traffic somewhere the deployment did not choose.
  */
 const RESERVED = new Set([
   'SANDBOX_ID',
@@ -39,6 +39,7 @@ const RESERVED = new Set([
   'GATEWAY_TUNNEL_URL',
   'DEEPSEEK_API_KEY',
   'DEEPSEEK_BASE_URL',
+  'MODEL_PROVIDER',
 ])
 
 /** How many a tenant may keep, so one account cannot fill the table. */

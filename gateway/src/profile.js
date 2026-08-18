@@ -156,10 +156,29 @@ export async function handleProfile(req, res, deps) {
     return
   }
 
+  // Whether the caller wants an answer or a page.
+  //
+  // The same handler serves both, and that is the point: the settings dialog
+  // and the sign-up page enforce one set of rules about what a name and an
+  // avatar may be, because they ARE one handler. A second endpoint for the
+  // dialog would have been a second copy of the size cap, the character
+  // limit and the allowed image types, drifting from this one.
+  const wantsJson = (req.headers.accept ?? '').includes('application/json')
+  /**
+   * Answer a caller that asked for JSON.
+   * @param {number} status - the status to send.
+   * @param {object} payload - the body.
+   */
+  const answer = (status, payload) => {
+    res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
+    res.end(JSON.stringify(payload))
+  }
+
   // Comfortably above the avatar cap, which form encoding inflates by about
   // half: `+`, `/` and `=` each become three characters on the wire.
   const body = await deps.readBody(req, 512 * 1024)
   if (body === undefined) {
+    if (wantsJson) { answer(413, { error: '头像太大了，请换一张。' }); return }
     page(413, { error: '头像太大了，请换一张。' })
     return
   }
@@ -167,7 +186,9 @@ export async function handleProfile(req, res, deps) {
 
   const name = cleanName(form.get('name') ?? '')
   if (name === undefined) {
-    page(400, { error: `请填写昵称，最多 ${MAX_NAME_POINTS} 个字符。`, name: form.get('name') ?? '' })
+    const problem = `请填写昵称，最多 ${MAX_NAME_POINTS} 个字符。`
+    if (wantsJson) { answer(400, { error: problem }); return }
+    page(400, { error: problem, name: form.get('name') ?? '' })
     return
   }
 
@@ -184,6 +205,7 @@ export async function handleProfile(req, res, deps) {
     avatar = undefined
   } else if (submitted !== '') {
     if (!isStorableAvatar(submitted)) {
+      if (wantsJson) { answer(400, { error: '头像格式不受支持，请重新选择图片。' }); return }
       page(400, { error: '头像格式不受支持，请重新选择图片。', name })
       return
     }
@@ -192,6 +214,8 @@ export async function handleProfile(req, res, deps) {
 
   await deps.accounts.setProfile(account.email, name, avatar)
   console.log(`gateway: ${account.email} set their profile`)
+  // A dialog is already where it wants to be; only the page needs sending on.
+  if (wantsJson) { answer(200, { name, avatar: avatar ?? '' }); return }
   // Straight into the application: this page is on the way in, and for an
   // account being asked for the first time it is the last thing between the
   // sign-in form and the shell.

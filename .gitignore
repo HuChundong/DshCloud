@@ -9,3 +9,8 @@ sandbox/egress-ca/*.crt
 
 # Worktrees the coding harness creates; not part of this project.
 .claude/worktrees/
+
+# Built by `npm run build` in that package: derived from src/, and rebuilt
+# by the image build. The thing to read is the source.
+packages/dsh-artifact-panel/lib/
+packages/dsh-artifact-panel/node_modules/

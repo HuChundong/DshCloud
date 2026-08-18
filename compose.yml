@@ -136,6 +136,10 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER:-dsh}:${POSTGRES_PASSWORD:?set a database password}@postgres:5432/${POSTGRES_DB:-dsh}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
       DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL}
+      # Which pi-ai route serves this deployment's model, by name. Unset means
+      # the endpoint is not one pi-ai carries a catalog for, and the sandbox
+      # describes it by hand instead.
+      MODEL_PROVIDER: ${MODEL_PROVIDER:-}
       SANDBOX_IDLE_TTL_MS: ${SANDBOX_IDLE_TTL_MS:-1800000}
     volumes:
       # The gateway starts one container per tenant, so it needs the Engine

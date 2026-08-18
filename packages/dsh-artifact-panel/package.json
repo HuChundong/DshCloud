@@ -1,0 +1,31 @@
+{
+  "name": "dsh-artifact-panel",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The right-hand panel: tools the tenant opens, and results the agent produced.",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "client": {
+      "inject": [
+        "slots",
+        "workspaces",
+        "sessions"
+      ],
+      "platform": "web",
+      "main": "./lib/client.js"
+    }
+  },
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "@xterm/xterm": "^5.5.0",
+    "@xterm/addon-fit": "^0.10.0"
+  }
+}

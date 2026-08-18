@@ -802,7 +802,6 @@ window.__ModuleLoader__.load({
     // --------------------------------------------------------- sandbox bar --
 
     /** How often the footer asks the sandbox how it is doing. */
-    const STATS_INTERVAL_MS = 5000
 
     /** Ring geometry, matching the 3px stroke the sidebar's own chrome uses. */
     const RING = { size: 34, r: 13, width: 3 }
@@ -866,28 +865,56 @@ window.__ModuleLoader__.load({
      * @param {object} props - the sidebar's owner share (`wide`).
      * @returns {object|null} the status row.
      */
-    const SandboxStatus = ({ wide }) => {
+    /**
+     * Subscribe to the sandbox's own numbers.
+     *
+     * An event stream from the gateway, which samples each sandbox once and
+     * hands the reading to everyone watching it. This replaced a poll from
+     * every open tab: the cost used to grow with tabs, which is the wrong
+     * thing for it to grow with, and it went on being paid by tabs sitting in
+     * the background with nobody looking at them.
+     *
+     * The numbers themselves now come from envd's own `/metrics` rather than
+     * from a reader inside the sandbox — the same plane the panel's files come
+     * over, and one implementation of "what is this machine doing" instead of
+     * two.
+     *
+     * `EventSource` reconnects by itself, which is what a status bar should do
+     * after the gateway restarts: come back, without anything here noticing.
+     *
+     * @returns {{status: string, stats: object|null}} the reading, as the bar draws it.
+     */
+    const useSandboxStats = () => {
       const [state, setState] = React.useState({ status: 'unknown', stats: null })
 
       React.useEffect(() => {
-        let live = true
-        let timer
-        const tick = async () => {
-          try {
-            const stats = await call('sandbox.stats', {})
-            if (live) setState({ status: 'running', stats })
-          } catch {
-            // Any failure means the same thing to a person: their sandbox is
-            // not answering. Which HTTP status it was is a detail for a log.
-            if (live) setState((current) => ({ status: 'starting', stats: current.stats }))
-          }
-          if (live) timer = setTimeout(() => { void tick() }, STATS_INTERVAL_MS)
+        const source = new EventSource('/sandbox/stats')
+        const onMessage = (event) => {
+          let reading
+          try { reading = JSON.parse(event.data) } catch { return }
+          // Any failure means the same thing to a person: their sandbox is not
+          // answering. Which HTTP status it was is a detail for a log.
+          setState((current) => (reading.ok === true
+            ? { status: 'running', stats: reading.stats }
+            : { status: 'starting', stats: current.stats }))
         }
-        void tick()
-        return () => { live = false; clearTimeout(timer) }
+        const onError = () => {
+          setState((current) => ({ status: 'starting', stats: current.stats }))
+        }
+        source.addEventListener('message', onMessage)
+        source.addEventListener('error', onError)
+        return () => {
+          source.removeEventListener('message', onMessage)
+          source.removeEventListener('error', onError)
+          source.close()
+        }
       }, [])
 
-      const { status, stats } = state
+      return state
+    }
+
+    const SandboxStatus = ({ wide }) => {
+      const { status, stats } = useSandboxStats()
       const dot = status === 'running' ? 'var(--dsw-alias-state-success-primary, #22c55e)'
         : status === 'starting' ? 'var(--dsw-alias-state-warn-label, #dd8629)'
           : 'var(--dsw-alias-border-l2, rgb(0 0 0 / 25%))'
@@ -897,6 +924,55 @@ window.__ModuleLoader__.load({
       const gb = (bytes) => `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`
       const asText = (part) => (part ? `${gb(part.usedBytes)} / ${gb(part.totalBytes)}` : '未知')
 
+      // Declared with the other hooks, above the early return below. Hooks
+      // after a conditional return are not hooks: on the render where the rail
+      // is narrow the component returns first, React counts fewer of them than
+      // last time, and the whole seat crashes with "rendered more hooks than
+      // during the previous render". That is exactly what folding the sidebar
+      // did.
+      const seat = React.useRef(null)
+
+      /**
+       * Land on the sandbox page when the panel is opened from this row.
+       *
+       * Listened for on the document in the CAPTURE phase, not with an
+       * `onClick` on the row. The shell's settings trigger — the button this
+       * seat sits inside — carries a capture listener that swallows the click
+       * before it reaches anything nested in it, so a handler on the row never
+       * ran at all. This project has met that button before: the account menu
+       * had to be moved out of it for the same reason. Capture from the
+       * document runs first, ahead of the trigger's own, so the click is seen
+       * without taking it away from the trigger that needs it.
+       */
+      React.useEffect(() => {
+        const onCapture = (event) => {
+          if (seat.current?.contains(event.target) !== true) return
+          selectSandboxPage()
+        }
+        document.addEventListener('click', onCapture, true)
+        return () => { document.removeEventListener('click', onCapture, true) }
+      }, [])
+
+      const selectSandboxPage = () => {
+        let tries = 0
+        const attempt = () => {
+          tries += 1
+          const dialog = document.querySelector('[role="dialog"]')
+          const row = dialog === null
+            ? undefined
+            : [...dialog.querySelectorAll('button')].find((button) => button.textContent?.trim() === '沙箱')
+          // Stop when the row is the one selected, not when it has been
+          // clicked once. A single click was the first version and it landed
+          // before the shell had settled its own initial section, which then
+          // overwrote it — the panel opened on the general page as if nothing
+          // had been asked for.
+          if (row?.getAttribute('aria-current') === 'true') return
+          row?.click()
+          if (tries < 40) window.setTimeout(attempt, 50)
+        }
+        window.setTimeout(attempt, 0)
+      }
+
       // Nothing at all on the 56px rail. A lone dot there was the first cut,
       // and it read as a stray mark: with no label beside it, nothing says the
       // colour is about a sandbox, and the three rings it stood in for cannot
@@ -905,9 +981,13 @@ window.__ModuleLoader__.load({
       // render narrow.
       if (!wide) return null
 
+
       return React.createElement(
         'div',
-        { className: `${P}-sandbox` },
+        // The row is not the button — the shell's settings trigger wraps this
+        // seat, so the click that opens the panel is already on its way. All
+        // this decides is which page it lands on; see the capture listener.
+        { className: `${P}-sandbox`, ref: seat },
         React.createElement(Style),
         React.createElement(
           'span',
@@ -972,25 +1052,9 @@ window.__ModuleLoader__.load({
      * @returns {object} the section.
      */
     const SandboxSection = () => {
-      const [state, setState] = React.useState({ status: 'unknown', stats: null })
-
-      React.useEffect(() => {
-        let live = true
-        let timer
-        const tick = async () => {
-          try {
-            const stats = await call('sandbox.stats', {})
-            if (live) setState({ status: 'running', stats })
-          } catch {
-            // As in the sidebar row: a sandbox that is not running answers
-            // nothing, so the failure IS the status rather than an error.
-            if (live) setState((current) => ({ status: 'starting', stats: current.stats }))
-          }
-          if (live) timer = setTimeout(() => { void tick() }, STATS_INTERVAL_MS)
-        }
-        void tick()
-        return () => { live = false; clearTimeout(timer) }
-      }, [])
+      // The same subscription the sidebar row uses. Two watchers of one
+      // sandbox now cost one sample rather than two polls.
+      const state = useSandboxStats()
 
       const { status, stats } = state
       const secondary = { color: 'var(--dsw-alias-label-tertiary, #81858c)', fontSize: '13px' }

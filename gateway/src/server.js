@@ -37,6 +37,8 @@ import { connect } from './db.js'
 import { canSendEmail } from './email.js'
 import { Invites, inviteRequired } from './invites.js'
 import { loginPage } from './login-page.js'
+import { handlePanel } from './panel.js'
+import { TERMINAL_PATH, serveTerminal } from './terminal.js'
 import { handleProfile } from './profile.js'
 import { DIAL_IN_TIMEOUT_MS, SandboxManager } from './sandboxes.js'
 import { Secrets, nameProblem } from './secrets.js'
@@ -133,7 +135,15 @@ const sandboxes = new SandboxManager({
   // sandbox started, not the next time the gateway is restarted.
   env: async () => {
     const credential = await settings.modelCredential()
-    return { DEEPSEEK_API_KEY: credential.apiKey, DEEPSEEK_BASE_URL: credential.baseUrl }
+    return {
+      DEEPSEEK_API_KEY: credential.apiKey,
+      DEEPSEEK_BASE_URL: credential.baseUrl,
+      // Deployment shape rather than a credential, which is why it comes from
+      // the environment and not from the console: rotating a key is an
+      // operational act, while changing which provider serves the deployment
+      // changes what models exist and what they are called.
+      MODEL_PROVIDER: process.env.MODEL_PROVIDER ?? '',
+    }
   },
   // The tenant's own environment, read at creation like the credential above:
   // a secret added in Settings reaches the next sandbox, not the one already
@@ -405,6 +415,11 @@ async function handleRequest(req, res) {
   //
   // It is the only way a tenant applies a change to their own environment, and
   // the only way out of a sandbox that has wedged.
+  // The right-hand panel's file plane. Ahead of the `/api|/files` branch below
+  // because that one is a catch-all, and on its own prefix because `/files` is
+  // already the tunnel's channel.
+  if (await handlePanel(req, res, { callerOf, sandboxes, sessionSecret, accountById: async (id) => await accounts.readById(id) })) return
+
   if (path === '/sandbox/restart' && req.method === 'POST') {
     const caller = await callerOf(req, res)
     if (caller === undefined) {
@@ -541,11 +556,38 @@ async function serveFromSandbox(caller, req, res) {
   tunnel.proxyHttp(req, res)
 }
 
+/**
+ * The terminal plane's accepted sockets.
+ *
+ * `noServer`, because this process already owns the upgrade path and decides
+ * per route what a socket is for — the tunnel's own dial-ins, dsh's downlinks,
+ * and now a shell.
+ */
+const terminalSockets = new WebSocketServer({ noServer: true })
+
 server.on('upgrade', (req, socket, head) => {
   const path = new URL(req.url ?? '/', 'http://gateway').pathname
 
   if (path === '/_tunnel') {
     tunnels.handleUpgrade(req, socket, head)
+    return
+  }
+
+  // The panel's terminal. Accepted here rather than forwarded down the tunnel:
+  // it is answered from outside the sandbox through envd, like the rest of the
+  // panel, so there is nothing for the tunnel to carry.
+  if (path === TERMINAL_PATH) {
+    void (async () => {
+      const caller = await callerOf(req)
+      if (caller === undefined) {
+        socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n')
+        socket.destroy()
+        return
+      }
+      terminalSockets.handleUpgrade(req, socket, head, (accepted) => {
+        void serveTerminal(accepted, caller, sandboxes)
+      })
+    })()
     return
   }
 

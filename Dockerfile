@@ -57,17 +57,79 @@ RUN npm install --omit=dev --no-audit --no-fund \
       "@deepseek-ai/dsh-web-frontend"
 
 
+# Declared before any FROM that interpolates it: `FROM envd-${TARGETARCH}`
+# below is resolved while the stage graph is built, not while it runs.
+ARG TARGETARCH
+
 # ----------------------------------------------------------- cube-tools ----
-# Where the sandbox image's two CubeSandbox binaries come from.
+# Where `cube-entrypoint.sh` comes from: CubeSandbox's own base image.
 #
 # Pinned to amd64 because that is the only platform the tag is published for,
 # and leaving it to the build platform fails outright on an arm64 host — which
-# is every Apple Silicon laptop this is developed on. The pin is honest rather
-# than a workaround: CubeSandbox runs on x86, so a `cube` deployment wants these
-# binaries amd64 wherever they were built. The Docker simulation never executes
-# either of them — it overrides both the entrypoint and the command — so on an
-# arm64 build they are inert bytes in an image that never asks them to run.
+# is every Apple Silicon laptop this is developed on. Only a shell script is
+# taken from it, so the pin costs a pull and nothing else; the binary that has
+# to match the build's architecture is compiled below instead.
 FROM --platform=linux/amd64 ghcr.io/tencentcloud/cubesandbox-base:2026.16 AS cube-tools
+
+# ---------------------------------------------------------------- envd ----
+# envd, for the architecture this image is being built for.
+#
+# It is the same binary either way, from the same upstream at the same ref —
+# only the way of getting one differs, because CubeSandbox publishes its base
+# image for amd64 alone.
+#
+# On amd64 that published binary IS the answer, and taking it keeps the
+# production build what it was: no Go toolchain, no clone, nothing between the
+# server and an image it can already build offline.
+#
+# On arm64 there is nothing to take, and it used to not matter — the simulation
+# never started envd, so an amd64 binary sat there inert. It matters now: the
+# panel's whole file plane is envd, so a local build that cannot run it is a
+# local build where half the product cannot be developed. `docker/Dockerfile.cube-base`
+# in CubeSandbox compiles `e2b-dev/infra` at this tag, and this does the same,
+# for the other architecture. Static, CGO off, no runtime dependencies.
+#
+# Selected by `FROM envd-${TARGETARCH}` rather than by a shell branch, so the
+# stage that is not wanted is never built — an arm64 build never runs the
+# amd64 image, and an amd64 build never clones anything.
+FROM scratch AS envd-amd64
+COPY --from=cube-tools /usr/bin/envd /envd
+
+FROM golang:1.25.4-bookworm AS envd-arm64
+# Kept in step with CubeSandbox's `ENVD_REF_DEFAULT`. Raising it here without
+# raising it there gives sandboxes an envd their CubeMaster was not built
+# against.
+ARG ENVD_REF=2026.16
+RUN git clone --depth 1 --branch "$ENVD_REF" https://github.com/e2b-dev/infra.git /src/infra
+WORKDIR /src/infra/packages/envd
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=arm64 \
+      go build -a -ldflags '-s -w' -o /envd . \
+    && /envd -version
+
+FROM envd-${TARGETARCH} AS envd
+
+# ---------------------------------------------------------- panel-build ----
+# The right-hand panel's browser half, bundled.
+#
+# The only package here that is built rather than served verbatim, because it
+# is the only one with a dependency the shell does not provide: the terminal's
+# renderer. Bundling it into the plugin rather than dropping it beside the
+# shell is what keeps the plugin a plugin — one that another dsh deployment
+# could install without first being told to place a file somewhere.
+#
+# `package.json` first and the sources after, so a change to the panel's code
+# does not reinstall its toolchain.
+FROM node:24-slim AS panel-build
+
+ARG NPM_REGISTRY=
+RUN if [ -n "$NPM_REGISTRY" ]; then npm config set registry "$NPM_REGISTRY"; fi
+
+WORKDIR /panel
+COPY packages/dsh-artifact-panel/package.json ./
+RUN npm install --no-audit --no-fund
+COPY packages/dsh-artifact-panel/build.mjs ./
+COPY packages/dsh-artifact-panel/src ./src
+RUN npm run build
 
 # ---------------------------------------------------------------- sandbox ----
 FROM node:24-slim AS sandbox
@@ -311,6 +373,9 @@ RUN node "$DSH_BIN" web --dump-config > /dev/null 2>&1 || true
 # as `file:../tunnel-protocol`, which only resolves if its sibling arrives at
 # the same depth.
 COPY packages /src/packages
+# The panel's built browser half, which `packages/` does not carry: it is
+# derived, so it is not committed, and it is produced by the stage above.
+COPY --from=panel-build /panel/lib /src/packages/dsh-artifact-panel/lib
 # `--install-links` because the default for a local path is a symlink back to
 # it, and Node then resolves the plugin's own dependencies from where the link
 # points rather than from the profile — which left the frame protocol
@@ -321,6 +386,7 @@ RUN npm install --omit=dev --no-audit --no-fund --install-links \
       /src/packages/dsh-gateway-tunnel \
       /src/packages/dsh-sandbox-host \
       /src/packages/dsh-tenant-account \
+      /src/packages/dsh-artifact-panel \
   && rm -rf /root/.npm /src
 
 # Project the environment above into a file the entrypoint sources.
@@ -353,8 +419,10 @@ RUN for name in PATH DSH_BIN DSH_HOME HOME DSH_PERMISSION_MODE NODE_ENV \
 # into it — started before any tenant exists, and identical in every sandbox
 # restored from it. `entrypoint.sh` needs an identity that only exists at
 # creation, so the gateway starts it through envd instead. The Docker simulation
-# has no envd and overrides both the entrypoint and the command.
-COPY --from=cube-tools /usr/bin/envd /usr/bin/envd
+# now keeps this entrypoint and passes `entrypoint.sh` as the command, so it
+# gets the same envd on the same port and the file plane has one implementation
+# rather than one per runtime.
+COPY --from=envd /envd /usr/bin/envd
 COPY --from=cube-tools /usr/local/bin/cube-entrypoint.sh /usr/local/bin/cube-entrypoint.sh
 
 # The tenant's workspace, and nothing else in it.

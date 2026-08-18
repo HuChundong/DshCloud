@@ -145,6 +145,21 @@ export class Accounts {
   }
 
   /**
+   * Read one account by its id.
+   *
+   * The panel's preview tickets name an account by id rather than by address:
+   * a ticket rides in a URL path, and a URL path lands in access logs and
+   * browser history. An opaque id there says nothing about who the tenant is.
+   *
+   * @param {string} id - the account's stable id.
+   * @returns {Promise<Account | undefined>} the account, or undefined when no such id exists.
+   */
+  async readById(id) {
+    const { rows } = await this.pool.query('SELECT * FROM accounts WHERE id = $1', [id])
+    return rows.length === 0 ? undefined : toAccount(rows[0])
+  }
+
+  /**
    * Return the account for an address, registering it if it has none.
    *
    * The caller must already have established that the address's owner is the one

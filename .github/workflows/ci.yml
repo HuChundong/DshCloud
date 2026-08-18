@@ -56,6 +56,9 @@ jobs:
       - name: Uploads
         run: node scripts/check-uploads.mjs
 
+      - name: Panel paths
+        run: node scripts/check-panel-paths.mjs
+
       # Interpolation errors and malformed overlays surface here rather than on
       # a deployment host. The values are placeholders: `config` resolves the
       # files, it does not start anything.
