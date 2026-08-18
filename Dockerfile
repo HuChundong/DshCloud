@@ -32,7 +32,7 @@ RUN apt-get update \
 # The harness version this deployment runs. A build argument rather than a
 # lockfile entry, so a deployment can move between published versions without
 # editing a file that also pins this project's own dependencies.
-ARG DSH_VERSION=0.1.0-rc.6
+ARG DSH_VERSION=0.1.0-rc.7
 
 # An npm registry to install from. Empty uses the public one; a deployment far
 # from it names a mirror rather than waiting out ~200 packages.
