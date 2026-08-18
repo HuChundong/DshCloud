@@ -279,6 +279,43 @@ actually revoke. A signed stateless cookie stays valid until it expires and
 nothing can take it back, which is the wrong property for a session that reaches
 a shell.
 
+## The tenant's own environment
+
+The agent inside a sandbox reaches things this deployment has no business
+knowing about, and reaching them needs a credential. There was nowhere to put
+one: the model credential belongs to the deployment and lives in `settings`, and
+everything else a sandbox was given was decided by the gateway. `sandbox_secrets`
+is the tenant's half of that — names and values they set in Settings, injected
+when their sandbox is created.
+
+Handing a tenant a lever on their own sandbox's environment is only safe because
+of the order the environment is composed in. `sandboxes.js` lays theirs down
+first, then the sandbox's identity and dial-in URL, then the deployment's model
+credential — so a name a tenant should not have set is overwritten rather than
+obeyed. `secrets.js` refuses those names on write as well, and the two checks
+are independent on purpose: the write-time list is the explanation a person
+gets, and the ordering is what holds if a row ever reaches the table another
+way. Reversing any pair of those spreads hands something over —
+`SANDBOX_TOKEN` is another sandbox's session, `GATEWAY_TUNNEL_URL` is somewhere
+else to dial, `DEEPSEEK_BASE_URL` is somewhere else to send the deployment's
+key.
+
+Because of that, the sandbox page carries the one control that applies a change:
+restarting. Nothing actually restarts — `POST /sandbox/restart` releases the
+sandbox, the manager forgets it, and the next request builds a fresh one, which
+is exactly what idle reclamation already does. It is therefore not a new
+lifecycle for the deployment to survive, only a way for a tenant to ask for the
+one it already has. It interrupts whatever the agent was doing, so the control
+asks twice before it acts.
+
+A value goes in and never comes back. The page shows the name and that it is
+set, which is what somebody auditing their own configuration needs; serving the
+value would put it in a screenshot, a scroll-back, and whatever proxies the
+response, for something its owner already has. And because an environment is
+fixed when a process starts, a change reaches the next sandbox rather than the
+one already running — which the page says outright rather than leaving to be
+discovered.
+
 ## The account section
 
 Sign-out is the deployment's, not dsh's: the harness has no notion of the
@@ -286,6 +323,27 @@ gateway's tenants, so nothing in its own composition can end a session.
 [`packages/dsh-tenant-account`](../packages/dsh-tenant-account) adds an Account page to
 Settings — the caller's name from `/whoami`, and a control that posts to
 `/logout`, which revokes the session and releases their sandbox.
+
+What a tenant is called and what they look like belong to the deployment for the
+same reason, and `/profile` is a gateway page rather than a panel in Settings: it
+edits an account dsh has no notion of, and it has to work on the way in, before a
+sandbox exists. It is unskippable by construction rather than by persuasion —
+`/_auth` answers 403 for a tenant who has never chosen a name, and nginx turns
+that into a redirect exactly as it turns 401 into one to the login page. Only the
+shell document is charged for the check: the same gate guards three dozen plugin
+bundles on a cold load, and asking the database about each of them would be three
+dozen queries for one page.
+
+The picture is a `data:` URI on the account row. The browser crops and encodes it
+to 256×256 on a canvas before it is ever submitted, so what crosses the wire is
+tens of kilobytes rather than whatever came off a phone — and so the gateway,
+which holds the Docker socket, never decodes tenant-supplied image bytes. It is
+matched against the shape a `data:` URI may have rather than parsed, and SVG is
+refused outright: it is a document with script in it, and this value is
+interpolated into an `img` on a page the deployment serves. It travels inline with
+`/whoami` rather than as a second request, because an object store for an image
+only its owner ever sees would be a second backup and a second failure mode for
+the sake of one column.
 
 It is a real client plugin, registered into `settings.section` beside the
 shipped pages. Three things make that work, and each fails silently rather than

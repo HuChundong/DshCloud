@@ -312,6 +312,33 @@ nginx location、网关路由里的一个分支、沙箱里的一条路由。藏
 难发现的原因在于：草稿是组合器里插件唯一能写的部分，于是它看起来像是够到模型的唯一途径。而
 inbox 在同一个会话的另一侧，够到它只需要客户端本来就有的 session id。
 
+## 非 loopback 的浏览器，设置不会持久化
+
+租户把主题改成深色，刷新，又变回浅色。没有任何报错，隧道一直连着，沙箱里的
+`~/.dsh/settings.yaml` 始终是 0 字节。
+
+判定发生在客户端，不在传输层。`dsh-client-ui-settings` 绑定每一个设置命名空间时写的是
+
+```js
+new SettingsScopeController(connection.api, spec, connection.isLoopback ? "host" : "memory")
+```
+
+而 `isLoopback` 取自页面自身的 hostname —— 只认 `localhost`、`[::1]`，以及 `127/8`
+里的地址，别无其他。落到 `"memory"` 的那一侧，每次写入都只留在这个标签页里，刷新即弃。
+它的文档注释把话说死了：*remote browsers remain process-local because settings RPCs
+are loopback-only.*
+
+这套部署确实让沙箱以为自己是被 loopback 调用的——隧道把每个转发请求都装扮成那样——但那是
+**服务端**的一半。浏览器判断的是它自己地址栏里的东西，再多的转发也改不了。于是任何不通过
+localhost 访问这套部署的租户，什么偏好都留不住：主题、语言、权限模式，一个都不会。
+
+它耗掉一个下午，是因为每一个症状都指向别处。沙箱活着、文件存在、同样的点击在一个开在
+`localhost` 的标签页里能正确写入——两个会话之间唯一的差别是地址栏里的主机名，而那是所有人
+最后才会去看的东西。
+
+`dsh-tenant-account` 里本来就留着一条注释，说 onboarding 提示对「通过域名进来的租户」
+留不住。那就是这件事，只是当时被看成某一条提示的怪癖，而不是所有设置的规则。
+
 ## 能推广的部分
 
 - **快照装不下「之后才知道」的东西。** 一切与租户相关的，都必须在还原之后才抵达。

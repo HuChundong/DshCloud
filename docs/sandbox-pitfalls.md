@@ -414,6 +414,39 @@ can write, so it looks like the only way to reach the model. The inbox is on the
 other side of the same session, and reaching it needs nothing but the session id
 the client already has.
 
+## Settings do not persist for a browser that is not on loopback
+
+A tenant changes the theme, reloads, and it is light again. Nothing errors, the
+tunnel stays up, and `~/.dsh/settings.yaml` in their sandbox stays zero bytes.
+
+The decision is in the client, not on the wire. `dsh-client-ui-settings` binds
+every settings namespace with
+
+```js
+new SettingsScopeController(connection.api, spec, connection.isLoopback ? "host" : "memory")
+```
+
+and `isLoopback` is judged from the page's own hostname —
+`localhost`, `[::1]`, or anything in `127/8`, and nothing else. On `"memory"`
+every write is kept in the tab and discarded on reload. The doc comment says so
+outright: *remote browsers remain process-local because settings RPCs are
+loopback-only.*
+
+This deployment makes the sandbox believe it is being called on loopback — the
+tunnel presents every forwarded request that way — but that is the *server* half.
+The browser judges its own address bar, which no amount of forwarding changes.
+So a tenant reaching the deployment by any name other than localhost keeps no
+preference: not the theme, not the language, not the permission mode.
+
+It cost an afternoon because every symptom pointed elsewhere. The sandbox was
+alive, the file existed, the same click persisted correctly in a tab opened on
+`localhost` — the only difference between the two sessions was the hostname in
+the address bar, which is the last thing anybody inspects.
+
+`dsh-tenant-account` already carried a note about the onboarding notice not
+sticking "for a tenant arriving by domain name". That was this, seen once and
+read as a quirk of one notice rather than as the rule for every setting.
+
 ## What generalizes
 
 - **A snapshot cannot hold what is only knowable later.** Everything
