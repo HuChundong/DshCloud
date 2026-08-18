@@ -60,9 +60,11 @@ export async function serveTerminal(socket, caller, sandboxes) {
     if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(message))
   }
 
-  let sandboxId
+  // The runtime's handle, because every call below is to envd and envd is
+  // addressed by the runtime, not by the gateway's id for the sandbox.
+  let handle
   try {
-    ({ sandboxId } = await sandboxes.ensure(caller.email, caller.id))
+    ({ handle } = await sandboxes.ensure(caller.email, caller.id))
   } catch (error) {
     console.error(`gateway: no sandbox for ${caller.email}'s terminal: ${error.message}`)
     say({ type: 'error', message: '沙箱还没准备好，请稍后再试。' })
@@ -78,7 +80,7 @@ export async function serveTerminal(socket, caller, sandboxes) {
   const waiting = []
 
   try {
-    session = await startPty(sandboxId, {
+    session = await startPty(handle, {
       cols: 80,
       rows: 24,
       cwd: ROOT,
@@ -91,7 +93,7 @@ export async function serveTerminal(socket, caller, sandboxes) {
         pid = started
         say({ type: 'ready' })
         for (const bytes of waiting.splice(0)) {
-          void sendPtyInput(sandboxId, pid, bytes).catch(() => {})
+          void sendPtyInput(handle, pid, bytes).catch(() => {})
         }
       },
       // Base64 rather than a binary frame: the socket already carries JSON in
@@ -124,11 +126,11 @@ export async function serveTerminal(socket, caller, sandboxes) {
     if (message.type === 'in' && typeof message.data === 'string') {
       const bytes = Buffer.from(message.data, 'base64')
       if (pid === undefined) waiting.push(bytes)
-      else void sendPtyInput(sandboxId, pid, bytes).catch(() => {})
+      else void sendPtyInput(handle, pid, bytes).catch(() => {})
       return
     }
     if (message.type === 'size' && pid !== undefined) {
-      void resizePty(sandboxId, pid, size(message.cols, 80, 500), size(message.rows, 24, 200)).catch(() => {})
+      void resizePty(handle, pid, size(message.cols, 80, 500), size(message.rows, 24, 200)).catch(() => {})
     }
   })
 

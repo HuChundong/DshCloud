@@ -40,10 +40,10 @@ const watched = new Map()
  * A failed sample is reported as a failure rather than skipped: to a person a
  * sandbox that stops answering is the status, not the absence of one.
  *
- * @param {string} sandboxId - the sandbox to measure.
+ * @param {string} handle - the runtime's address for the sandbox to measure.
  */
-async function sample(sandboxId) {
-  const entry = watched.get(sandboxId)
+async function sample(handle) {
+  const entry = watched.get(handle)
   if (entry === undefined) return
   let reading
   try {
@@ -51,12 +51,12 @@ async function sample(sandboxId) {
     // also shows it: it is the one thing a tenant has to quote when reporting
     // that their machine misbehaved. Harmless to tell its owner — reaching the
     // sandbox needs the token, which never leaves the sandbox and the gateway.
-    reading = { ok: true, stats: { id: sandboxId, ...shape(await metrics(sandboxId)) } }
+    reading = { ok: true, stats: { id: entry.id, ...shape(await metrics(handle)) } }
   } catch {
     reading = { ok: false }
   }
   // Watchers can leave while a sample is in flight.
-  const current = watched.get(sandboxId)
+  const current = watched.get(handle)
   if (current === undefined) return
   current.last = reading
   for (const watcher of current.watchers) watcher(reading)
@@ -93,28 +93,29 @@ function shape(raw) {
  * being sampled is handed the last reading at once rather than waiting out an
  * interval for the first one.
  *
- * @param {string} sandboxId - the sandbox to watch.
+ * @param {string} handle - the runtime's address for the sandbox to watch.
+ * @param {string} id - the gateway's id for it, which is what the bar shows.
  * @param {(reading: {ok: boolean, stats?: object}) => void} onReading - called with every sample.
  * @returns {() => void} stop watching.
  */
-export function watchSandbox(sandboxId, onReading) {
-  let entry = watched.get(sandboxId)
+export function watchSandbox(handle, id, onReading) {
+  let entry = watched.get(handle)
   if (entry === undefined) {
-    entry = { timer: undefined, watchers: new Set(), last: undefined }
-    watched.set(sandboxId, entry)
-    entry.timer = setInterval(() => { void sample(sandboxId) }, SAMPLE_MS)
-    void sample(sandboxId)
+    entry = { timer: undefined, watchers: new Set(), last: undefined, id }
+    watched.set(handle, entry)
+    entry.timer = setInterval(() => { void sample(handle) }, SAMPLE_MS)
+    void sample(handle)
   }
   entry.watchers.add(onReading)
   if (entry.last !== undefined) onReading(entry.last)
 
   return () => {
-    const current = watched.get(sandboxId)
+    const current = watched.get(handle)
     if (current === undefined) return
     current.watchers.delete(onReading)
     if (current.watchers.size > 0) return
     clearInterval(current.timer)
-    watched.delete(sandboxId)
+    watched.delete(handle)
   }
 }
 
@@ -230,20 +231,20 @@ function serveStream(req, res, attach) {
  *
  * @param {import('node:http').IncomingMessage} req - the request.
  * @param {import('node:http').ServerResponse} res - the response.
- * @param {() => Promise<string>} resolve - the caller's sandbox, resolved afresh on every attempt.
+ * @param {() => Promise<{handle: string, sandboxId: string}>} resolve - the caller's sandbox, resolved afresh on every attempt.
  */
 export function serveStats(req, res, resolve) {
   serveStream(req, res, async (send, retry) => {
-    let sandboxId
+    let where
     try {
-      sandboxId = await resolve()
+      where = await resolve()
     } catch {
       // Told, not swallowed: to a person a sandbox that is still coming up and
       // one that is not answering are the same state, and the bar draws it.
       send({ ok: false })
       return undefined
     }
-    return watchSandbox(sandboxId, (reading) => {
+    return watchSandbox(where.handle, where.sandboxId, (reading) => {
       send(reading)
       // A sandbox that stops answering may simply have been replaced, so the
       // next attempt starts over at `resolve` rather than asking this id again.
@@ -272,40 +273,40 @@ const watching = new Map()
 /**
  * Hear about changes under a sandbox's workspace.
  *
- * @param {string} sandboxId - the sandbox to watch.
+ * @param {string} handle - the runtime's address for the sandbox to watch.
  * @param {(event: {name: string, type: string}) => void} onEvent - called with each change.
  * @returns {Promise<() => void>} stop watching.
  */
-export async function watchWorkspace(sandboxId, onEvent) {
-  let entry = watching.get(sandboxId)
+export async function watchWorkspace(handle, onEvent) {
+  let entry = watching.get(handle)
   if (entry === undefined) {
     entry = { handle: undefined, watchers: new Set() }
-    watching.set(sandboxId, entry)
+    watching.set(handle, entry)
     try {
-      entry.handle = await watchDir(sandboxId, ROOT, {
+      entry.handle = await watchDir(handle, ROOT, {
         onEvent: (event) => {
-          for (const watcher of watching.get(sandboxId)?.watchers ?? []) watcher(event)
+          for (const watcher of watching.get(handle)?.watchers ?? []) watcher(event)
         },
         // A watch that ends — the sandbox went away, envd restarted — is
         // forgotten rather than retried here. The browsers reconnect their own
         // streams, and the next one to arrive opens a fresh watch.
-        onEnd: () => { watching.delete(sandboxId) },
-        onError: () => { watching.delete(sandboxId) },
+        onEnd: () => { watching.delete(handle) },
+        onError: () => { watching.delete(handle) },
       })
     } catch (error) {
-      watching.delete(sandboxId)
+      watching.delete(handle)
       throw error
     }
   }
   entry.watchers.add(onEvent)
 
   return () => {
-    const current = watching.get(sandboxId)
+    const current = watching.get(handle)
     if (current === undefined) return
     current.watchers.delete(onEvent)
     if (current.watchers.size > 0) return
     current.handle?.close()
-    watching.delete(sandboxId)
+    watching.delete(handle)
   }
 }
 
@@ -317,12 +318,12 @@ export const WATCH_PATH = '/sandbox/watch'
  *
  * @param {import('node:http').IncomingMessage} req - the request.
  * @param {import('node:http').ServerResponse} res - the response.
- * @param {() => Promise<string>} resolve - the caller's sandbox, resolved afresh on every attempt.
+ * @param {() => Promise<{handle: string}>} resolve - the caller's sandbox, resolved afresh on every attempt.
  */
 export function serveWatch(req, res, resolve) {
   // Both steps can fail while a sandbox is starting, and both are retried by
   // the stream rather than ending it. The panel asks for nothing on a timer any
   // more, so a watch that quietly gave up would leave the tree and the canvas
   // showing whatever they were showing when it did.
-  serveStream(req, res, async (send) => await watchWorkspace(await resolve(), send))
+  serveStream(req, res, async (send) => await watchWorkspace((await resolve()).handle, send))
 }

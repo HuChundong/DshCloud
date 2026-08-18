@@ -74,7 +74,12 @@ const cube = {
 const docker = {
   name: 'docker',
   create: async (owner, env) => {
-    const handle = await createContainer(`dsh-sandbox-${env.SANDBOX_ID.slice(0, 12)}`, {
+    // The NAME is the handle, not the id Docker answers with, because a handle
+    // has to be an address: on a user-defined network Docker resolves a
+    // container by name, and `envd.js` dials it by that name. Docker accepts a
+    // name anywhere it accepts an id, so nothing else here has to care.
+    const name = `dsh-sandbox-${env.SANDBOX_ID.slice(0, 12)}`
+    await createContainer(name, {
       Image: process.env.SANDBOX_IMAGE ?? 'dsh-sandbox:latest',
       Labels: { [OWNER_KEY]: owner.username },
       Env: Object.entries(env).map(([key, value]) => `${key}=${value}`),
@@ -101,8 +106,8 @@ const docker = {
         RestartPolicy: { Name: 'no' },
       },
     })
-    await startContainer(handle)
-    return handle
+    await startContainer(name)
+    return name
   },
   remove: async (handle) => { await removeContainer(handle) },
   listOwned: async () => (await listContainers(OWNER_KEY).catch(() => [])).map((container) => container.Id),

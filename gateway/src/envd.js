@@ -67,22 +67,33 @@ const RUNTIME = process.env.SANDBOX_RUNTIME === 'cube' ? 'cube' : 'docker'
  * the address and no `Host` games are needed.
  *
  * The container's name is derived from the sandbox id rather than remembered,
- * because `runtimes.js` derives it the same way when it creates the container.
- * Two derivations of one rule, which is a thing to keep in step — but the
- * alternative is threading a runtime-specific handle through every caller of
- * every function in this file.
+ * The argument is the RUNTIME's own handle — what `runtime.create` returned —
+ * and never the gateway's `sandboxId`. The two are not the same thing and only
+ * one of them is an address:
  *
- * @param {string} sandboxId - the sandbox to reach.
+ *   docker   handle = `dsh-sandbox-<first 12 of SANDBOX_ID>`, the container name
+ *   cube     handle = CubeSandbox's own sandbox id, which is what CubeProxy
+ *            routes its `<port>-<id>` virtual host by
+ *
+ * Under docker the handle is DERIVED from the gateway's id, so passing the
+ * wrong one still worked and the mistake was invisible in the simulation.
+ * Under CubeSandbox the two are unrelated, and passing the gateway's id built
+ * a virtual host nothing answers to — every call, including `/health`, came
+ * back 503 from the proxy. That is why this parameter is named for what it is.
+ *
+ * @param {string} handle - the runtime's handle for the sandbox to reach.
  * @returns {{host: string, port: number, hostHeader: string|undefined}} where to dial.
  */
-function endpointOf(sandboxId) {
+function endpointOf(handle) {
   if (RUNTIME === 'docker') {
-    return { host: `dsh-sandbox-${sandboxId.slice(0, 12)}`, port: ENVD_PORT, hostHeader: undefined }
+    // The handle IS the container name, which is the name Docker resolves on
+    // the sandbox network. Nothing is derived here any more.
+    return { host: handle, port: ENVD_PORT, hostHeader: undefined }
   }
   if (PROXY_NODE_IP === undefined) {
     throw new Error('envd: CUBE_PROXY_NODE_IP is required to reach a sandbox')
   }
-  return { host: PROXY_NODE_IP, port: PROXY_PORT, hostHeader: `${ENVD_PORT}-${sandboxId}.${SANDBOX_DOMAIN}` }
+  return { host: PROXY_NODE_IP, port: PROXY_PORT, hostHeader: `${ENVD_PORT}-${handle}.${SANDBOX_DOMAIN}` }
 }
 
 /** The sandbox user commands run as. The backend owns the whole machine. */
@@ -139,15 +150,15 @@ function decodeEnvelopes(body) {
  * mechanism is a `Host` header that names somewhere other than the address
  * dialled, and `fetch` forbids setting `Host`.
  *
- * @param {string} sandboxId - the sandbox to address.
+ * @param {string} handle - the sandbox to address.
  * @param {string} path - the envd path to call.
  * @param {Buffer} body - the encoded request body.
  * @param {Record<string, string>} headers - request headers, less `Host`.
  * @param {string} [method] - the HTTP method; `POST` for every Connect call, `GET` for envd's file reader.
  * @returns {Promise<{status: number, body: Buffer}>} the response status and complete body.
  */
-async function envdRequest(sandboxId, path, body, headers, method = 'POST') {
-  const endpoint = endpointOf(sandboxId)
+async function envdRequest(handle, path, body, headers, method = 'POST') {
+  const endpoint = endpointOf(handle)
   return await new Promise((resolve, reject) => {
     const request = http.request({
       host: endpoint.host,
@@ -181,25 +192,25 @@ async function envdRequest(sandboxId, path, body, headers, method = 'POST') {
  * exit code turns a failed start into a failed sandbox creation rather than a
  * sandbox that silently never dials in.
  *
- * @param {string} sandboxId - the sandbox to run in.
+ * @param {string} handle - the sandbox to run in.
  * @param {string} command - the shell command, run under `/bin/bash -l -c`.
  * @param {Record<string, string>} envs - environment for the command and anything it starts.
  * @returns {Promise<{exitCode: number, stdout: string, stderr: string}>} what the command did.
  * @throws {Error} when envd refuses the call or the stream ends with no exit code.
  */
-async function runCommand(sandboxId, command, envs) {
+async function runCommand(handle, command, envs) {
   const payload = {
     process: { cmd: '/bin/bash', args: ['-l', '-c', command], envs },
     stdin: false,
   }
-  const { status, body } = await envdRequest(sandboxId, '/process.Process/Start', encodeEnvelope(payload), {
+  const { status, body } = await envdRequest(handle, '/process.Process/Start', encodeEnvelope(payload), {
     'Content-Type': 'application/connect+json',
     'Connect-Protocol-Version': '1',
     'Connect-Content-Encoding': 'identity',
     Authorization: `Basic ${Buffer.from(`${ENVD_USER}:`).toString('base64')}`,
   })
   if (status >= 400) {
-    throw new Error(`envd: starting a process in ${sandboxId} failed (${status}): ${body.toString('utf8').trim()}`)
+    throw new Error(`envd: starting a process in ${handle} failed (${status}): ${body.toString('utf8').trim()}`)
   }
 
   const stdout = []
@@ -210,7 +221,7 @@ async function runCommand(sandboxId, command, envs) {
       // The trailer reports a stream-level failure — envd refusing the call
       // after headers were sent — which is distinct from the command failing.
       if (message.error !== undefined) {
-        throw new Error(`envd: process stream in ${sandboxId} failed: ${JSON.stringify(message.error)}`)
+        throw new Error(`envd: process stream in ${handle} failed: ${JSON.stringify(message.error)}`)
       }
       break
     }
@@ -220,7 +231,7 @@ async function runCommand(sandboxId, command, envs) {
     if (event.end !== undefined) exitCode = Number(event.end.exitCode ?? event.end.exit_code ?? 0)
   }
   if (exitCode === undefined) {
-    throw new Error(`envd: process stream in ${sandboxId} ended without an exit code`)
+    throw new Error(`envd: process stream in ${handle} ended without an exit code`)
   }
   return { exitCode, stdout: stdout.join(''), stderr: stderr.join('') }
 }
@@ -236,16 +247,16 @@ const BACKEND_LOG_PATH = '/var/log/dsh.log'
  * backend has to outlive the call by the entire life of the sandbox. Its output
  * goes to a file for the same reason — nothing is left holding the pipe.
  *
- * @param {string} sandboxId - the sandbox to start the backend in.
+ * @param {string} handle - the sandbox to start the backend in.
  * @param {Record<string, string>} env - the backend's environment, carrying this sandbox's identity.
  * @returns {Promise<void>} resolves once the backend has been started.
  * @throws {Error} when the start command itself fails.
  */
-export async function startBackend(sandboxId, env) {
+export async function startBackend(handle, env) {
   const command = `setsid nohup /app/sandbox/entrypoint.sh >${BACKEND_LOG_PATH} 2>&1 </dev/null &`
-  const { exitCode, stderr } = await runCommand(sandboxId, command, env)
+  const { exitCode, stderr } = await runCommand(handle, command, env)
   if (exitCode !== 0) {
-    throw new Error(`envd: starting the backend in ${sandboxId} exited ${exitCode}: ${stderr.trim()}`)
+    throw new Error(`envd: starting the backend in ${handle} exited ${exitCode}: ${stderr.trim()}`)
   }
 }
 
@@ -275,14 +286,14 @@ const CONNECT_HEADERS = {
  * A failure comes back as a non-2xx with a JSON `{code, message}` body, so
  * there is no trailer to inspect and no end-of-stream flag to wait for.
  *
- * @param {string} sandboxId - the sandbox to ask.
+ * @param {string} handle - the sandbox to ask.
  * @param {string} method - the fully qualified method path.
  * @param {object} payload - the request message.
  * @returns {Promise<object>} the response message.
  * @throws {Error} when envd refuses the call.
  */
-async function unary(sandboxId, method, payload) {
-  const { status, body } = await envdRequest(sandboxId, method, Buffer.from(JSON.stringify(payload), 'utf8'), {
+async function unary(handle, method, payload) {
+  const { status, body } = await envdRequest(handle, method, Buffer.from(JSON.stringify(payload), 'utf8'), {
     'Content-Type': 'application/json',
     'Connect-Protocol-Version': '1',
     Authorization: CONNECT_HEADERS.Authorization,
@@ -292,7 +303,7 @@ async function unary(sandboxId, method, payload) {
     // Connect reports a failure as a JSON `{code, message}`. The code is
     // carried onto the error so a caller can tell "there is no such file" from
     // "the sandbox is not answering" without matching on prose.
-    const failure = new Error(`envd: ${method} in ${sandboxId} failed (${String(status)}): ${text.trim()}`)
+    const failure = new Error(`envd: ${method} in ${handle} failed (${String(status)}): ${text.trim()}`)
     try {
       failure.code = JSON.parse(text).code
     } catch {
@@ -303,7 +314,7 @@ async function unary(sandboxId, method, payload) {
   try {
     return JSON.parse(text === '' ? '{}' : text)
   } catch {
-    throw new Error(`envd: ${method} in ${sandboxId} answered something that is not JSON`)
+    throw new Error(`envd: ${method} in ${handle} answered something that is not JSON`)
   }
 }
 
@@ -313,24 +324,24 @@ async function unary(sandboxId, method, payload) {
  * Depth 1: the panel's tree loads a level at a time as it is opened, so asking
  * for more would read a tenant's whole workspace to draw one row of it.
  *
- * @param {string} sandboxId - the sandbox to read in.
+ * @param {string} handle - the sandbox to read in.
  * @param {string} path - an absolute path, already through the fence.
  * @returns {Promise<Array<object>>} the entries, in envd's own order.
  */
-export async function listDir(sandboxId, path) {
-  const message = await unary(sandboxId, `${FILESYSTEM}/ListDir`, { path, depth: 1, username: ENVD_USER })
+export async function listDir(handle, path) {
+  const message = await unary(handle, `${FILESYSTEM}/ListDir`, { path, depth: 1, username: ENVD_USER })
   return message.entries ?? []
 }
 
 /**
  * What one path is.
  *
- * @param {string} sandboxId - the sandbox to read in.
+ * @param {string} handle - the sandbox to read in.
  * @param {string} path - an absolute path, already through the fence.
  * @returns {Promise<object>} the entry.
  */
-export async function stat(sandboxId, path) {
-  const message = await unary(sandboxId, `${FILESYSTEM}/Stat`, { path, username: ENVD_USER })
+export async function stat(handle, path) {
+  const message = await unary(handle, `${FILESYSTEM}/Stat`, { path, username: ENVD_USER })
   return message.entry ?? message
 }
 
@@ -341,13 +352,13 @@ export async function stat(sandboxId, path) {
  * Connect method for it — and because a file arrives as bytes rather than as
  * base64 inside an envelope.
  *
- * @param {string} sandboxId - the sandbox to read in.
+ * @param {string} handle - the sandbox to read in.
  * @param {string} path - an absolute path, already through the fence.
  * @returns {Promise<{status: number, body: Buffer}>} the status envd answered with, and the bytes.
  */
-export async function readFile(sandboxId, path) {
+export async function readFile(handle, path) {
   const query = new URLSearchParams({ path, username: ENVD_USER })
-  return await envdRequest(sandboxId, `/files?${query.toString()}`, undefined, {
+  return await envdRequest(handle, `/files?${query.toString()}`, undefined, {
     Authorization: CONNECT_HEADERS.Authorization,
   }, 'GET')
 }
@@ -358,13 +369,13 @@ export async function readFile(sandboxId, path) {
  * envd calls both the same thing, which is what the filesystem calls them
  * both: a rename is a move within one directory.
  *
- * @param {string} sandboxId - the sandbox to act in.
+ * @param {string} handle - the sandbox to act in.
  * @param {string} source - an absolute path, already through the scope check.
  * @param {string} destination - an absolute path, likewise.
  * @returns {Promise<object>} the entry as it now is.
  */
-export async function move(sandboxId, source, destination) {
-  const message = await unary(sandboxId, `${FILESYSTEM}/Move`, { source, destination, username: ENVD_USER })
+export async function move(handle, source, destination) {
+  const message = await unary(handle, `${FILESYSTEM}/Move`, { source, destination, username: ENVD_USER })
   return message.entry ?? message
 }
 
@@ -375,23 +386,23 @@ export async function move(sandboxId, source, destination) {
  * manager needs and the behaviour a person expects from a delete, so the
  * warning belongs in the interface asking for it, not in a second call here.
  *
- * @param {string} sandboxId - the sandbox to act in.
+ * @param {string} handle - the sandbox to act in.
  * @param {string} path - an absolute path, already through the scope check.
  * @returns {Promise<void>} resolves once it is gone.
  */
-export async function remove(sandboxId, path) {
-  await unary(sandboxId, `${FILESYSTEM}/Remove`, { path, username: ENVD_USER })
+export async function remove(handle, path) {
+  await unary(handle, `${FILESYSTEM}/Remove`, { path, username: ENVD_USER })
 }
 
 /**
  * Create one directory.
  *
- * @param {string} sandboxId - the sandbox to act in.
+ * @param {string} handle - the sandbox to act in.
  * @param {string} path - an absolute path, already through the scope check.
  * @returns {Promise<object>} the entry.
  */
-export async function makeDir(sandboxId, path) {
-  const message = await unary(sandboxId, `${FILESYSTEM}/MakeDir`, { path, username: ENVD_USER })
+export async function makeDir(handle, path) {
+  const message = await unary(handle, `${FILESYSTEM}/MakeDir`, { path, username: ENVD_USER })
   return message.entry ?? message
 }
 
@@ -410,12 +421,12 @@ export async function makeDir(sandboxId, path) {
  * semicolon in it is a name. The root is bounded by the caller before it
  * arrives.
  *
- * @param {string} sandboxId - the sandbox to look in.
+ * @param {string} handle - the sandbox to look in.
  * @param {string} root - an absolute directory, already through the scope check.
  * @param {string} pattern - a filename glob, e.g. `*.html`.
  * @returns {Promise<{path: string, modified: number}|undefined>} the newest match, or undefined when there is none.
  */
-export async function newestFile(sandboxId, root, pattern) {
+export async function newestFile(handle, root, pattern) {
   const payload = {
     process: {
       cmd: '/usr/bin/find',
@@ -424,9 +435,9 @@ export async function newestFile(sandboxId, root, pattern) {
     },
     stdin: false,
   }
-  const { status, body } = await envdRequest(sandboxId, '/process.Process/Start', encodeEnvelope(payload), CONNECT_HEADERS)
+  const { status, body } = await envdRequest(handle, '/process.Process/Start', encodeEnvelope(payload), CONNECT_HEADERS)
   if (status >= 400) {
-    throw new Error(`envd: scanning ${root} in ${sandboxId} failed (${String(status)})`)
+    throw new Error(`envd: scanning ${root} in ${handle} failed (${String(status)})`)
   }
   const out = []
   for (const { flags, message } of decodeEnvelopes(body)) {
@@ -456,13 +467,13 @@ export async function newestFile(sandboxId, root, pattern) {
  * functions and a boundary string, against a dependency that would arrive with
  * its own.
  *
- * @param {string} sandboxId - the sandbox to write in.
+ * @param {string} handle - the sandbox to write in.
  * @param {string} path - an absolute path, already through the scope check.
  * @param {Buffer} content - the bytes to write.
  * @returns {Promise<void>} resolves once envd has taken it.
  * @throws {Error} when envd refuses.
  */
-export async function writeFile(sandboxId, path, content) {
+export async function writeFile(handle, path, content) {
   const boundary = `----dsh${randomUUID().replaceAll('-', '')}`
   const name = path.slice(path.lastIndexOf('/') + 1)
   const body = Buffer.concat([
@@ -476,12 +487,12 @@ export async function writeFile(sandboxId, path, content) {
     Buffer.from(`\r\n--${boundary}--\r\n`, 'utf8'),
   ])
   const query = new URLSearchParams({ path, username: ENVD_USER })
-  const { status, body: answer } = await envdRequest(sandboxId, `/files?${query.toString()}`, body, {
+  const { status, body: answer } = await envdRequest(handle, `/files?${query.toString()}`, body, {
     'Content-Type': `multipart/form-data; boundary=${boundary}`,
     Authorization: CONNECT_HEADERS.Authorization,
   })
   if (status >= 400) {
-    throw new Error(`envd: writing ${path} in ${sandboxId} failed (${String(status)}): ${answer.toString('utf8').trim()}`)
+    throw new Error(`envd: writing ${path} in ${handle} failed (${String(status)}): ${answer.toString('utf8').trim()}`)
   }
 }
 
@@ -531,12 +542,12 @@ function readEnvelopes(response, onFrame) {
  * unary calls — see `sendPtyInput` and `resizePty` — so there is no
  * bidirectional plumbing here, and nothing to keep alive in two directions.
  *
- * @param {string} sandboxId - the sandbox to open the shell in.
+ * @param {string} handle - the sandbox to open the shell in.
  * @param {{cols: number, rows: number, cwd: string, envs: Record<string, string>}} options - the terminal's shape and where it starts.
  * @param {{onStart: (pid: number) => void, onData: (bytes: Buffer) => void, onEnd: (exitCode: number|undefined) => void, onError: (error: Error) => void}} sink - where the session's events go.
  * @returns {Promise<{close: () => void}>} a handle that ends the read.
  */
-export async function startPty(sandboxId, options, sink) {
+export async function startPty(handle, options, sink) {
   const payload = {
     process: {
       cmd: '/bin/bash',
@@ -549,7 +560,7 @@ export async function startPty(sandboxId, options, sink) {
     // what makes a prompt, colours and line editing appear at all.
     pty: { size: { cols: options.cols, rows: options.rows } },
   }
-  const endpoint = endpointOf(sandboxId)
+  const endpoint = endpointOf(handle)
   return await new Promise((resolve, reject) => {
     const body = encodeEnvelope(payload)
     const request = http.request({
@@ -565,7 +576,7 @@ export async function startPty(sandboxId, options, sink) {
     }, (response) => {
       if ((response.statusCode ?? 502) >= 400) {
         response.resume()
-        reject(new Error(`envd: opening a terminal in ${sandboxId} failed (${String(response.statusCode)})`))
+        reject(new Error(`envd: opening a terminal in ${handle} failed (${String(response.statusCode)})`))
         return
       }
       readEnvelopes(response, (flags, message) => {
@@ -596,13 +607,13 @@ export async function startPty(sandboxId, options, sink) {
 /**
  * Type into a terminal.
  *
- * @param {string} sandboxId - the sandbox the shell is in.
+ * @param {string} handle - the sandbox the shell is in.
  * @param {number} pid - the shell's process id, as its start event reported it.
  * @param {Buffer} bytes - what was typed.
  * @returns {Promise<void>} resolves once envd has taken it.
  */
-export async function sendPtyInput(sandboxId, pid, bytes) {
-  await unary(sandboxId, `${PROCESS}/SendInput`, {
+export async function sendPtyInput(handle, pid, bytes) {
+  await unary(handle, `${PROCESS}/SendInput`, {
     process: { pid },
     input: { pty: bytes.toString('base64') },
   })
@@ -614,14 +625,14 @@ export async function sendPtyInput(sandboxId, pid, bytes) {
  * Without this a resized window leaves the shell drawing to the old size, and
  * anything full-screen — an editor, a pager — wraps at the wrong column.
  *
- * @param {string} sandboxId - the sandbox the shell is in.
+ * @param {string} handle - the sandbox the shell is in.
  * @param {number} pid - the shell's process id.
  * @param {number} cols - columns.
  * @param {number} rows - rows.
  * @returns {Promise<void>} resolves once envd has taken it.
  */
-export async function resizePty(sandboxId, pid, cols, rows) {
-  await unary(sandboxId, `${PROCESS}/Update`, { process: { pid }, pty: { size: { cols, rows } } })
+export async function resizePty(handle, pid, cols, rows) {
+  await unary(handle, `${PROCESS}/Update`, { process: { pid }, pty: { size: { cols, rows } } })
 }
 
 /**
@@ -637,16 +648,16 @@ export async function resizePty(sandboxId, pid, cols, rows) {
  * somebody has to sample. `stats.js` decides who and how often, so that a
  * tenant with three tabs open costs one sample rather than three.
  *
- * @param {string} sandboxId - the sandbox to measure.
+ * @param {string} handle - the sandbox to measure.
  * @returns {Promise<object>} envd's own reading.
  * @throws {Error} when the sandbox does not answer.
  */
-export async function metrics(sandboxId) {
-  const { status, body } = await envdRequest(sandboxId, '/metrics', undefined, {
+export async function metrics(handle) {
+  const { status, body } = await envdRequest(handle, '/metrics', undefined, {
     Authorization: CONNECT_HEADERS.Authorization,
   }, 'GET')
   if (status >= 400) {
-    throw new Error(`envd: reading metrics in ${sandboxId} failed (${String(status)})`)
+    throw new Error(`envd: reading metrics in ${handle} failed (${String(status)})`)
   }
   return JSON.parse(body.toString('utf8'))
 }
@@ -663,13 +674,13 @@ export async function metrics(sandboxId) {
  * watched, and splitting it per open directory would mean a stream per
  * expanded row.
  *
- * @param {string} sandboxId - the sandbox to watch in.
+ * @param {string} handle - the sandbox to watch in.
  * @param {string} path - an absolute directory, already through the scope check.
  * @param {{onEvent: (event: {name: string, type: string}) => void, onEnd: () => void, onError: (error: Error) => void}} sink - where the changes go.
  * @returns {Promise<{close: () => void}>} a handle that ends the watch.
  */
-export async function watchDir(sandboxId, path, sink) {
-  const endpoint = endpointOf(sandboxId)
+export async function watchDir(handle, path, sink) {
+  const endpoint = endpointOf(handle)
   const body = encodeEnvelope({ path, recursive: true, username: ENVD_USER })
   return await new Promise((resolve, reject) => {
     const request = http.request({
@@ -685,7 +696,7 @@ export async function watchDir(sandboxId, path, sink) {
     }, (response) => {
       if ((response.statusCode ?? 502) >= 400) {
         response.resume()
-        reject(new Error(`envd: watching ${path} in ${sandboxId} failed (${String(response.statusCode)})`))
+        reject(new Error(`envd: watching ${path} in ${handle} failed (${String(response.statusCode)})`))
         return
       }
       readEnvelopes(response, (flags, message) => {

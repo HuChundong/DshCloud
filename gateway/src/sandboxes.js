@@ -77,15 +77,24 @@ export class SandboxManager {
 
   /**
    * Return the user's sandbox, starting one if they have none.
+   *
+   * Two identities come back and they are not interchangeable. `sandboxId` is
+   * the gateway's own: it is what the sandbox presents when it dials in, what
+   * tunnels are keyed by, and what a tenant quotes. `handle` is the runtime's:
+   * it is the only one that is an ADDRESS, and every call to `envd.js` takes
+   * it. Under docker the handle is derived from the id, so confusing them
+   * still works; under CubeSandbox they are unrelated and confusing them
+   * reaches nothing.
+   *
    * @param {string} username - the authenticated user.
    * @param {string} accountId - their stable account id, which names their durable state.
-   * @returns {Promise<{sandboxId: string, token: string}>} the sandbox identity.
+   * @returns {Promise<{sandboxId: string, token: string, handle: string}>} the gateway's identity for the sandbox, its dial-in token, and the runtime's address for it.
    */
   async ensure(username, accountId) {
     const existing = this.byUser.get(username)
     if (existing !== undefined) {
       existing.lastUsedAt = Date.now()
-      return { sandboxId: existing.sandboxId, token: existing.token }
+      return { sandboxId: existing.sandboxId, token: existing.token, handle: existing.handle }
     }
     // A browser opens a page and several /api calls at once, so requests for a
     // tenant with no sandbox arrive together. Each would otherwise pass the
@@ -139,7 +148,7 @@ export class SandboxManager {
 
     this.byUser.set(username, { sandboxId, token, handle, lastUsedAt: Date.now() })
     console.log(`gateway: started sandbox ${sandboxId} for ${username}`)
-    return { sandboxId, token }
+    return { sandboxId, token, handle }
   }
 
   /**

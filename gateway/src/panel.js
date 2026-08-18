@@ -177,9 +177,16 @@ export async function handlePanel(req, res, deps) {
 
   /**
    * The caller's sandbox, started if it is not running.
-   * @returns {Promise<string>} its id.
+   *
+   * The runtime's handle, not the gateway's id: this is an address for
+   * `envd.js`, and only one of the two is one.
+   *
+   * @returns {Promise<{handle: string, sandboxId: string}>} where to reach it, and what to call it.
    */
-  const resolve = async () => (await deps.sandboxes.ensure(caller.email, caller.id)).sandboxId
+  const resolve = async () => {
+    const { handle, sandboxId } = await deps.sandboxes.ensure(caller.email, caller.id)
+    return { handle, sandboxId }
+  }
 
   // The two subscriptions are answered BEFORE the sandbox is resolved, and
   // that is deliberate rather than an ordering that happens to work.
@@ -200,9 +207,9 @@ export async function handlePanel(req, res, deps) {
     return true
   }
 
-  let sandboxId
+  let handle
   try {
-    sandboxId = await resolve()
+    ({ handle } = await resolve())
   } catch (error) {
     console.error(`gateway: the panel could not reach ${caller.email}'s sandbox: ${error.message}`)
     json(res, 502, { error: '沙箱还没准备好，请稍后再试。' })
@@ -213,7 +220,7 @@ export async function handlePanel(req, res, deps) {
     const bytesPath = rawPath ?? preview?.path
     if (bytesPath !== undefined) {
       const resolved = requireInsideRoot(bytesPath)
-      const { status, body } = await readFile(sandboxId, resolved)
+      const { status, body } = await readFile(handle, resolved)
       if (status >= 400) {
         json(res, status === 404 ? 404 : 502, { error: '读不到这个文件。' })
         return true
@@ -239,13 +246,13 @@ export async function handlePanel(req, res, deps) {
     const action = path.slice(FS_PREFIX.length)
     if (action === 'list' && req.method === 'GET') {
       const resolved = requireInsideRoot(url.searchParams.get('path'))
-      const entries = await listDir(sandboxId, resolved)
+      const entries = await listDir(handle, resolved)
       json(res, 200, { path: resolved, entries: entries.map(entryOf) })
       return true
     }
     if (action === 'stat' && req.method === 'GET') {
       const resolved = requireInsideRoot(url.searchParams.get('path'))
-      json(res, 200, { path: resolved, entry: entryOf(await stat(sandboxId, resolved)) })
+      json(res, 200, { path: resolved, entry: entryOf(await stat(handle, resolved)) })
       return true
     }
     // What the panel asks for before it shows an HTML preview.
@@ -258,7 +265,7 @@ export async function handlePanel(req, res, deps) {
     // was written. One call answers both — which file to show, and whether
     // what is on screen is still current.
     if (action === 'newest' && req.method === 'GET') {
-      const found = await newestFile(sandboxId, ROOT, '*.html')
+      const found = await newestFile(handle, ROOT, '*.html')
       json(res, 200, found === undefined ? {} : { path: found.path, modified: found.modified })
       return true
     }
@@ -272,7 +279,7 @@ export async function handlePanel(req, res, deps) {
       if (action === 'move') {
         const from = requireInsideRoot(body.from)
         const to = requireInsideRoot(body.to)
-        json(res, 200, { entry: entryOf(await move(sandboxId, from, to)) })
+        json(res, 200, { entry: entryOf(await move(handle, from, to)) })
         return true
       }
       if (action === 'create') {
@@ -282,25 +289,25 @@ export async function handlePanel(req, res, deps) {
         // one is never what was meant.
         let taken = true
         try {
-          await stat(sandboxId, at)
+          await stat(handle, at)
         } catch (error) {
           if (error.code !== 'not_found') throw error
           taken = false
         }
         if (taken) throw new PathRefused(409, '这个名字已经被占用了')
-        await writeFile(sandboxId, at, Buffer.alloc(0))
+        await writeFile(handle, at, Buffer.alloc(0))
         json(res, 200, { path: at })
         return true
       }
       if (action === 'mkdir') {
         const at = requireInsideRoot(body.path)
-        json(res, 200, { entry: entryOf(await makeDir(sandboxId, at)) })
+        json(res, 200, { entry: entryOf(await makeDir(handle, at)) })
         return true
       }
       const at = requireInsideRoot(body.path)
       // The workspace itself is not one of the things in it.
       if (at === ROOT) throw new PathRefused(403, '工作区本身不能删除')
-      await remove(sandboxId, at)
+      await remove(handle, at)
       json(res, 200, {})
       return true
     }
