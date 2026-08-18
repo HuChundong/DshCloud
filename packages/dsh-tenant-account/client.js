@@ -170,6 +170,167 @@ window.__ModuleLoader__.load({
       )
     }
 
+    /** Classes the rules below are scoped to; nothing else in the page uses them. */
+    const U = 'dsh-tenant-account'
+
+    /** Restated from the theme's own tokens, like the sign-out button above. */
+    const MENU_CSS = `
+      .${U}-row {
+        display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0;
+      }
+      .${U}-avatar {
+        flex: none; width: 24px; height: 24px; border-radius: 50%;
+        display: inline-flex; align-items: center; justify-content: center;
+        background: var(--dsw-alias-fill-secondary, rgb(0 0 0 / 6%));
+        color: var(--dsw-alias-label-primary, inherit);
+        font-size: 11px; font-weight: 600; text-transform: uppercase;
+      }
+      .${U}-email {
+        flex: 1 1 auto; min-width: 0; overflow: hidden;
+        white-space: nowrap; text-overflow: ellipsis;
+        font-size: 13px; text-align: left;
+        color: var(--dsw-alias-label-primary, inherit);
+      }
+      .${U}-menu {
+        position: fixed; z-index: 200; min-width: 208px; padding: 4px;
+        border: 1px solid var(--dsw-alias-border-l2, rgb(0 0 0 / 10%));
+        border-radius: 12px;
+        background: var(--dsw-alias-button-elevated-fill, #fff);
+        box-shadow: rgb(0 0 0 / 20%) 0 0 1px, rgb(0 0 0 / 8%) 0 12px 32px;
+      }
+      .${U}-head {
+        padding: 8px 10px 6px; font-size: 12px;
+        color: var(--dsw-alias-label-secondary, #81858c);
+        overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+      }
+      .${U}-sep { height: 1px; margin: 4px 0; background: var(--dsw-alias-border-l2, rgb(0 0 0 / 8%)); }
+      .${U}-item {
+        display: flex; align-items: center; gap: 8px; width: 100%;
+        padding: 7px 10px; border: none; border-radius: 8px;
+        background: transparent; color: var(--dsw-alias-label-primary, inherit);
+        font-family: inherit; font-size: 13px; text-align: left; cursor: pointer;
+      }
+      .${U}-item:hover { background: var(--dsw-alias-fill-secondary, rgb(0 0 0 / 5%)); }
+      .${U}-item[data-danger='true'] { color: var(--dsw-alias-label-error, #c0392b); }
+    `
+
+    /**
+     * The tenant, at the sidebar's foot, with everything about them behind it.
+     *
+     * This takes the `settings.trigger` seat rather than adding a row beside
+     * it, because the shell's Settings control IS that seat: the owner wraps
+     * whatever fills it in the button that opens the panel. Filling it with the
+     * account row is what demotes Settings from a first-class control to one
+     * line in this menu — which is the whole point — and it leaves the panel
+     * itself, and every section in it, untouched.
+     *
+     * Opening the panel from the menu clicks that owner button directly. There
+     * is no programmatic way in: `open` is local state inside the settings
+     * shell, with no service and no event to reach it. The click is the seam
+     * the shell already has.
+     *
+     * @param {object} props - the sidebar's owner share (`wide`).
+     * @returns {object} the row, and the menu while it is open.
+     */
+    const AccountRow = ({ wide }) => {
+      const [who, setWho] = React.useState({ username: '', admin: false })
+      const [menu, setMenu] = React.useState(null)
+      const host = React.useRef(null)
+
+      React.useEffect(() => {
+        let live = true
+        void fetch('/whoami', { credentials: 'same-origin' })
+          .then((response) => response.json())
+          .then((body) => {
+            if (!live) return
+            setWho({ username: String(body?.username ?? ''), admin: body?.admin === true })
+          })
+          .catch(() => {})
+        return () => { live = false }
+      }, [])
+
+      // Dismissed the way every menu is: a pointer somewhere else, or Escape.
+      React.useEffect(() => {
+        if (menu === null) return undefined
+        const away = (event) => {
+          if (!event.target?.closest?.(`.${U}-menu`)) setMenu(null)
+        }
+        const key = (event) => { if (event.key === 'Escape') setMenu(null) }
+        document.addEventListener('pointerdown', away, true)
+        document.addEventListener('keydown', key)
+        return () => {
+          document.removeEventListener('pointerdown', away, true)
+          document.removeEventListener('keydown', key)
+        }
+      }, [menu !== null])
+
+      /** Open the shell's settings panel through the button this sits inside. */
+      const openSettings = () => {
+        setMenu(null)
+        host.current?.closest('button')?.click()
+      }
+
+      const label = who.username === '' ? '—' : who.username
+      const initial = who.username === '' ? '?' : [...who.username][0]
+
+      return React.createElement(
+        'div',
+        {
+          ref: host,
+          className: `${U}-row`,
+          // The owner's button opens Settings on click. This seat is the whole
+          // account control now, so that gesture belongs to the menu instead —
+          // and capture-phase is what stops the click before the owner sees it.
+          onClickCapture: (event) => {
+            event.stopPropagation()
+            // Measured from the BUTTON, not from this row: the row sits inside
+            // the owner's padding, and a menu aligned to it hangs a few pixels
+            // into the sidebar's edge.
+            const anchor = host.current?.closest('button') ?? host.current
+            const rect = anchor?.getBoundingClientRect()
+            setMenu(menu === null && rect
+              ? { left: rect.left, bottom: window.innerHeight - rect.top + 6 }
+              : null)
+          },
+        },
+        React.createElement('style', null, MENU_CSS),
+        React.createElement('span', { className: `${U}-avatar` }, initial),
+        wide && React.createElement('span', { className: `${U}-email`, title: label }, label),
+        menu !== null && React.createElement(
+          'div',
+          {
+            className: `${U}-menu`,
+            style: { left: `${String(menu.left)}px`, bottom: `${String(menu.bottom)}px` },
+            role: 'menu',
+          },
+          React.createElement('div', { className: `${U}-head`, title: label }, label),
+          React.createElement('div', { className: `${U}-sep` }),
+          React.createElement(
+            'button',
+            { type: 'button', role: 'menuitem', className: `${U}-item`, onClick: openSettings },
+            '设置',
+          ),
+          // Only the console's own audience is told it exists: `/admin` answers
+          // 404 to everyone else, so a link nobody may follow would be a dead
+          // end rather than a discovery.
+          who.admin && React.createElement(
+            'a',
+            { role: 'menuitem', className: `${U}-item`, href: '/admin' },
+            '用户管理',
+          ),
+          React.createElement('div', { className: `${U}-sep` }),
+          React.createElement(
+            'button',
+            {
+              type: 'button', role: 'menuitem', className: `${U}-item`, 'data-danger': 'true',
+              onClick: () => { setMenu(null); void signOut() },
+            },
+            '退出登录',
+          ),
+        ),
+      )
+    }
+
     return {
       inject: ['slots'],
       /**
@@ -183,6 +344,17 @@ window.__ModuleLoader__.load({
             AccountSection,
           )),
           'tenant-account: settings account section',
+        )
+
+        // The account row takes the Settings control's seat; see AccountRow.
+        // `priority`, not `order`: order is nav position within a cell, while
+        // priority is the cell's shadowing rank — ascending, lowest renders.
+        ctx.effect(
+          () => ctx.slots.inject('settings.trigger', () => ctx.slots.register(
+            { name: 'settings.trigger', priority: -1 },
+            AccountRow,
+          )),
+          'tenant-account: account row in the settings trigger seat',
         )
 
         // Retire the onboarding steps.

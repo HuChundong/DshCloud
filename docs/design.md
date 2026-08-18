@@ -445,6 +445,34 @@ Not taken at all: database drivers, because one deployment's databases are not
 another's; and a compiler, because every wheel here is prebuilt for this
 platform and a source build is the one thing a tenant has to arrange itself.
 
+## The sidebar's foot
+
+Two things live there, and which package owns which follows the same question
+as everything else: take the gateway away, is this still needed?
+
+The **sandbox row** — a status dot and three rings for CPU, memory and disk —
+belongs to `dsh-sandbox-host`, because a sandbox is what it describes. The
+figures come from `/proc` and `statfs` inside the sandbox, over the same
+`/files` channel the uploads use, polled every five seconds while somebody is
+looking. A push would have cost a frame kind in the tunnel protocol and
+per-tenant state in the gateway; a poll costs one small round trip and nothing
+when no tab is open.
+
+Whether the sandbox is RUNNING is deliberately not part of that answer. A
+sandbox that is not running answers nothing at all, and the gateway already
+says so with a 503 — so the state is read from whether the call arrives, which
+is the only version of the question that is not a guess.
+
+The **account row** belongs to `dsh-tenant-account`, and it takes the seat the
+Settings control used to have. That is not a decoration: the shell's Settings
+button IS the `settings.trigger` seat, wrapped by the owner in the button that
+opens the panel. Filling that seat with the account row is what demotes
+Settings from a first-class control to one line in the menu behind it, while
+leaving the panel and every section in it untouched. The menu opens the panel
+by clicking the owner's own button — `open` is local state inside the settings
+shell, with no service and no event to reach it, so the click is the only seam
+there is.
+
 ## Permissions inside a sandbox
 
 Sandboxes run with `DSH_PERMISSION_MODE=danger-full-access`, which the base

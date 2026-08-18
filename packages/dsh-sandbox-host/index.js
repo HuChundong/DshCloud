@@ -32,6 +32,7 @@ import { readFile } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 import process from 'node:process'
+import { createMetrics } from './metrics.js'
 import { createUploads } from './uploads.js'
 
 export const name = 'sandbox-host'
@@ -70,7 +71,11 @@ const internal = (message) => ({ ok: false, error: { code: 'internal', message, 
  * @param {{root?: string}} [config] - the workspace root; the working directory by default, which is where dsh roots a tenant's workspace.
  */
 export function apply(ctx, config) {
-  const uploads = createUploads(config?.root ?? process.cwd())
+  const root = config?.root ?? process.cwd()
+  const uploads = createUploads(root)
+  // One sampler for the plugin's lifetime, because CPU is a difference between
+  // two readings and a per-request sampler would have nothing to subtract.
+  const metrics = createMetrics(root)
 
   /**
    * The configuration document, prepared the way the control this replaces
@@ -167,6 +172,13 @@ export function apply(ctx, config) {
       }
       case 'document.read':
         return await readDocument()
+      case 'sandbox.stats':
+        // Whether the sandbox is RUNNING is not answered here and cannot be:
+        // a sandbox that is not running answers nothing at all, and the
+        // gateway says so with a 503. The browser reads the status from
+        // whether this call arrives, which is the only version of the question
+        // that is not a guess.
+        return { ok: true, value: await metrics.read() }
       default:
         return badRequest(`no such endpoint: ${endpoint}`)
     }

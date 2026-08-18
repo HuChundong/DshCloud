@@ -337,6 +337,26 @@ window.__ModuleLoader__.load({
         font-family: inherit; font-size: 13px; cursor: pointer;
       }
       .${P}-button:hover { background: var(--dsw-alias-button-floating-hover, rgb(241 243 245)); }
+      .${P}-sandbox {
+        display: flex; align-items: center; justify-content: space-between;
+        gap: 8px; width: 100%; padding: 8px 4px;
+        border-top: 1px solid var(--dsw-alias-border-l2, rgb(0 0 0 / 8%));
+        margin-top: 4px;
+      }
+      .${P}-sandbox-rail { display: flex; justify-content: center; width: 100%; padding: 6px 0 2px; }
+      .${P}-sandbox-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+      .${P}-sandbox-title { font-size: 12px; color: var(--dsw-alias-label-secondary, #81858c); line-height: 16px; }
+      .${P}-sandbox-state {
+        display: inline-flex; align-items: center; gap: 5px;
+        font-size: 12px; color: var(--dsw-alias-label-primary, inherit); line-height: 16px;
+      }
+      .${P}-dot { width: 6px; height: 6px; border-radius: 50%; flex: none; }
+      .${P}-rings { display: inline-flex; gap: 6px; flex: none; }
+      .${P}-ring { position: relative; display: inline-flex; align-items: center; justify-content: center; }
+      .${P}-ring-label {
+        position: absolute; font-size: 9px; line-height: 1;
+        color: var(--dsw-alias-label-secondary, #81858c);
+      }
     `
 
     /** The stylesheet, mounted by whichever of our seats renders first. */
@@ -719,6 +739,150 @@ window.__ModuleLoader__.load({
       )
     }
 
+    // --------------------------------------------------------- sandbox bar --
+
+    /** How often the footer asks the sandbox how it is doing. */
+    const STATS_INTERVAL_MS = 5000
+
+    /** Ring geometry, matching the 3px stroke the sidebar's own chrome uses. */
+    const RING = { size: 34, r: 13, width: 3 }
+    const CIRCUMFERENCE = 2 * Math.PI * RING.r
+
+    /**
+     * One metric as a ring.
+     *
+     * Two circles: the track, and an arc drawn with `stroke-dasharray` — the
+     * usual way to draw a fraction of a circle without a path calculation. It
+     * starts at twelve o'clock because a gauge that starts at three reads as
+     * broken to everyone who has seen any other gauge.
+     *
+     * @param {object} props - label, fraction (0..1 or null), and the title.
+     * @returns {object} the ring.
+     */
+    const Ring = ({ label, value, title }) => {
+      const known = typeof value === 'number' && Number.isFinite(value)
+      const shown = known ? Math.min(1, Math.max(0, value)) : 0
+      // Green until it is worth noticing, then amber, then red. The thresholds
+      // are where a person would want to act, not evenly spaced.
+      const stroke = !known
+        ? 'var(--dsw-alias-border-l2, rgb(0 0 0 / 12%))'
+        : shown >= 0.9 ? 'var(--dsw-alias-label-error, #c0392b)'
+          : shown >= 0.7 ? '#d98324'
+            : 'var(--dsw-alias-label-success, #2f9e5e)'
+      return React.createElement(
+        'span',
+        { className: `${P}-ring`, title },
+        React.createElement(
+          'svg',
+          { width: RING.size, height: RING.size, viewBox: `0 0 ${String(RING.size)} ${String(RING.size)}`, 'aria-hidden': true },
+          React.createElement('circle', {
+            cx: RING.size / 2, cy: RING.size / 2, r: RING.r, fill: 'none',
+            stroke: 'var(--dsw-alias-fill-secondary, rgb(0 0 0 / 6%))', strokeWidth: RING.width,
+          }),
+          known && React.createElement('circle', {
+            cx: RING.size / 2, cy: RING.size / 2, r: RING.r, fill: 'none',
+            stroke, strokeWidth: RING.width, strokeLinecap: 'round',
+            strokeDasharray: CIRCUMFERENCE,
+            strokeDashoffset: CIRCUMFERENCE * (1 - shown),
+            transform: `rotate(-90 ${String(RING.size / 2)} ${String(RING.size / 2)})`,
+          }),
+        ),
+        React.createElement('span', { className: `${P}-ring-label` }, label),
+      )
+    }
+
+    /**
+     * The sandbox's own account of itself, at the sidebar's foot.
+     *
+     * Running is not asked for and could not be answered from inside: a
+     * sandbox that is not running answers nothing, and the gateway says so
+     * with a 503. So the state is read from whether the call arrives at all —
+     * the only version of the question that is not a guess.
+     *
+     * Polled rather than pushed. A push would need a frame kind in the tunnel
+     * protocol and a gateway that holds per-tenant state; a poll costs one
+     * small round trip every few seconds and only while somebody is looking.
+     *
+     * @param {object} props - the sidebar's owner share (`wide`).
+     * @returns {object|null} the status row.
+     */
+    const SandboxStatus = ({ wide }) => {
+      const [state, setState] = React.useState({ status: 'unknown', stats: null })
+
+      React.useEffect(() => {
+        let live = true
+        let timer
+        const tick = async () => {
+          try {
+            const stats = await call('sandbox.stats', {})
+            if (live) setState({ status: 'running', stats })
+          } catch {
+            // Any failure means the same thing to a person: their sandbox is
+            // not answering. Which HTTP status it was is a detail for a log.
+            if (live) setState((current) => ({ status: 'starting', stats: current.stats }))
+          }
+          if (live) timer = setTimeout(() => { void tick() }, STATS_INTERVAL_MS)
+        }
+        void tick()
+        return () => { live = false; clearTimeout(timer) }
+      }, [])
+
+      const { status, stats } = state
+      const dot = status === 'running' ? 'var(--dsw-alias-label-success, #2f9e5e)'
+        : status === 'starting' ? '#d98324'
+          : 'var(--dsw-alias-border-l2, rgb(0 0 0 / 25%))'
+      const text = status === 'running' ? '运行中' : status === 'starting' ? '连接中' : '未知'
+
+      const pct = (part) => (part && part.totalBytes > 0 ? part.usedBytes / part.totalBytes : null)
+      const gb = (bytes) => `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`
+      const asText = (part) => (part ? `${gb(part.usedBytes)} / ${gb(part.totalBytes)}` : '未知')
+
+      // Collapsed to a 56px rail there is room for the dot and nothing else;
+      // the rings would be three unreadable circles.
+      if (!wide) {
+        return React.createElement(
+          'div',
+          { className: `${P}-sandbox-rail`, title: `沙箱 ${text}` },
+          React.createElement(Style),
+          React.createElement('span', { className: `${P}-dot`, style: { background: dot } }),
+        )
+      }
+
+      return React.createElement(
+        'div',
+        { className: `${P}-sandbox` },
+        React.createElement(Style),
+        React.createElement(
+          'span',
+          { className: `${P}-sandbox-text` },
+          React.createElement('span', { className: `${P}-sandbox-title` }, '沙箱'),
+          React.createElement(
+            'span',
+            { className: `${P}-sandbox-state` },
+            React.createElement('span', { className: `${P}-dot`, style: { background: dot } }),
+            text,
+          ),
+        ),
+        React.createElement(
+          'span',
+          { className: `${P}-rings` },
+          React.createElement(Ring, {
+            label: 'CPU',
+            value: stats?.cpu ?? null,
+            title: stats?.cpu === null || stats?.cpu === undefined
+              ? 'CPU：正在测量'
+              : `CPU ${String(Math.round(stats.cpu * 100))}%${stats.cores ? `（${String(stats.cores)} 核）` : ''}`,
+          }),
+          React.createElement(Ring, {
+            label: '内存', value: pct(stats?.memory), title: `内存 ${asText(stats?.memory)}`,
+          }),
+          React.createElement(Ring, {
+            label: '磁盘', value: pct(stats?.disk), title: `磁盘 ${asText(stats?.disk)}`,
+          }),
+        ),
+      )
+    }
+
     // ------------------------------------------------------------- settings --
 
     /**
@@ -861,6 +1025,16 @@ window.__ModuleLoader__.load({
             'sandbox-host: 附件 trigger source',
           )
         })
+
+        // Beside the settings control at the sidebar's foot. A list slot, so
+        // this adds a row rather than replacing anything.
+        ctx.effect(
+          () => ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register(
+            { name: 'sidebar.footer.action', id: 'sandbox-status', order: 100 },
+            SandboxStatus,
+          )),
+          'sandbox-host: sandbox status row',
+        )
 
         ctx.effect(
           () => ctx.slots.inject('settings.section', () => ctx.slots.register(
