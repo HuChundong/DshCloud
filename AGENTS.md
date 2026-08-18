@@ -22,6 +22,25 @@ says so.
 If the harness genuinely cannot do what is needed, the answer is an upstream
 issue and a documented limitation here — not a patch layer that silently forks.
 
+**There is exactly one exception, and it is `web/patch-loopback.mjs`.** DSH
+decides whether the settings plane is reachable from `location.hostname`, so
+every tenant of a deployment reached by a domain name keeps no preference at
+all — not the theme, not the language, not the conversation settings. The lock
+is deliberate upstream and correct there: `trustedHosts` is a DNS-rebinding
+fence, not authentication, so the configuration plane stays loopback-only until
+a real authentication layer exists. This deployment is that layer, and the
+tunnel already makes the server accept these writes; only the browser declines
+to send them. Configuration cannot express it, composition cannot reorder around
+it, and flipping the flag from a plugin lands after `ui-theme` has already
+bound. The script carries the full argument and the evidence for each of those.
+
+Two things keep it from becoming a habit. It fails the image build when it stops
+matching, rather than letting a release ship with settings quietly back in
+memory; and `scripts/check-images.sh` asserts it against the bytes nginx will
+serve. **Add nothing beside it.** A second patch is a sign this project has
+started forking the harness, which is the thing the rule above exists to
+prevent — and the first one is only here because upstream is closed to it.
+
 ## Everything added to DSH is a cordis plugin
 
 Three plugins exist today, and which one a change belongs in is decided by one

@@ -374,8 +374,15 @@ ENTRYPOINT ["/usr/local/bin/cube-entrypoint.sh"]
 # set does not match the backend it talks to.
 FROM sandbox AS shell
 WORKDIR /app
-COPY web/harvest-shell.mjs sandbox/harvest.patch.yml ./web/
+COPY web/harvest-shell.mjs sandbox/harvest.patch.yml web/patch-loopback.mjs ./web/
 RUN node web/harvest-shell.mjs /shell
+# The one patch this repository applies to the harness, and the only one. It
+# enables the settings plane for browsers that are not on loopback — which is
+# every tenant of a deployment reached by a domain name. `web/patch-loopback.mjs`
+# carries the whole argument, including why the three plugin-shaped fixes are
+# closed. It fails this build if it stops applying, rather than letting a
+# release ship with settings silently back in memory.
+RUN node web/patch-loopback.mjs /shell
 
 # -------------------------------------------------------------------- web ----
 # The whole frontend: hashed assets from the published build, plus the composed

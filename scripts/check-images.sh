@@ -12,11 +12,12 @@
 # resolve from where the registry will look for it, and does the plugin whose
 # absence would be silent actually load?
 #
-# Usage: scripts/check-images.sh [sandbox-image] [gateway-image]
+# Usage: scripts/check-images.sh [sandbox-image] [gateway-image] [web-image]
 set -euo pipefail
 
 SANDBOX="${1:-dsh-sandbox:latest}"
 GATEWAY="${2:-dsh-gateway:latest}"
+WEB="${3:-dsh-web:latest}"
 PROFILE=/root/.dsh/profiles/web
 
 fail=0
@@ -165,6 +166,18 @@ index=$(docker run --rm --entrypoint sh "$SANDBOX" -c \
 [ -n "$index" ] || index=https://pypi.org/simple
 check 'pip has an index' 1 "$([ -n "$index" ] && echo 1 || echo 0)"
 printf '        pip  -> %s\n' "${index:-unset}"
+
+echo
+echo "=== the web image ==="
+
+# The one patch this repository applies to the harness. It fails the build when
+# it stops matching, so reaching here means it applied — but the build and the
+# image are separable (a cached layer, a hand-tagged image), and a served bundle
+# that lost the patch is a deployment where nobody can keep a preference and
+# nothing says so. Asserted against the bytes nginx will actually serve.
+patched=$(docker run --rm --entrypoint sh "$WEB" -c \
+  "grep -c 'isLoopback: true' /usr/share/nginx/html/plugins/@deepseek-ai/dsh-client-connection/client.js" 2>/dev/null || echo error)
+check 'the settings plane is enabled for non-loopback browsers' 1 "$patched"
 
 echo
 echo "=== the gateway image ==="
