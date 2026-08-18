@@ -413,6 +413,18 @@ spreadsheet and one that can only describe the file. It ships:
 - and a CJK font, because a chart with Chinese labels renders as boxes without
   one and nothing about that failure says "font".
 
+OfficeCLI carries its own agent skill, and the image installs it into a bundled
+skill root of its own (`DSH_BUNDLED_SKILL_DIR`) rather than into
+`$DSH_HOME/skills` — that one is a symlink onto the tenant's volume, so an
+image-owned copy there would be shadowed by whatever they have. Written by the
+binary at build time rather than kept in this repository, because OfficeCLI
+updates the skill with itself and a copy here would age silently against the
+version pinned in the `Dockerfile`. Only the base skill: the specialized ones
+are printed on demand by `officecli load_skill <name>`, so putting all eleven in
+the catalog would spend a description line in every request for ten skills a
+tenant may never open. The bundled root ranks below the tenant's own, so a skill
+they write under the same name wins.
+
 Python is a virtualenv on `PATH`, not the system interpreter. Debian marks that
 one externally managed, so `pip install` there fails by design and
 `--break-system-packages` is a way of saying the design was wrong. The venv

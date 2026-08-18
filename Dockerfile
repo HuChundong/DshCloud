@@ -179,6 +179,32 @@ RUN set -eux; \
     chmod 0755 /usr/local/bin/officecli; \
     officecli --version
 
+# The skill that tells an agent how to drive it.
+#
+# Written by the binary rather than by this repository: OfficeCLI ships its own
+# agent skill and updates it with itself, so a copy kept here would be a second
+# source of truth that silently ages against the version pinned above. The
+# format is the one dsh's filesystem provider reads — a directory holding a
+# `SKILL.md` with `name` and `description` frontmatter — because that is also
+# Claude Code's, which is the flavour asked for here.
+#
+# `skills install` writes into whichever agent homes it detects, so it is given
+# a scratch one and the result is moved where this deployment wants it.
+#
+# Only the base skill. The specialized ones (pitch-deck, financial-model,
+# morph-ppt, …) are reachable from the binary at the moment they are needed —
+# `officecli load_skill <name>` prints any of them — so putting all eleven in
+# the catalog would spend a description line in every request for ten skills a
+# tenant may never open.
+ENV DSH_BUNDLED_SKILL_DIR=/opt/dsh-skills
+RUN set -eux; \
+    scratch=$(mktemp -d); \
+    mkdir -p "$scratch/.claude" "$DSH_BUNDLED_SKILL_DIR"; \
+    HOME="$scratch" officecli skills install; \
+    mv "$scratch/.claude/skills/officecli" "$DSH_BUNDLED_SKILL_DIR/officecli"; \
+    rm -rf "$scratch"; \
+    grep -q '^name: officecli$' "$DSH_BUNDLED_SKILL_DIR/officecli/SKILL.md"
+
 # pnpm and yarn, for a repository that is entered through one of them. Corepack
 # ships with node; enabling it costs two shims rather than two installs.
 #
@@ -281,7 +307,7 @@ RUN npm install --omit=dev --no-audit --no-fund --install-links \
 # has to be reachable through this file or it does not exist to the backend.
 RUN for name in PATH DSH_BIN DSH_HOME HOME DSH_PERMISSION_MODE NODE_ENV \
                 NODE_EXTRA_CA_CERTS TZ VIRTUAL_ENV MPLBACKEND MPLCONFIGDIR \
-                OFFICECLI_SKIP_UPDATE; do \
+                OFFICECLI_SKIP_UPDATE DSH_BUNDLED_SKILL_DIR; do \
       printf 'export %s=%s\n' "$name" "$(printenv "$name")"; \
     done > /app/sandbox/env.sh
 

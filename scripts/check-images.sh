@@ -136,6 +136,18 @@ check 'a CJK font is installed' 1 "$([ "${cjk:-0}" -gt 0 ] && echo 1 || echo 0)"
 office=$(docker run --rm --entrypoint officecli "$SANDBOX" --version 2>/dev/null | head -1 | grep -c . || echo 0)
 check 'officecli runs' 1 "$office"
 
+# A tool an agent cannot be told about is a tool it will not reach for. The
+# skill is written by the binary at build time, so this asks for the two things
+# that make it discoverable: the file where dsh's provider looks, and the
+# frontmatter its parser requires — a skill missing either is skipped with a
+# warning nobody reads.
+skill=$(docker run --rm --entrypoint sh "$SANDBOX" -c '
+  f="$DSH_BUNDLED_SKILL_DIR/officecli/SKILL.md"
+  test -f "$f" || { echo no-file; exit 0; }
+  grep -q "^name: officecli$" "$f" && grep -q "^description: " "$f" && echo ok || echo no-frontmatter
+' 2>/dev/null || echo error)
+check 'the officecli skill is where dsh will look' ok "$skill"
+
 # Both package managers must point somewhere before a tenant reaches for them.
 # What they point AT is the deployment's choice — a mirror close to the host, or
 # the public default — but an empty registry is a tenant discovering on their

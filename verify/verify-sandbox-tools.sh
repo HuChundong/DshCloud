@@ -13,4 +13,7 @@
 for tool in python pip officecli rg fd jq sqlite3 pdftotext bsdtar; do
   command -v "$tool" > /dev/null 2>&1 || printf '%s ' "$tool"
 done
+# The skill root travels the same way the tools do — through the environment
+# file envd's clean start would otherwise drop.
+test -f "${DSH_BUNDLED_SKILL_DIR:-/nowhere}/officecli/SKILL.md" || printf 'officecli-skill '
 echo
