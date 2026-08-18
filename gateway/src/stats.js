@@ -282,16 +282,36 @@ export async function watchWorkspace(handle, onEvent) {
   if (entry === undefined) {
     entry = { handle: undefined, watchers: new Set() }
     watching.set(handle, entry)
+    /**
+     * Tell every watcher the workspace is no longer being watched.
+     *
+     * Said rather than swallowed, and this is the important half. envd refuses
+     * to watch a network filesystem — `cannot watch path on network
+     * filesystem` — and a tenant's workspace is exactly that wherever it is a
+     * volume, which is to say in production. The refusal arrives AFTER the
+     * stream is established, so the call succeeds and the watch is dead a
+     * moment later.
+     *
+     * Left unsaid, that is the worst of both: the panel believes it will be
+     * told about changes and is never told, so a directory the tenant just
+     * made never appears; and the browser, seeing its stream close, reconnects
+     * to open another watch that will fail the same way, for as long as the
+     * tab is open.
+     *
+     * @param {string} reason - what ended it.
+     */
+    const stopped = (reason) => {
+      const current = watching.get(handle)
+      watching.delete(handle)
+      for (const watcher of current?.watchers ?? []) watcher({ watching: false, reason })
+    }
     try {
       entry.handle = await watchDir(handle, ROOT, {
         onEvent: (event) => {
           for (const watcher of watching.get(handle)?.watchers ?? []) watcher(event)
         },
-        // A watch that ends — the sandbox went away, envd restarted — is
-        // forgotten rather than retried here. The browsers reconnect their own
-        // streams, and the next one to arrive opens a fresh watch.
-        onEnd: () => { watching.delete(handle) },
-        onError: () => { watching.delete(handle) },
+        onEnd: () => { stopped('ended') },
+        onError: (error) => { stopped(error.message) },
       })
     } catch (error) {
       watching.delete(handle)
@@ -325,5 +345,11 @@ export function serveWatch(req, res, resolve) {
   // the stream rather than ending it. The panel asks for nothing on a timer any
   // more, so a watch that quietly gave up would leave the tree and the canvas
   // showing whatever they were showing when it did.
+  //
+  // A watch that cannot exist here at all is different from one that has not
+  // started yet, and it travels down the stream as `{watching: false}` instead
+  // of closing it. The stream stays open precisely so the browser does not
+  // reconnect: there is nothing to come back to, and the panel's answer is to
+  // go back to asking, which it can only do if it is told.
   serveStream(req, res, async (send) => await watchWorkspace((await resolve()).handle, send))
 }

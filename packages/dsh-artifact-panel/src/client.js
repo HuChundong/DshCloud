@@ -337,23 +337,63 @@ window.__ModuleLoader__.load({
      * Listeners register by name so the tree and the canvas can each take what
      * they need without knowing about the other.
      */
+    /**
+     * How often the panel re-asks when nothing will tell it.
+     *
+     * Only ever used where events are unavailable. The canvas used to poll at
+     * two seconds and the tree on every draw; this is slower than both on
+     * purpose, because it now covers the whole panel at once and a workspace
+     * that changed is usually one a person just changed themselves — and they
+     * have a button.
+     */
+    const STALE_INTERVAL_MS = 5000
+
     const workspaceWatch = (() => {
       const listeners = new Set()
       let source
+      let timer
+
+      /**
+       * Tell everyone something happened.
+       * @param {object} change - what changed, or a stale marker.
+       */
+      const announce = (change) => { for (const listener of listeners) listener(change) }
+
+      /**
+       * Go back to asking, because nothing is going to tell us.
+       *
+       * envd cannot watch a network filesystem, and a tenant's workspace is
+       * one wherever it is a volume — so in production there are no events to
+       * wait for, and a panel that only waits shows a directory that was made
+       * five minutes ago as still absent.
+       *
+       * What is sent is `stale`, not a path: this knows only that the
+       * workspace may have moved on, never what moved. Subscribers re-read
+       * whatever they are showing.
+       */
+      const fallBackToAsking = () => {
+        if (timer !== undefined) return
+        timer = window.setInterval(() => { announce({ stale: true, path: ROOT }) }, STALE_INTERVAL_MS)
+      }
+
       const start = () => {
         if (source !== undefined) return
         source = new EventSource('/sandbox/watch')
         source.addEventListener('message', (event) => {
           let change
           try { change = JSON.parse(event.data) } catch { return }
+          // The gateway says so down the stream rather than closing it, so
+          // that the browser does not reconnect to a watch that cannot exist.
+          if (change.watching === false) { fallBackToAsking(); return }
           const path = `${ROOT}/${String(change.name ?? '')}`
-          for (const listener of listeners) listener({ ...change, path })
+          announce({ ...change, path })
         })
       }
+
       return {
         /**
          * Hear about changes.
-         * @param {(change: {name: string, type: string, path: string}) => void} listener - called per change.
+         * @param {(change: {name?: string, type?: string, path: string, stale?: boolean}) => void} listener - called per change.
          * @returns {() => void} stop listening.
          */
         subscribe: (listener) => {
@@ -364,8 +404,20 @@ window.__ModuleLoader__.load({
             if (listeners.size > 0) return
             source?.close()
             source = undefined
+            if (timer !== undefined) {
+              window.clearInterval(timer)
+              timer = undefined
+            }
           }
         },
+        /**
+         * Look again, now, because a person asked.
+         *
+         * The same signal the fallback sends on a timer, which is why one
+         * control refreshes the tree and the canvas together: neither is being
+         * told what changed in either case.
+         */
+        refresh: () => { announce({ stale: true, path: ROOT }) },
       }
     })()
 
@@ -1784,6 +1836,9 @@ window.__ModuleLoader__.load({
       // And re-read exactly the directory a change happened in — not the whole
       // tree, and not this branch unless the change was in it.
       React.useEffect(() => workspaceWatch.subscribe((change) => {
+        // `stale` means the change is unknown rather than elsewhere, so this
+        // branch re-reads instead of deciding it was not about it.
+        if (change.stale === true) { treeStore.load(path); return }
         const parent = change.path.slice(0, change.path.lastIndexOf('/')) || ROOT
         if (parent === path) treeStore.load(path)
       }), [path])
@@ -2296,6 +2351,20 @@ window.__ModuleLoader__.load({
             'aria-label': '复制路径',
             onClick: () => copy('path', path),
           }, icon(ICON_COPY, 15)),
+          // Look again, by hand.
+          //
+          // It exists because the panel cannot always be told: envd will not
+          // watch a network filesystem, which is what a tenant's workspace is
+          // wherever it is a volume. There is a fallback on a timer, and this
+          // is the same signal without the wait — for the moment after you
+          // make a file and want to see it now.
+          h('button', {
+            type: 'button',
+            className: `${NS}-icon-button`,
+            title: '刷新',
+            'aria-label': '刷新',
+            onClick: () => { workspaceWatch.refresh() },
+          }, icon(ICON_REFRESH, 15)),
           h(FoldButton, { kind: 'files', title: '文件树' })),
         h('div', { className: `${NS}-split` },
           h('div', { className: `${NS}-split-main` },
@@ -2347,7 +2416,7 @@ window.__ModuleLoader__.load({
       // Only a page is worth looking again for: the agent writing a Python file
       // does not change what is on this canvas.
       React.useEffect(() => workspaceWatch.subscribe((change) => {
-        if (/\.html?$/i.test(change.path)) void look()
+        if (change.stale === true || /\.html?$/i.test(change.path)) void look()
       }), [look])
 
       // One ticket for the tab, not one per reload: it outlives several

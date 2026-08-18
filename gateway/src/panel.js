@@ -229,6 +229,21 @@ export async function handlePanel(req, res, deps) {
         'Content-Type': contentTypeOf(resolved),
         'Content-Length': String(body.length),
         'Cache-Control': RAW_CACHE,
+        // Readable from the opaque origin the preview frame runs in.
+        //
+        // `sandbox` without `allow-same-origin` is what makes a previewed page
+        // safe, and it gives that page the origin `null`. An ordinary
+        // `<script src>` does not care, which is why this went unnoticed — but
+        // a module script, a `fetch`, a font and a CORS-mode image all do, and
+        // they were refused with no `Access-Control-Allow-Origin` present. A
+        // page that loads its own JavaScript as a module could not run at all.
+        //
+        // Open, and it grants nothing extra: reaching this URL already
+        // requires the ticket in its path, which is signed, names the one
+        // account it was minted for, and expires in minutes. No credentials
+        // are involved — the frame sends no cookies, which is the whole reason
+        // tickets exist — so there is no session here for a reader to borrow.
+        ...(preview === undefined ? {} : { 'Access-Control-Allow-Origin': '*' }),
         // The three headers that make it safe to serve a tenant's own HTML
         // from this origin. `sandbox` without `allow-same-origin` forces an
         // opaque origin on the document, so a previewed page cannot read the

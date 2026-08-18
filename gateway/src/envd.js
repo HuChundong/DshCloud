@@ -430,7 +430,18 @@ export async function newestFile(handle, root, pattern) {
   const payload = {
     process: {
       cmd: '/usr/bin/find',
-      args: [root, '-type', 'f', '-name', pattern, '-printf', '%T@\\t%p\\n'],
+      // `-H` because the root is a SYMLINK wherever a tenant has a volume:
+      // the entrypoint points `/workspace` at `/persist/workspace`, and find
+      // does not follow a link named on its command line unless told to. It
+      // reported nothing, every time, and the canvas concluded the workspace
+      // held no page — while the file tree, which reaches the same directory
+      // through envd's own stat, listed it perfectly. The simulation has no
+      // volume and therefore no link, so this was invisible there.
+      //
+      // `-H` and not `-L`: the root is followed, links INSIDE the tree are
+      // not. That is enough to see the workspace, and it cannot walk into a
+      // cycle a tenant left behind.
+      args: ['-H', root, '-type', 'f', '-name', pattern, '-printf', '%T@\\t%p\\n'],
       envs: {},
     },
     stdin: false,
