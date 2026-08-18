@@ -550,190 +550,172 @@ window.__ModuleLoader__.load({
       )
     }
 
-    // ------------------------------------------------------- the + splicing --
+    // ------------------------------------------------------ the + addition --
 
     /**
-     * Copy a few computed properties off a live element.
-     * @param {Element} el - the element to read.
-     * @param {string[]} keys - CSS property names.
-     * @returns {object} a React style object.
+     * Read the class names an element carries, minus the ones that mark state.
+     *
+     * The shell's classes are content-hashed CSS-module names, so they cannot
+     * be written down — but they can be READ off the live element, which is
+     * better than restating the rules they stand for: the group below then
+     * inherits hover, focus and theme from the same stylesheet the real rows
+     * use, and keeps inheriting them through an upstream restyle.
+     *
+     * The intersection across siblings is what drops the state classes: the
+     * highlighted row carries one the others do not.
+     *
+     * @param {NodeListOf<Element>|Element[]} kin - the siblings to compare.
+     * @returns {string} the classes every one of them has.
      */
-    const mirror = (el, keys) => {
-      const cs = getComputedStyle(el)
-      const out = {}
-      for (const key of keys) {
-        out[key.replace(/-([a-z])/g, (_, c) => c.toUpperCase())] = cs.getPropertyValue(key)
-      }
-      return out
+    const sharedClasses = (kin) => {
+      const lists = [...kin].map((el) => [...el.classList])
+      if (lists.length === 0) return ''
+      return lists[0].filter((name) => lists.every((list) => list.includes(name))).join(' ')
     }
 
     /**
-     * Same, for an element found by selector; null when it is not there.
-     * @param {Element} root - where to look.
-     * @param {string} selector - what to look for.
-     * @param {string[]} keys - CSS property names.
-     * @returns {object|null} a React style object, or null.
-     */
-    const mirrorOf = (root, selector, keys) => {
-      const el = root.querySelector(selector)
-      return el === null ? null : mirror(el, keys)
-    }
-
-    /**
-     * The "附件" group, spliced onto the `+` menu.
+     * The "附件" group, added to the `+` menu's own panel.
      *
-     * This one is a forgery, and it is here because the honest route is closed.
-     * The `+` button calls `inputTriggers.toggleSource('command', …)`, which
-     * seeds the menu with exactly one source — so a registered source appears
-     * when the person types `/` and never under `+`. Reported upstream; see
-     * docs/sandbox-pitfalls.md.
+     * The honest route is closed: `+` calls
+     * `inputTriggers.toggleSource('command', …)`, which seeds the menu with
+     * exactly one source, so a registered source appears when the person types
+     * `/` and never under `+`. Reported upstream; see docs/sandbox-pitfalls.md.
      *
-     * What keeps it from being pure guesswork: everything it depends on is a
-     * role or an ARIA state, not a private class name. It finds the real panel
-     * as `[role=listbox]` inside the same overlay anchor it renders into, reads
-     * that panel's COMPUTED style rather than restating it — so it tracks the
-     * theme and any upstream restyle for free — and decides whether to show
-     * itself from `aria-expanded` on the `+` button, which is true only for the
-     * launcher and false while the person is typing a trigger.
+     * So this puts its group INSIDE the shipped panel rather than drawing a
+     * second one above it — the person sees one card, which is what a menu is.
+     * Everything it keys on is a role or an ARIA state: the panel is
+     * `[role=listbox]`, its rows are `[role=option]`, its headings are
+     * `[role=presentation][data-source]`, and whether to appear at all comes
+     * from `aria-expanded` on the `+` button, true only for the launcher and
+     * false while the person is typing a trigger.
      *
-     * It will still break the day upstream changes the anchor's shape. That is
-     * the deal; the `/` group below is the part that does not.
+     * The container goes in as the panel's first child and React renders into
+     * it through a portal — never a node moved after the fact, which is what
+     * froze the page when the attachment cards did it.
      *
-     * @returns {object|null} the spliced panel, or nothing.
+     * @returns {object|null} the group, or nothing.
      */
     const PlusAttachmentGroup = () => {
+      const [seat, setSeat] = React.useState(null)
       const [look, setLook] = React.useState(null)
+      const held = React.useRef(null)
+      held.current ??= document.createElement('div')
 
       React.useEffect(() => {
-        /**
-         * The panel currently being followed, and the observer following it.
-         * Its height changes while candidates load, and this side's offset is
-         * measured from its top edge.
-         */
-        const watched = { panel: null, observer: null }
+        const container = held.current
+        /** The panel currently being watched for its rows arriving. */
+        const watched = { viewport: null, observer: null }
 
-        /** Re-read the real panel and mirror it, or hide when there is none. */
-        const measure = () => {
-          // `aria-expanded` on the trigger is the launcher's own state: true
-          // only while `+` holds the menu open, false while the person types a
-          // trigger character — which is exactly when the honest `/` group
-          // renders instead, and this one must not double it.
+        /** Stop following a panel that has gone. */
+        const unwatch = () => {
+          watched.observer?.disconnect()
+          watched.viewport = null
+          watched.observer = null
+        }
+
+        /** Find the launcher's panel and sit in it, or leave. */
+        const place = () => {
           const launcher = document.querySelector('button[aria-haspopup="listbox"][aria-expanded="true"]')
           const panel = launcher === null ? null : document.querySelector('[role="listbox"]')
-          if (panel === null) {
-            watched.observer?.disconnect()
-            watched.panel = null
-            watched.observer = null
-            setLook(null)
+          // `data-source` is the shell's own marking, so this cannot pick up
+          // the heading rendered below — but the filter above is the rule, and
+          // this is the one place it is enforced by the selector instead.
+          const heading = panel?.querySelector('[role="presentation"][data-source]')
+          // The viewport is whatever holds the headings; naming it by class
+          // would be naming a hash.
+          const viewport = heading?.parentElement
+          if (viewport === undefined || viewport === null) {
+            unwatch()
+            container.remove()
+            setSeat(null)
             return
           }
-          if (watched.panel !== panel) {
-            watched.observer?.disconnect()
-            watched.panel = panel
-            watched.observer = new ResizeObserver(() => { measure() })
-            watched.observer.observe(panel)
+          // The rows arrive after the panel does — the source is asked for its
+          // candidates asynchronously, and the first frames hold a loading row
+          // instead. Measuring then yields nothing to copy, which is how the
+          // group rendered once as an unstyled button. Watching the viewport
+          // costs nothing while the menu is shut and ends when it closes.
+          if (watched.viewport !== viewport) {
+            unwatch()
+            watched.viewport = viewport
+            watched.observer = new MutationObserver(() => { place() })
+            watched.observer.observe(viewport, { childList: true })
           }
-          const p = panel.getBoundingClientRect()
-          const cs = getComputedStyle(panel)
-          const title = panel.querySelector('[role="presentation"][data-source]')
-          const option = panel.querySelector('[role="option"]')
-          setLook({
-            // Viewport coordinates, so this makes no assumption about the
-            // overlay anchor's shape — only that the real panel is on screen.
-            left: p.left,
-            width: p.width,
-            // 4px is the gap the real panel already leaves above its anchor;
-            // reusing it stacks the two with the spacing dsh chose.
-            bottom: window.innerHeight - p.top + 4,
-            panel: {
-              background: cs.backgroundColor,
-              border: cs.border,
-              borderRadius: cs.borderRadius,
-              boxShadow: cs.boxShadow,
-              padding: cs.padding,
-              zIndex: cs.zIndex,
-            },
-            title: title === null ? null : mirror(title, ['color', 'font-size', 'line-height', 'padding']),
-            option: option === null ? null : mirror(option, ['color', 'font-size', 'line-height', 'padding', 'border-radius', 'gap']),
-            name: mirrorOf(panel, '[role="option"] > span:first-child', ['color', 'font-size', 'font-weight']),
-            description: mirrorOf(panel, '[role="option"] > span:last-child', ['color', 'font-size']),
-          })
+          if (container.parentElement !== viewport || container.previousSibling !== null) {
+            viewport.prepend(container)
+          }
+          // Everything measured has to come from the shell's own rows, never
+          // from ours: this runs again after the group is in place, and the
+          // intersection with a row of ours that has not been styled yet is
+          // empty — which is how the group rendered once as a bare button.
+          const theirs = (selector) => [...panel.querySelectorAll(selector)]
+            .filter((el) => !container.contains(el))
+          const next = {
+            heading: heading.className,
+            option: sharedClasses(theirs('[role="option"]')),
+            name: sharedClasses(theirs('[role="option"] > span:first-child')),
+            description: sharedClasses(theirs('[role="option"] > span:last-child')),
+          }
+          setSeat(container)
+          // Replaced only when it actually differs: placing the group is
+          // itself a mutation of the viewport, and a new object every time
+          // would re-render on the observation of our own work.
+          setLook((current) => (current !== null
+            && current.heading === next.heading
+            && current.option === next.option
+            && current.name === next.name
+            && current.description === next.description
+            ? current
+            : next))
         }
-        // `aria-expanded` alone, not the subtree. Watching childList over the
-        // whole document would re-measure on every token of a streaming reply,
-        // and the one signal that matters — the launcher opening or closing —
-        // is an attribute flip.
-        //
-        // The panel is created in the same gesture, sometimes a frame after the
-        // attribute, so each flip measures twice: now, and on the next frame.
-        const soon = () => { measure(); requestAnimationFrame(measure) }
+
+        // `aria-expanded` alone, not the subtree: watching childList over the
+        // document would re-run this on every token of a streaming reply, and
+        // the one signal that matters is the launcher opening or closing. The
+        // panel is built in the same gesture, sometimes a frame later, so each
+        // flip is handled now and again on the next frame.
+        const soon = () => { place(); requestAnimationFrame(place) }
         soon()
         const observer = new MutationObserver(soon)
         observer.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['aria-expanded'] })
-        // No scroll listener. A capture-phase one catches every scrollable in
-        // the page — the transcript under a streaming reply included — and this
-        // measure forces a document-wide query per event. It also buys nothing:
-        // the composer is sticky at the bottom of its scrollport, so the panel
-        // this mirrors does not move when the conversation scrolls.
-        window.addEventListener('resize', measure)
         return () => {
           observer.disconnect()
-          watched.observer?.disconnect()
-          window.removeEventListener('resize', measure)
+          unwatch()
+          container.remove()
         }
       }, [])
 
-      const [hover, setHover] = React.useState(false)
-      if (look === null) return null
+      // Nothing until there is something to copy: a row rendered before the
+      // shell's own have arrived is a row with no styling at all.
+      if (seat === null || look === null || look.option === '') return null
 
-      return React.createElement(
-        React.Fragment,
-        null,
+      return ReactDom.createPortal(
         React.createElement(
-          'div',
-          {
-            role: 'presentation',
-            style: {
-              position: 'fixed',
-              left: `${String(look.left)}px`,
-              bottom: `${String(look.bottom)}px`,
-              width: `${String(look.width)}px`,
-              boxSizing: 'border-box',
-              ...look.panel,
-            },
-          },
-          look.title !== null && React.createElement('div', { style: look.title }, GROUP),
+          React.Fragment,
+          null,
+          React.createElement('div', { className: look.heading, role: 'presentation' }, GROUP),
           React.createElement(
             'button',
             {
               type: 'button',
-              style: {
-                ...look.option,
-                display: 'flex',
-                width: '100%',
-                boxSizing: 'border-box',
-                border: 'none',
-                textAlign: 'left',
-                cursor: 'pointer',
-                fontFamily: 'inherit',
-                background: hover ? 'var(--dsw-alias-fill-secondary, rgb(38 49 72 / 6%))' : 'transparent',
-              },
-              onMouseEnter: () => { setHover(true) },
-              onMouseLeave: () => { setHover(false) },
+              role: 'option',
+              'aria-selected': false,
+              className: look.option,
               // The composer keeps focus through its own chrome the same way.
               onMouseDown: (event) => { event.preventDefault() },
               onClick: () => {
-                // Closing is the launcher's own toggle: clicking inside the
+                // Closing is the launcher's own toggle: a click inside the
                 // composer area is not the outside-pointer gesture that
                 // dismisses the menu.
                 document.querySelector('button[aria-haspopup="listbox"][aria-expanded="true"]')?.click()
                 pickAndSend()
               },
             },
-            React.createElement('span', { style: look.name }, ITEM.name),
-            React.createElement('span', { style: look.description }, ITEM.description),
+            React.createElement('span', { className: look.name }, ITEM.name),
+            React.createElement('span', { className: look.description }, ITEM.description),
           ),
         ),
+        seat,
       )
     }
 

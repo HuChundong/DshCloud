@@ -363,9 +363,19 @@ one sits next to something it does offer.
   attachment as a chip in the sent message means reimplementing the transcript's
   most common row.
 
-Two of the three are answered here by forgery: a second panel drawn above the
-real `+` menu, and a container of this plugin's own placed where the image rail
-sits, filled through a React portal.
+Two of the three are answered here by forgery: a group added to the `+` menu's
+own panel, and a container of this plugin's own placed where the image rail
+sits, both filled through a React portal.
+
+The `+` group started as a second panel drawn above the real one, which read as
+two cards for one menu. Putting it inside instead also made the styling honest:
+a row can take the class names off the shell's own rows at runtime, so it
+inherits hover, focus and theme from the same stylesheet rather than restating
+them. Two things had to be right for that. The measurement must skip the
+plugin's own row — the intersection with a row that has not been styled yet is
+empty, which rendered the group once as a bare button. And it must wait: the
+candidates are fetched asynchronously, so the first frames hold a loading row
+and nothing to copy.
 
 The card started as the second half of that sentence done wrong — React's own
 node, moved. It froze the page, and only on the gesture that matters: upload,
