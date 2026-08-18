@@ -1,0 +1,200 @@
+/**
+ * What a tenant is called and what they look like.
+ *
+ * A gateway page rather than a surface in the shell, for the same reason the
+ * sign-in page is one: the account it edits is the gateway's, dsh has no notion
+ * of it, and the one moment this has to work is before a sandbox exists. It is
+ * also the only way to make it unskippable — the shell's gate below sends an
+ * account that has never answered here, and nothing in the frontend has to
+ * participate or could.
+ *
+ * The avatar arrives already cropped and already encoded, because the cropping
+ * happens in the browser: a canvas is the only image processor in this
+ * deployment, the gateway holds no image library and is the one process that
+ * must not grow attack surface for tenant-supplied bytes. What arrives here is
+ * therefore not trusted to be what it says — it is matched against the shape a
+ * `data:` URI is allowed to have, and refused if it is anything else.
+ *
+ * @module profile
+ */
+
+import { hasProfile, normalizeEmail } from './accounts.js'
+import { profilePage } from './profile-page.js'
+
+/**
+ * The longest name this will store, in code points rather than UTF-16 units so
+ * that a name of emoji is counted the way it is read.
+ *
+ * Short on purpose: it is rendered in a sidebar row that is 208px wide at its
+ * widest and 56px at its narrowest, and a name that does not fit is a name
+ * shown as an ellipsis.
+ */
+const MAX_NAME_POINTS = 24
+
+/**
+ * The largest avatar this will store, as characters of `data:` URI.
+ *
+ * The cropper sends a 256×256 WebP, which is a few tens of kilobytes; this is
+ * several times that, so it bounds a broken or hostile client rather than a
+ * legitimate one. It matters because the row is read whole on every `/whoami`
+ * — there is no object store here to keep the bytes out of the account.
+ */
+const MAX_AVATAR_CHARS = 64 * 1024
+
+/**
+ * The only image the avatar column may hold.
+ *
+ * Three raster types and nothing else. SVG is absent deliberately: it is a
+ * document with script in it, and this value is interpolated into an `img` on a
+ * page the deployment serves — one that a tenant chooses the contents of.
+ * Base64 is matched strictly rather than decoded, so a URI carrying anything
+ * but an encoded payload never reaches a reader.
+ */
+const AVATAR_PATTERN = /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]{16,}={0,2}$/
+
+/**
+ * Reduce a submitted name to what will be stored, or reject it.
+ *
+ * Control characters go rather than being escaped: they are never part of a
+ * name anyone meant to type, and one of them is what turns a name into two
+ * lines in the sidebar.
+ *
+ * @param {string} raw - the name as submitted.
+ * @returns {string | undefined} the name to store, or undefined when it is not usable.
+ */
+export function cleanName(raw) {
+  // By code point rather than by a regular expression, which is how
+  // `dsh-sandbox-host` reduces a filename and the only form the linter accepts
+  // for this: a character class of control characters is one however it is
+  // written, escapes included.
+  const cleaned = [...raw]
+    .map((ch) => (ch.codePointAt(0) < 0x20 || ch.codePointAt(0) === 0x7f ? ' ' : ch))
+    .join('')
+    .trim()
+  const points = [...cleaned]
+  if (points.length === 0 || points.length > MAX_NAME_POINTS) return undefined
+  return cleaned
+}
+
+/**
+ * Whether a submitted avatar is one this will store.
+ *
+ * @param {string} raw - the `data:` URI as submitted.
+ * @returns {boolean} whether it is storable.
+ */
+export function isStorableAvatar(raw) {
+  return raw.length <= MAX_AVATAR_CHARS && AVATAR_PATTERN.test(raw)
+}
+
+/**
+ * What the profile page needs from the rest of the gateway.
+ * @typedef {object} ProfileDeps
+ * @property {import('./accounts.js').Accounts} accounts - who exists.
+ * @property {(req: import('node:http').IncomingMessage, res?: import('node:http').ServerResponse) => Promise<{email: string, id: string, admin: boolean} | undefined>} callerOf - the authenticated caller.
+ * @property {(req: import('node:http').IncomingMessage, limit: number) => Promise<Buffer | undefined>} readBody - the capped body reader.
+ * @property {string | undefined} version - the release shown in the footer.
+ */
+
+/**
+ * Serve the profile page and the form it posts.
+ *
+ * Both halves need a session and neither needs anything else: the address is
+ * the caller's own, so there is no target to authorize and no way to name
+ * somebody else's account.
+ *
+ * @param {import('node:http').IncomingMessage} req - the request.
+ * @param {import('node:http').ServerResponse} res - the response.
+ * @param {ProfileDeps} deps - the stores this reads and writes.
+ * @returns {Promise<void>} resolves once the response is complete.
+ */
+export async function handleProfile(req, res, deps) {
+  const caller = await deps.callerOf(req, res)
+  if (caller === undefined) {
+    // The page is worthless without knowing whose profile it is, and a 401 here
+    // would be a blank tab. Sign-in already returns here afterwards.
+    res.writeHead(303, { Location: '/login' })
+    res.end()
+    return
+  }
+
+  const account = await deps.accounts.read(normalizeEmail(caller.email))
+  if (account === undefined) {
+    // Authenticated against an account that has since been erased. The token is
+    // the stale half, so send them to the door rather than showing a form that
+    // would write nothing.
+    res.writeHead(303, { Location: '/login' })
+    res.end()
+    return
+  }
+
+  /**
+   * @param {number} status - the status to answer with.
+   * @param {object} state - what the page should show over the stored values.
+   */
+  const page = (status, state = {}) => {
+    res.writeHead(status, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' })
+    res.end(profilePage({
+      email: account.email,
+      name: account.displayName,
+      avatar: account.avatar,
+      // Which of the two the page is: an account that has never answered is
+      // being asked, and one that has is editing. It changes the wording, the
+      // way out, and nothing else.
+      first: !hasProfile(account),
+      // The page enforces both in the browser so a person is told before they
+      // submit; these are the same numbers, passed rather than restated, so the
+      // two cannot drift into disagreeing about what is acceptable.
+      avatarLimit: MAX_AVATAR_CHARS,
+      nameLimit: MAX_NAME_POINTS,
+      version: deps.version,
+      ...state,
+    }))
+  }
+
+  if (req.method === 'GET') {
+    page(200)
+    return
+  }
+
+  // Comfortably above the avatar cap, which form encoding inflates by about
+  // half: `+`, `/` and `=` each become three characters on the wire.
+  const body = await deps.readBody(req, 512 * 1024)
+  if (body === undefined) {
+    page(413, { error: '头像太大了，请换一张。' })
+    return
+  }
+  const form = new URLSearchParams(body.toString('utf8'))
+
+  const name = cleanName(form.get('name') ?? '')
+  if (name === undefined) {
+    page(400, { error: `请填写昵称，最多 ${MAX_NAME_POINTS} 个字符。`, name: form.get('name') ?? '' })
+    return
+  }
+
+  // Three states rather than two, because "leave it alone" and "take it away"
+  // are different intentions and an empty field cannot be both. The form says
+  // which one it means.
+  // Trimmed before it is matched. The field is filled by this deployment's own
+  // script and carries no whitespace, but the pattern is anchored at both ends,
+  // and a stray newline picked up in transit would otherwise be refused as a
+  // format problem the person cannot see and cannot act on.
+  const submitted = (form.get('avatar') ?? '').trim()
+  let avatar = account.avatar
+  if (form.get('avatar_clear') === '1') {
+    avatar = undefined
+  } else if (submitted !== '') {
+    if (!isStorableAvatar(submitted)) {
+      page(400, { error: '头像格式不受支持，请重新选择图片。', name })
+      return
+    }
+    avatar = submitted
+  }
+
+  await deps.accounts.setProfile(account.email, name, avatar)
+  console.log(`gateway: ${account.email} set their profile`)
+  // Straight into the application: this page is on the way in, and for an
+  // account being asked for the first time it is the last thing between the
+  // sign-in form and the shell.
+  res.writeHead(303, { Location: '/' })
+  res.end()
+}

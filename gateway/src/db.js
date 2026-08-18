@@ -42,6 +42,20 @@ CREATE TABLE IF NOT EXISTS accounts (
   last_seen_at timestamptz NOT NULL DEFAULT now()
 );
 
+-- What a tenant calls themselves and what they look like, both chosen by them
+-- and neither known until they have been through the profile page. The avatar
+-- is a whole data: URI rather than bytes and a type, because every reader of it
+-- puts it straight into an img element and would otherwise have to reassemble
+-- one; it is bounded on write, and there is no object store here to bound it.
+--
+-- (No backticks in here: this string is a template literal, and one would end
+-- the schema early — which fails at boot, on the statement after it.)
+--
+-- Null is the answer for an account that has never set them, which is also what
+-- the shell's gate reads to decide whether a tenant has been asked yet.
+ALTER TABLE accounts ADD COLUMN IF NOT EXISTS display_name text;
+ALTER TABLE accounts ADD COLUMN IF NOT EXISTS avatar text;
+
 -- Cascades from the account: a deleted account must not leave a token that
 -- still renews, and the database is a better place to guarantee that than a
 -- sequence of calls that can be interrupted halfway.
@@ -84,6 +98,21 @@ CREATE TABLE IF NOT EXISTS settings (
   value      jsonb       NOT NULL,
   updated_at timestamptz NOT NULL DEFAULT now(),
   updated_by text
+);
+
+-- Environment a tenant asks for in their own sandbox.
+--
+-- Values are secrets in the ordinary sense — an API key for something the agent
+-- should reach — so they are written here and never read back to a browser:
+-- what the settings page shows is the name and when it changed. Cascading from
+-- the account matters more than usual, because a row that outlived its owner
+-- would be injected into whoever registered that address next.
+CREATE TABLE IF NOT EXISTS sandbox_secrets (
+  email      text        NOT NULL REFERENCES accounts(email) ON DELETE CASCADE ON UPDATE CASCADE,
+  name       text        NOT NULL,
+  value      text        NOT NULL,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (email, name)
 );
 
 -- Redeemed rather than deleted, so an operator can see who used which invite.

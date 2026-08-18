@@ -174,6 +174,15 @@ export async function handleSignIn(req, res, deps) {
   const access = await deps.tokens.issueAccess(account)
   const refresh = await deps.tokens.issueRefresh(account)
   console.log(`gateway: ${account.email} signed in`)
-  res.writeHead(303, { Location: '/', 'Set-Cookie': signedInCookies(access, refresh, isSecureRequest(req)) })
+  // An account that has never said what to call it goes to the profile page
+  // first. The shell's gate would send them there anyway, but bouncing off `/`
+  // to get there shows a moment of the application they are not admitted to
+  // yet — and this is the one place that already knows which of the two an
+  // account is, from the row it just admitted.
+  const destination = account.displayName === undefined ? '/profile' : '/'
+  res.writeHead(303, {
+    Location: destination,
+    'Set-Cookie': signedInCookies(access, refresh, isSecureRequest(req)),
+  })
   res.end()
 }

@@ -12,7 +12,11 @@
  *   POST /login          request a code, or answer one and sign in — see sign-in.js
  *   POST /logout         sign out and release the sandbox
  *   GET  /_auth          resolve a session for nginx's auth_request; status only
- *   GET  /whoami         the caller's address, for the account section in Settings
+ *   GET  /whoami         the caller's address and profile, for the account section in Settings
+ *   GET  /profile        the tenant's name and picture — see profile.js
+ *   *    /secrets        the tenant's own sandbox environment — see secrets.js
+ *   POST /sandbox/restart  throw this tenant's sandbox away; the next request rebuilds it
+ *   POST /profile        set them, then into the application
  *   GET  /admin          the administrator's console — see console.js
  *   POST /admin/*        one administrative action, then back to the console
  *   *    /api/*          authenticated; proxied into the caller's sandbox
@@ -25,7 +29,7 @@ import http from 'node:http'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 import { WebSocketServer } from 'ws'
-import { Accounts } from './accounts.js'
+import { Accounts, hasProfile } from './accounts.js'
 import { authenticate, isSecureRequest } from './auth.js'
 import { handleConsole } from './console.js'
 import { request as cubeRequest } from './cubesandbox.js'
@@ -33,7 +37,9 @@ import { connect } from './db.js'
 import { canSendEmail } from './email.js'
 import { Invites, inviteRequired } from './invites.js'
 import { loginPage } from './login-page.js'
+import { handleProfile } from './profile.js'
 import { DIAL_IN_TIMEOUT_MS, SandboxManager } from './sandboxes.js'
+import { Secrets, nameProblem } from './secrets.js'
 import { SendLimit } from './send-limit.js'
 import { Settings } from './settings.js'
 import { handleSignIn } from './sign-in.js'
@@ -41,6 +47,15 @@ import { Tokens, signedOutCookies } from './tokens.js'
 import { TunnelServer } from './tunnel-server.js'
 import { Verification } from './verification.js'
 import { destroyVolume } from './volumes.js'
+
+/**
+ * The addresses that are the application itself, as the browser asks for them.
+ *
+ * The profile gate in `/_auth` applies to these and to nothing else: they are
+ * the requests a person makes by arriving, where being sent somewhere first is
+ * a redirect rather than a broken asset.
+ */
+const SHELL_DOCUMENTS = new Set(['/', '/index.html'])
 
 const PORT = Number(process.env.PORT ?? 8080)
 const GATEWAY_TUNNEL_URL = process.env.GATEWAY_TUNNEL_URL ?? `ws://gateway:${PORT}/_tunnel`
@@ -92,6 +107,7 @@ const accounts = new Accounts(db)
 const invites = new Invites(db)
 const settings = new Settings(db)
 const tokens = new Tokens(sessionSecret, db)
+const secrets = new Secrets(db)
 const verification = new Verification(db)
 
 /**
@@ -119,6 +135,10 @@ const sandboxes = new SandboxManager({
     const credential = await settings.modelCredential()
     return { DEEPSEEK_API_KEY: credential.apiKey, DEEPSEEK_BASE_URL: credential.baseUrl }
   },
+  // The tenant's own environment, read at creation like the credential above:
+  // a secret added in Settings reaches the next sandbox, not the one already
+  // running, because an environment is fixed when a process starts.
+  secrets: async (username) => await secrets.environment(username),
   // Read through a closure because the two are mutually dependent — the tunnel
   // server authorizes dial-ins against this manager — and the idle sweep that
   // calls it runs on a timer, long after both are built.
@@ -136,6 +156,7 @@ const sandboxes = new SandboxManager({
 // it is per-process state with a lifetime, like the pool and the manager.
 const sendLimit = new SendLimit()
 const signInDeps = { accounts, invites, tokens, verification, sendLimit, readBody, version: DSH_VERSION }
+const profileDeps = { accounts, callerOf, readBody, version: DSH_VERSION }
 const consoleDeps = {
   accounts,
   invites,
@@ -313,8 +334,35 @@ async function handleRequest(req, res) {
     // them onto the page's, which is how a tab whose access token expired while
     // it sat open gets a new one from the reload rather than a login page.
     const caller = await callerOf(req, res, true)
-    res.writeHead(caller === undefined ? 401 : 204)
+    if (caller === undefined) {
+      res.writeHead(401)
+      res.end()
+      return
+    }
+    // 403 is "signed in, but not finished signing up", which nginx turns into a
+    // redirect to /profile the same way it turns 401 into one to /login. It is
+    // what makes the page unskippable: the shell is the only thing a tenant can
+    // be trying to reach, and it is not served until they have answered.
+    //
+    // Only for the shell document, which is why nginx passes the address the
+    // browser actually asked for. This costs a read of the account, and the
+    // same gate guards the three dozen plugin bundles a cold load fetches —
+    // charging each of them for it would be three dozen queries per page.
+    if (SHELL_DOCUMENTS.has(String(req.headers['x-original-uri'] ?? '').split('?')[0])) {
+      const account = await accounts.read(caller.email)
+      if (account !== undefined && !hasProfile(account)) {
+        res.writeHead(403)
+        res.end()
+        return
+      }
+    }
+    res.writeHead(204)
     res.end()
+    return
+  }
+
+  if (path === '/profile' && (req.method === 'GET' || req.method === 'POST')) {
+    await handleProfile(req, res, profileDeps)
     return
   }
 
@@ -327,10 +375,129 @@ async function handleRequest(req, res) {
       res.end('{}')
       return
     }
+    // Read rather than taken from the token: the token carries what a session
+    // is, and a name changed in another tab must not wait out an access token
+    // to take effect here.
+    const account = await accounts.read(caller.email)
     res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
     // `username` stays the field name: it is what the account section in
     // Settings reads, and the address is what it should show either way.
-    res.end(JSON.stringify({ username: caller.email, admin: caller.admin }))
+    //
+    // The avatar travels inline rather than as a URL to fetch. It is a few tens
+    // of kilobytes and the row was read anyway, and a second request would mean
+    // the sidebar rendering a letter first and replacing it a moment later.
+    res.end(JSON.stringify({
+      username: caller.email,
+      admin: caller.admin,
+      displayName: account?.displayName ?? null,
+      avatar: account?.avatar ?? null,
+    }))
+    return
+  }
+
+  // Throw this tenant's machine away, so the next request builds a new one.
+  //
+  // Release rather than restart: nothing here restarts a sandbox, and nothing
+  // needs to. The manager forgets it and the runtime removes it, and the very
+  // next `/api` call finds no record and creates one — which is also how idle
+  // reclamation already works, so this is a gesture the deployment can already
+  // survive rather than a new lifecycle.
+  //
+  // It is the only way a tenant applies a change to their own environment, and
+  // the only way out of a sandbox that has wedged.
+  if (path === '/sandbox/restart' && req.method === 'POST') {
+    const caller = await callerOf(req, res)
+    if (caller === undefined) {
+      res.writeHead(401, { 'Content-Type': 'application/json' })
+      res.end('{}')
+      return
+    }
+    try {
+      await sandboxes.release(caller.email)
+    } catch (error) {
+      // The record is gone from the manager either way; a runtime that could
+      // not remove the container leaves an orphan for the sweep, and the
+      // tenant still gets a new machine.
+      console.error(`gateway: restarting ${caller.email}'s sandbox failed: ${error.message}`)
+      res.writeHead(502, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: '重启失败，请稍后再试。' }))
+      return
+    }
+    console.log(`gateway: ${caller.email} restarted their sandbox`)
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
+    res.end('{"ok":true}')
+    return
+  }
+
+  // What a tenant asks to be in their own sandbox's environment. Read, written
+  // and deleted here rather than in the sandbox, because the sandbox is the
+  // thing being configured and is recreated without warning — and because a
+  // value must survive one being reclaimed.
+  if (path === '/secrets' || path === '/secrets/delete') {
+    const caller = await callerOf(req, res)
+    if (caller === undefined) {
+      res.writeHead(401, { 'Content-Type': 'application/json' })
+      res.end('{}')
+      return
+    }
+    /**
+     * @param {number} status - the status to answer with.
+     * @param {object} body - the JSON to send.
+     */
+    const answer = (status, body) => {
+      res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
+      res.end(JSON.stringify(body))
+    }
+
+    if (path === '/secrets' && req.method === 'GET') {
+      answer(200, { secrets: await secrets.list(caller.email) })
+      return
+    }
+
+    if (req.method !== 'POST') {
+      answer(405, { error: 'method not allowed' })
+      return
+    }
+
+    // Small on purpose: a name and a value, and the value is capped again in
+    // the store. Nothing here should ever approach this.
+    const body = await readBody(req, 64 * 1024)
+    if (body === undefined) {
+      answer(413, { error: '内容过长。' })
+      return
+    }
+    /** @type {{name?: unknown, value?: unknown}} */
+    let payload
+    try {
+      payload = JSON.parse(body.toString('utf8'))
+    } catch {
+      answer(400, { error: '请求格式不正确。' })
+      return
+    }
+    const name = String(payload?.name ?? '')
+
+    if (path === '/secrets/delete') {
+      await secrets.remove(caller.email, name)
+      answer(200, { secrets: await secrets.list(caller.email) })
+      return
+    }
+
+    const problem = nameProblem(name)
+    if (problem !== undefined) {
+      answer(400, { error: problem })
+      return
+    }
+    const outcome = await secrets.set(caller.email, name, String(payload?.value ?? ''))
+    if (outcome === 'full') {
+      answer(409, { error: '变量数量已达上限。' })
+      return
+    }
+    if (outcome === 'too-long') {
+      answer(413, { error: '值过长。' })
+      return
+    }
+    console.log(`gateway: ${caller.email} set sandbox secret ${name}`)
+    answer(200, { secrets: await secrets.list(caller.email) })
     return
   }
 

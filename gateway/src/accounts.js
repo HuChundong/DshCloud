@@ -40,6 +40,8 @@ const ADMIN_EMAILS = new Set(
  * @property {boolean} disabled - whether an administrator has suspended it.
  * @property {number} createdAt - epoch milliseconds of registration.
  * @property {number} lastSeenAt - epoch milliseconds of the most recent sign-in.
+ * @property {string | undefined} displayName - what the tenant asked to be called; undefined until they have said.
+ * @property {string | undefined} avatar - their avatar as a `data:` URI; undefined for the default.
  */
 
 /**
@@ -102,7 +104,26 @@ function toAccount(row) {
     disabled: row.disabled,
     createdAt: row.created_at.getTime(),
     lastSeenAt: row.last_seen_at.getTime(),
+    // Undefined for a row that has none and for a row that was not asked for
+    // them — `list` below leaves the avatar out on purpose. Every caller that
+    // needs one reads a single account, where both columns are always present.
+    displayName: row.display_name ?? undefined,
+    avatar: row.avatar ?? undefined,
   }
+}
+
+/**
+ * Whether a tenant has been through the profile page.
+ *
+ * The name is what settles it, because the name is the part that is required
+ * there — an account may reasonably have no avatar, but one with no name has
+ * never answered.
+ *
+ * @param {Account} account - the account.
+ * @returns {boolean} whether they have said what to call them.
+ */
+export function hasProfile(account) {
+  return account.displayName !== undefined
 }
 
 export class Accounts {
@@ -197,7 +218,33 @@ export class Accounts {
    * @returns {Promise<Account[]>} the accounts.
    */
   async list() {
-    const { rows } = await this.pool.query('SELECT * FROM accounts ORDER BY created_at DESC')
+    // Every column but the avatar, which is the only large one here and which
+    // the console does not show: `SELECT *` would pull every tenant's image
+    // into memory to render a table of addresses.
+    const { rows } = await this.pool.query(
+      `SELECT id, email, disabled, created_at, last_seen_at, display_name
+         FROM accounts ORDER BY created_at DESC`,
+    )
     return rows.map(toAccount)
+  }
+
+  /**
+   * Record what a tenant calls themselves and what they look like.
+   *
+   * Both are written together because they are one form, and both are written
+   * unconditionally because "leave it as it was" is a decision the caller has
+   * already made by passing the current value back.
+   *
+   * @param {string} email - the normalized address.
+   * @param {string} displayName - the name, already validated and trimmed.
+   * @param {string | undefined} avatar - the `data:` URI, already validated, or undefined for none.
+   * @returns {Promise<Account | undefined>} the updated account, or undefined when there is none.
+   */
+  async setProfile(email, displayName, avatar) {
+    const { rows } = await this.pool.query(
+      'UPDATE accounts SET display_name = $2, avatar = $3 WHERE email = $1 RETURNING *',
+      [email, displayName, avatar ?? null],
+    )
+    return rows.length === 0 ? undefined : toAccount(rows[0])
   }
 }

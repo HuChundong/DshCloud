@@ -57,6 +57,22 @@ location = /login   { proxy_pass http://gateway; proxy_set_header Host $host; pr
 location = /logout  { proxy_pass http://gateway; proxy_set_header Host $host; proxy_set_header X-Forwarded-Proto $scheme; }
 location /login-assets/ { proxy_pass http://gateway; proxy_set_header Host $host; }
 location = /whoami  { proxy_pass http://gateway; proxy_set_header Host $host; proxy_set_header X-Forwarded-Proto $scheme; }
+# The tenant's own name and picture. Served by the gateway because the account
+# is the gateway's, and because it has to work before a sandbox exists — an
+# account reaches it on the way in, before it has ever loaded the shell.
+location = /profile { proxy_pass http://gateway; proxy_set_header Host $host; proxy_set_header X-Forwarded-Proto $scheme; }
+# The tenant's own sandbox environment. A prefix rather than an exact match:
+# `/secrets` lists and writes, `/secrets/delete` removes.
+location /secrets { proxy_pass http://gateway; proxy_set_header Host $host; proxy_set_header X-Forwarded-Proto $scheme; }
+# Throwing away this tenant's own machine. Removing a container is slower than
+# a request usually is, so it gets the long read timeout rather than the 60s
+# default — a timeout here would report failure for something that worked.
+location = /sandbox/restart {
+  proxy_pass http://gateway;
+  proxy_set_header Host $host;
+  proxy_set_header X-Forwarded-Proto $scheme;
+  proxy_read_timeout 5m;
+}
 
 # The administrator's console. Served by the gateway, which is the only
 # component that knows who administers this deployment; an ordinary caller is
@@ -78,9 +94,19 @@ location = /_auth {
   proxy_set_header Content-Length "";
   proxy_set_header Host $host;
   proxy_set_header X-Forwarded-Proto $scheme;
+  # A subrequest carries its own URI, not the one being gated. The gateway needs
+  # the original to tell the application shell apart from the plugin bundles
+  # behind the same gate: only the shell is worth charging a database read to
+  # ask whether its tenant has finished signing up.
+  proxy_set_header X-Original-URI $request_uri;
 }
 
 location @login { return 303 /login; }
+
+# Signed in, but not finished signing up. The gate answers 403 for that, and
+# only for the shell document, so an account that has never chosen a name meets
+# the profile page instead of an application it is halfway into.
+location @profile { return 303 /profile; }
 
 # Carry a renewal back to the browser. The gateway renews an expired access
 # token during auth_request — the frontend is dsh's own shell and knows nothing
@@ -104,6 +130,7 @@ location = / {
   auth_request_set $renew_access $upstream_http_x_renew_access;
   auth_request_set $renew_refresh $upstream_http_x_renew_refresh;
   error_page 401 = @login;
+  error_page 403 = @profile;
   try_files /index.html =404;
   add_header Set-Cookie $renew_access;
   add_header Set-Cookie $renew_refresh;
@@ -115,6 +142,7 @@ location = /index.html {
   auth_request_set $renew_access $upstream_http_x_renew_access;
   auth_request_set $renew_refresh $upstream_http_x_renew_refresh;
   error_page 401 = @login;
+  error_page 403 = @profile;
   add_header Set-Cookie $renew_access;
   add_header Set-Cookie $renew_refresh;
   add_header Cache-Control "no-store";

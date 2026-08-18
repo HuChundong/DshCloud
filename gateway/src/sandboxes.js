@@ -45,6 +45,7 @@ export class SandboxManager {
    * @param {object} options - manager configuration.
    * @param {string} options.gatewayTunnelUrl - URL the sandbox dials back on.
    * @param {() => Promise<Record<string, string>>} options.env - extra environment for a sandbox about to start (model credentials and endpoint), resolved per creation so a credential changed in the console reaches the next sandbox.
+   * @param {(username: string) => Promise<Record<string, string>>} options.secrets - the tenant's own environment, applied beneath everything the deployment sets.
    * @param {(sandboxId: string) => number | undefined} options.lastActiveAt - when traffic last crossed that sandbox's tunnel, for the idle sweep to weigh against the last request.
    */
   constructor(options) {
@@ -118,7 +119,18 @@ export class SandboxManager {
     // is known would be rejected as forged.
     this.tokenBySandbox.set(sandboxId, token)
 
+    // Composed least-trusted first, and the order is the enforcement.
+    //
+    // What the tenant asked for goes in at the bottom, so a name that reached
+    // the table despite `secrets.js` refusing it — an older row, a hand-written
+    // INSERT — is overwritten here rather than obeyed. Above it sits the
+    // sandbox's own identity and its way back, and above that the deployment's
+    // model credential. Reversing any pair of these hands a tenant something:
+    // `SANDBOX_TOKEN` is another sandbox's session, `GATEWAY_TUNNEL_URL` is
+    // somewhere else to dial, `DEEPSEEK_BASE_URL` is somewhere else to send the
+    // deployment's key.
     const handle = await runtime.create({ username, accountId }, {
+      ...await this.options.secrets(username),
       SANDBOX_ID: sandboxId,
       SANDBOX_TOKEN: token,
       GATEWAY_TUNNEL_URL: this.options.gatewayTunnelUrl,
