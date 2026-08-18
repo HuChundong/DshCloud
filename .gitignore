@@ -6,3 +6,6 @@ node_modules/
 !.env.example
 # Every installation of CubeEgress generates its own root; none is ours to ship.
 sandbox/egress-ca/*.crt
+
+# Worktrees the coding harness creates; not part of this project.
+.claude/worktrees/

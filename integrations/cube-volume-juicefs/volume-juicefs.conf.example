@@ -17,7 +17,7 @@ SHARED_MOUNT=/data/cube-shared/juicefs
 # How much one volume may hold, in GiB. One figure for every tenant: CubeSandbox
 # passes a plugin nothing but a volume id and a name, so there is no capacity to
 # receive per volume and nowhere for a per-tenant one to come from.
-VOLUME_CAPACITY_GB=5
+VOLUME_CAPACITY_GB=20
 
 # ── Performance ───────────────────────────────────────────────────────────────
 #

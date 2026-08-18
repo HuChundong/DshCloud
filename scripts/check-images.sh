@@ -97,6 +97,15 @@ check 'the published frontend is installed' present "$frontend"
 entry=$(docker run --rm --entrypoint sh "$SANDBOX" -c 'test -f "$DSH_BIN" && echo present || echo missing' 2>/dev/null || echo error)
 check 'DSH_BIN names a file that exists' present "$entry"
 
+# The workspace has to arrive empty, and this is not a style point: the
+# entrypoint replaces the directory with a link onto the tenant's volume, and
+# anything the build leaves here either blocks that or follows a tenant into
+# their own files. A stray npm cache did both, and the failure was silent for
+# weeks — a whole deployment's tenants writing to a layer that dies with the
+# sandbox.
+stray=$(docker run --rm --entrypoint sh "$SANDBOX" -c 'ls -A /workspace 2>/dev/null | tr "\n" " "' 2>/dev/null || echo docker-error)
+check 'the image ships an empty workspace' '' "$stray"
+
 # What the sandbox promises a tenant's agent. A missing tool is not a build
 # failure and not a boot failure — it is a tool call that fails halfway through
 # somebody's task, which is the worst place to find out.

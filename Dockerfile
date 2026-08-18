@@ -357,7 +357,15 @@ RUN for name in PATH DSH_BIN DSH_HOME HOME DSH_PERMISSION_MODE NODE_ENV \
 COPY --from=cube-tools /usr/bin/envd /usr/bin/envd
 COPY --from=cube-tools /usr/local/bin/cube-entrypoint.sh /usr/local/bin/cube-entrypoint.sh
 
-RUN mkdir -p /workspace
+# The tenant's workspace, and nothing else in it.
+#
+# HOME is /workspace, so every npm and corepack call above wrote a cache here.
+# That is what made the entrypoint's `rmdir /workspace` fail, silently, and
+# sent every tenant's files to a writable layer that dies with the sandbox.
+# Emptied here as well as handled there, because the entrypoint's fallback
+# moves whatever it finds into the tenant's volume — and a build artefact is
+# not something a tenant should find in their files.
+RUN mkdir -p /workspace && rm -rf /workspace/.[!.]* /workspace/* 2>/dev/null || true
 WORKDIR /workspace
 EXPOSE 49983
 ENTRYPOINT ["/usr/local/bin/cube-entrypoint.sh"]

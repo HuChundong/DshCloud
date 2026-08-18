@@ -36,18 +36,53 @@ set -eu
 # both theirs and belong on the same one.
 if [ -d /persist ]; then
   mkdir -p /persist/workspace /persist/dsh
-  for entry in sessions storages attachments skills .agent-presets; do
-    mkdir -p "/persist/dsh/$entry"
-  done
-  # The files are linked without being created: dsh writes through the link, and
-  # the target appears on the volume the first time it does.
-  for entry in sessions storages attachments skills .agent-presets \
-               settings.yaml .credentials.yaml AGENTS.md .anonymous-user-id cordis.patch.yml; do
-    ln -sfn "/persist/dsh/$entry" "$DSH_HOME/$entry"
-  done
-  # Replaced rather than mounted over, so the working directory below resolves
-  # to the volume. The image's /workspace is empty, so nothing is lost.
-  rmdir /workspace 2>/dev/null && ln -sfn /persist/workspace /workspace
+
+  # The harness's state directory MOVES onto the volume, rather than being
+  # assembled out of one symlink per entry.
+  #
+  # It was the latter until a tenant reported that settings did not survive a
+  # restart, and the reason is worth keeping: dsh writes settings.yaml with
+  # writeFileAtomic, which renames a temporary file over the target — and a
+  # rename replaces the SYMLINK rather than writing through to its referent.
+  # Upstream does that on purpose and says so: refusing to follow a link is
+  # what stops a planted one from redirecting a privileged write. So the first
+  # save turned the link into an ordinary file in the container's writable
+  # layer, and every setting after it died with the sandbox. Directories
+  # survived because a rename inside one does not touch the directory itself,
+  # which is why sessions and skills persisted and settings did not.
+  #
+  # profiles/ is the one thing here that belongs to the image — the composed
+  # web profile and this project's plugins, with node_modules linked into /src
+  # — so it points back at the image's copy. Recreated on every boot, so an
+  # upgrade cannot leave a stale profile or a dangling link behind.
+  ln -sfn "$DSH_HOME/profiles" /persist/dsh/profiles
+  DSH_HOME=/persist/dsh
+  export DSH_HOME
+  # env.sh is what the acceptance suite and every probe read to learn the
+  # environment the backend runs with, and it has just stopped being right
+  # about this one. Corrected rather than left to disagree.
+  sed -i "s|^export DSH_HOME=.*|export DSH_HOME=$DSH_HOME|" /app/sandbox/env.sh
+  # The tenant's files, moved onto the volume.
+  #
+  # This was `rmdir /workspace && ln -sfn`, on the stated grounds that the
+  # image's /workspace is empty — and it stopped being empty. HOME is
+  # /workspace, so the npm the image build runs left a .npm cache there, rmdir
+  # refused a non-empty directory, the `&&` swallowed it, and every tenant's
+  # files went to the container's writable layer and died with the sandbox.
+  # The session directory names recorded the whole thing: early ones read
+  # --persist-workspace-1234--, later ones --workspace-DSH--.
+  #
+  # So: no precondition on the directory being empty, and no silent branch.
+  # Whatever the image left there is moved across on the first boot with a
+  # volume, and the link is then remade unconditionally.
+  if [ ! -L /workspace ]; then
+    if [ -d /workspace ]; then
+      # Dotfiles included, and a name that cannot collide with a tenant's.
+      find /workspace -mindepth 1 -maxdepth 1 -exec mv -n {} /persist/workspace/ \; 2>/dev/null || true
+      rm -rf /workspace
+    fi
+    ln -sfn /persist/workspace /workspace
+  fi
 fi
 
 # The harness as the registry publishes it. DSH is a dependency of this
