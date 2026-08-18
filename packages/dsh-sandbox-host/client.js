@@ -282,28 +282,28 @@ window.__ModuleLoader__.load({
         padding: 6px 10px;
         border: 1px solid var(--dsw-alias-border-l2, rgb(0 0 0 / 10%));
         border-radius: 10px;
-        background: var(--dsw-alias-fill-secondary, rgb(0 0 0 / 3%));
+        background: var(--dsw-alias-border-l1, rgb(0 0 0 / 4%));
         font-size: 13px;
         line-height: 18px;
       }
-      .${P}-icon { flex: none; color: var(--dsw-alias-label-secondary, #81858c); }
+      .${P}-icon { flex: none; color: var(--dsw-alias-label-tertiary, #81858c); }
       .${P}-text { flex: 0 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
       .${P}-name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-      .${P}-meta { color: var(--dsw-alias-label-secondary, #81858c); font-size: 12px; line-height: 16px; }
-      .${P}-fail { color: var(--dsw-alias-label-error, #c0392b); }
+      .${P}-meta { color: var(--dsw-alias-label-tertiary, #81858c); font-size: 12px; line-height: 16px; }
+      .${P}-fail { color: var(--dsw-alias-state-error-primary, #ec1313); }
       .${P}-bar {
         height: 2px;
         border-radius: 2px;
-        background: var(--dsw-alias-fill-secondary, rgb(0 0 0 / 6%));
+        background: var(--dsw-alias-border-l1, rgb(0 0 0 / 4%));
         overflow: hidden;
       }
-      .${P}-bar > i { display: block; height: 100%; background: var(--dsw-alias-label-secondary, #81858c); }
+      .${P}-bar > i { display: block; height: 100%; background: var(--dsw-alias-label-tertiary, #81858c); }
       .${P}-x {
         flex: none;
         width: 22px; height: 22px;
         display: inline-flex; align-items: center; justify-content: center;
         border: none; border-radius: 6px; background: transparent;
-        color: var(--dsw-alias-label-secondary, #81858c);
+        color: var(--dsw-alias-label-tertiary, #81858c);
         cursor: pointer; font-size: 14px; line-height: 1; padding: 0;
       }
       .${P}-x:hover { background: var(--dsw-alias-button-floating-hover, rgb(241 243 245)); }
@@ -312,7 +312,7 @@ window.__ModuleLoader__.load({
         padding: 10px;
         border: 1px dashed var(--dsw-alias-border-l2, rgb(0 0 0 / 10%));
         border-radius: 12px;
-        color: var(--dsw-alias-label-secondary, #81858c);
+        color: var(--dsw-alias-label-tertiary, #81858c);
         font-size: 13px;
       }
       .${P}-drop[data-over='true'] {
@@ -323,7 +323,7 @@ window.__ModuleLoader__.load({
         margin: 0; padding: 12px 14px; max-height: 420px; overflow: auto;
         border: 1px solid var(--dsw-alias-border-l2, rgb(0 0 0 / 10%));
         border-radius: 10px;
-        background: var(--dsw-alias-fill-secondary, rgb(0 0 0 / 3%));
+        background: var(--dsw-alias-border-l1, rgb(0 0 0 / 4%));
         color: var(--dsw-alias-label-primary, inherit);
         font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
         font-size: 12px; line-height: 1.6; white-space: pre;
@@ -339,22 +339,27 @@ window.__ModuleLoader__.load({
       .${P}-button:hover { background: var(--dsw-alias-button-floating-hover, rgb(241 243 245)); }
       .${P}-sandbox {
         display: flex; align-items: center; justify-content: space-between;
-        gap: 8px; width: 100%; padding: 8px 4px;
-        border-top: 1px solid var(--dsw-alias-border-l2, rgb(0 0 0 / 8%));
-        margin-top: 4px;
+        gap: 8px; width: 100%; box-sizing: border-box;
+        padding: 8px; border-radius: 12px;
+        background: transparent;
+        transition: background 120ms ease;
       }
+      /* The same card the sidebar's own rows take under the pointer, at the
+         radius they use. Nothing here is clickable, so the cursor is left
+         alone: the tint says "these figures are one thing", not "press me". */
+      .${P}-sandbox:hover { background: var(--dsw-alias-button-ghost-active-fill, rgb(235 238 242)); }
       .${P}-sandbox-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-      .${P}-sandbox-title { font-size: 12px; color: var(--dsw-alias-label-secondary, #81858c); line-height: 16px; }
+      .${P}-sandbox-title { font-size: 12px; color: var(--dsw-alias-label-tertiary, #81858c); line-height: 16px; }
       .${P}-sandbox-state {
         display: inline-flex; align-items: center; gap: 5px;
-        font-size: 12px; color: var(--dsw-alias-label-primary, inherit); line-height: 16px;
+        font-size: 13px; color: var(--dsw-alias-label-secondary, #61666b); line-height: 18px;
       }
       .${P}-dot { width: 6px; height: 6px; border-radius: 50%; flex: none; }
       .${P}-rings { display: inline-flex; gap: 6px; flex: none; }
       .${P}-ring { position: relative; display: inline-flex; align-items: center; justify-content: center; }
       .${P}-ring-label {
         position: absolute; font-size: 9px; line-height: 1;
-        color: var(--dsw-alias-label-secondary, #81858c);
+        color: var(--dsw-alias-label-tertiary, #81858c);
       }
     `
 
@@ -765,9 +770,9 @@ window.__ModuleLoader__.load({
       // are where a person would want to act, not evenly spaced.
       const stroke = !known
         ? 'var(--dsw-alias-border-l2, rgb(0 0 0 / 12%))'
-        : shown >= 0.9 ? 'var(--dsw-alias-label-error, #c0392b)'
-          : shown >= 0.7 ? '#d98324'
-            : 'var(--dsw-alias-label-success, #2f9e5e)'
+        : shown >= 0.9 ? 'var(--dsw-alias-state-error-primary, #ec1313)'
+          : shown >= 0.7 ? 'var(--dsw-alias-state-warn-label, #dd8629)'
+            : 'var(--dsw-alias-state-success-primary, #22c55e)'
       return React.createElement(
         'span',
         { className: `${P}-ring`, title },
@@ -776,7 +781,7 @@ window.__ModuleLoader__.load({
           { width: RING.size, height: RING.size, viewBox: `0 0 ${String(RING.size)} ${String(RING.size)}`, 'aria-hidden': true },
           React.createElement('circle', {
             cx: RING.size / 2, cy: RING.size / 2, r: RING.r, fill: 'none',
-            stroke: 'var(--dsw-alias-fill-secondary, rgb(0 0 0 / 6%))', strokeWidth: RING.width,
+            stroke: 'var(--dsw-alias-border-l1, rgb(0 0 0 / 4%))', strokeWidth: RING.width,
           }),
           known && React.createElement('circle', {
             cx: RING.size / 2, cy: RING.size / 2, r: RING.r, fill: 'none',
@@ -827,8 +832,8 @@ window.__ModuleLoader__.load({
       }, [])
 
       const { status, stats } = state
-      const dot = status === 'running' ? 'var(--dsw-alias-label-success, #2f9e5e)'
-        : status === 'starting' ? '#d98324'
+      const dot = status === 'running' ? 'var(--dsw-alias-state-success-primary, #22c55e)'
+        : status === 'starting' ? 'var(--dsw-alias-state-warn-label, #dd8629)'
           : 'var(--dsw-alias-border-l2, rgb(0 0 0 / 25%))'
       const text = status === 'running' ? '运行中' : status === 'starting' ? '连接中' : '未知'
 
@@ -906,13 +911,13 @@ window.__ModuleLoader__.load({
         return () => { live = false }
       }, [])
 
-      const secondary = { color: 'var(--dsw-alias-label-secondary, #81858c)', fontSize: '13px' }
+      const secondary = { color: 'var(--dsw-alias-label-tertiary, #81858c)', fontSize: '13px' }
 
       if (state.status === 'loading') {
         return React.createElement('p', { style: secondary }, '读取中…')
       }
       if (state.status === 'failed') {
-        return React.createElement('p', { style: { ...secondary, color: 'var(--dsw-alias-label-error, #c0392b)' } },
+        return React.createElement('p', { style: { ...secondary, color: 'var(--dsw-alias-state-error-primary, #ec1313)' } },
           `无法读取配置文件：${state.message}`)
       }
 

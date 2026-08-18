@@ -436,6 +436,10 @@ the client already has.
   for weeks.
 - **A public method is not necessarily an available one.** `rpc.intercept` is
   documented, exported, and already taken.
+- **A CSS variable that does not exist fails silently into its fallback.** Three
+  invented token names sat in this repository's components looking theme-aware
+  and were hardcoded colours in every theme; `getComputedStyle(document.body)`
+  says which names the shell actually defines.
 - **The seat you can reach is not always the seat you want.** The draft is the
   only writable part of the composer, which is why it took two tries to look for
   the agent inbox.

@@ -182,37 +182,47 @@ window.__ModuleLoader__.load({
       .${U}-avatar {
         flex: none; width: 26px; height: 26px; border-radius: 50%;
         display: inline-flex; align-items: center; justify-content: center;
-        background: var(--dsw-alias-fill-secondary, rgb(0 0 0 / 6%));
+        background: var(--dsw-alias-border-l1, rgb(0 0 0 / 4%));
         color: var(--dsw-alias-label-primary, inherit);
         font-size: 11px; font-weight: 600; text-transform: uppercase;
       }
       .${U}-email {
         flex: 1 1 auto; min-width: 0; overflow: hidden;
         white-space: nowrap; text-overflow: ellipsis;
-        font-size: 13px; text-align: left;
+        font-size: 14px; line-height: 20px; text-align: left;
         color: var(--dsw-alias-label-primary, inherit);
       }
       .${U}-menu {
         position: fixed; z-index: 200; min-width: 208px; padding: 4px;
-        border: 1px solid var(--dsw-alias-border-l2, rgb(0 0 0 / 10%));
+        border: 1px solid transparent;
         border-radius: 12px;
         background: var(--dsw-alias-button-elevated-fill, #fff);
-        box-shadow: rgb(0 0 0 / 20%) 0 0 1px, rgb(0 0 0 / 8%) 0 12px 32px;
+        /* The three layers the shell's own popup carries, in its order: a
+           hairline, a close ambient wash, and the drop. Two of them looked
+           like enough until they were measured side by side. */
+        box-shadow:
+          rgb(0 0 0 / 20%) 0 0 1px 0,
+          rgb(0 0 0 / 2%) 0 0 4px 0,
+          rgb(0 0 0 / 8%) 0 12px 32px 0;
       }
       .${U}-head {
-        padding: 8px 10px 6px; font-size: 12px;
-        color: var(--dsw-alias-label-secondary, #81858c);
+        padding: 8px 10px; font-size: 12px; line-height: 16px;
+        color: var(--dsw-alias-label-tertiary, #81858c);
         overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
       }
-      .${U}-sep { height: 1px; margin: 4px 0; background: var(--dsw-alias-border-l2, rgb(0 0 0 / 8%)); }
       .${U}-item {
         display: flex; align-items: center; gap: 8px; width: 100%;
-        padding: 7px 10px; border: none; border-radius: 8px;
+        padding: 8px 10px; border: none; border-radius: 10px;
         background: transparent; color: var(--dsw-alias-label-primary, inherit);
-        font-family: inherit; font-size: 13px; text-align: left; cursor: pointer;
+        font-family: inherit; font-size: 14px; line-height: 22px;
+        text-align: left; text-decoration: none; cursor: pointer;
       }
-      .${U}-item:hover { background: var(--dsw-alias-fill-secondary, rgb(0 0 0 / 5%)); }
-      .${U}-item[data-danger='true'] { color: var(--dsw-alias-label-error, #c0392b); }
+      .${U}-item:hover { background: var(--dsw-alias-button-ghost-active-fill, rgb(235 238 242)); }
+      .${U}-item[data-danger='true'] { color: var(--dsw-alias-state-error-primary, #ec1313); }
+      /* The shell tints a destructive row's hover rather than greying it. */
+      .${U}-item[data-danger='true']:hover {
+        background: var(--dsw-alias-interactive-bg-hover-danger, rgb(236 19 19 / 5%));
+      }
     `
 
     /**
@@ -315,7 +325,6 @@ window.__ModuleLoader__.load({
             role: 'menu',
           },
           React.createElement('div', { className: `${U}-head`, title: label }, label),
-          React.createElement('div', { className: `${U}-sep` }),
           React.createElement(
             'button',
             { type: 'button', role: 'menuitem', className: `${U}-item`, onClick: openSettings },
@@ -329,7 +338,6 @@ window.__ModuleLoader__.load({
             { role: 'menuitem', className: `${U}-item`, href: '/admin' },
             '用户管理',
           ),
-          React.createElement('div', { className: `${U}-sep` }),
           React.createElement(
             'button',
             {
