@@ -16,9 +16,18 @@ services:
       context: .
       dockerfile: Dockerfile
       target: web
+      # Every argument the *sandbox* stage takes, not only the ones this target
+      # names: `shell` is `FROM sandbox`, so building web builds that stage too.
+      # PyPI's was missing here, and the result was a web build that reached the
+      # public index while the sandbox build beside it used the mirror — one of
+      # them timing out on files.pythonhosted.org for no visible reason.
       args:
+        DSH_VERSION:
         APT_MIRROR: ${APT_MIRROR:-}
         NPM_REGISTRY: ${NPM_REGISTRY:-}
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-}
+        # Valueless on purpose: unset, the Dockerfile's own full list stands.
+        AGENT_PYTHON_PACKAGES:
         TZ: ${DEPLOYMENT_TZ:-UTC}
     image: dsh-web:latest
     # The user-facing entry: static bytes are answered here from disk, and only
@@ -85,6 +94,7 @@ services:
       dockerfile: Dockerfile
       target: gateway
       args:
+        DSH_VERSION:
         NPM_REGISTRY: ${NPM_REGISTRY:-}
     image: dsh-gateway:latest
     depends_on:
@@ -124,9 +134,6 @@ services:
       # should not be.
       REGISTRATION: ${REGISTRATION:-invite}
       DATABASE_URL: postgres://${POSTGRES_USER:-dsh}:${POSTGRES_PASSWORD:?set a database password}@postgres:5432/${POSTGRES_DB:-dsh}
-      # Optional. Left unset, the login page shows this checkout's own version,
-      # which is what the images were built from.
-      DSH_VERSION: ${DSH_VERSION:-}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
       DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL}
       SANDBOX_IDLE_TTL_MS: ${SANDBOX_IDLE_TTL_MS:-1800000}
@@ -148,9 +155,11 @@ services:
       dockerfile: Dockerfile
       target: sandbox
       args:
+        DSH_VERSION:
         APT_MIRROR: ${APT_MIRROR:-}
         NPM_REGISTRY: ${NPM_REGISTRY:-}
         PIP_INDEX_URL: ${PIP_INDEX_URL:-}
+        AGENT_PYTHON_PACKAGES:
         TZ: ${DEPLOYMENT_TZ:-UTC}
     image: dsh-sandbox:latest
     profiles: [build]

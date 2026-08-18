@@ -14,6 +14,18 @@
 #   web      nginx over the frontend build and that shell
 #   gateway  the authenticating front door; no harness code at all
 
+# The harness version this deployment runs. A build argument rather than a
+# lockfile entry, so a deployment can move between published versions without
+# editing a file that also pins this project's own dependencies.
+#
+# Declared here, before any FROM, because two stages need it and a default
+# declared inside one is invisible to the others: `deps` installs this version,
+# and `gateway` puts it on the login page. Each re-declares a bare `ARG
+# DSH_VERSION` to bring this default into its own scope — which is the only way
+# to read it after a FROM, and which is what was missing when the footer went
+# blank.
+ARG DSH_VERSION=0.1.0-rc.7
+
 # ------------------------------------------------------------------- deps ----
 FROM node:24-slim AS deps
 
@@ -29,10 +41,7 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends git ca-certificates python3 make g++ \
   && rm -rf /var/lib/apt/lists/*
 
-# The harness version this deployment runs. A build argument rather than a
-# lockfile entry, so a deployment can move between published versions without
-# editing a file that also pins this project's own dependencies.
-ARG DSH_VERSION=0.1.0-rc.7
+ARG DSH_VERSION
 
 # An npm registry to install from. Empty uses the public one; a deployment far
 # from it names a mirror rather than waiting out ~200 packages.
@@ -47,6 +56,18 @@ RUN npm install --omit=dev --no-audit --no-fund \
       "@deepseek-ai/dsh@${DSH_VERSION}" \
       "@deepseek-ai/dsh-web-frontend"
 
+
+# ----------------------------------------------------------- cube-tools ----
+# Where the sandbox image's two CubeSandbox binaries come from.
+#
+# Pinned to amd64 because that is the only platform the tag is published for,
+# and leaving it to the build platform fails outright on an arm64 host — which
+# is every Apple Silicon laptop this is developed on. The pin is honest rather
+# than a workaround: CubeSandbox runs on x86, so a `cube` deployment wants these
+# binaries amd64 wherever they were built. The Docker simulation never executes
+# either of them — it overrides both the entrypoint and the command — so on an
+# arm64 build they are inert bytes in an image that never asks them to run.
+FROM --platform=linux/amd64 ghcr.io/tencentcloud/cubesandbox-base:2026.16 AS cube-tools
 
 # ---------------------------------------------------------------- sandbox ----
 FROM node:24-slim AS sandbox
@@ -137,14 +158,26 @@ ARG PIP_INDEX_URL=
 RUN if [ -n "$PIP_INDEX_URL" ]; then \
       printf '[global]\nindex-url = %s\n' "$PIP_INDEX_URL" > /etc/pip.conf; \
     fi
-RUN python3 -m venv "$VIRTUAL_ENV" \
-  && pip install --no-cache-dir --upgrade pip \
-  && pip install --no-cache-dir --retries 5 --timeout 120 \
-       pandas duckdb sqlalchemy tabulate \
+# What the agent can reach for, as an argument rather than a fixed list.
+#
+# The default is the deployment's answer and the only one a tenant should ever
+# meet. It is an argument so that a build which is not for tenants can ask for
+# less: this is the slowest step in the image by a wide margin, and a checkout
+# being exercised for its gateway and its frontend does not need pandas to find
+# out whether a page renders. Set it empty and the environment is still created
+# and still on PATH — there is simply nothing in it.
+ARG AGENT_PYTHON_PACKAGES="pandas duckdb sqlalchemy tabulate \
        openpyxl xlsxwriter xlrd pyxlsb odfpy \
        pdfplumber pillow matplotlib \
        lxml beautifulsoup4 markdownify jinja2 \
-       python-magic py7zr rarfile charset-normalizer requests \
+       python-magic py7zr rarfile charset-normalizer requests"
+RUN python3 -m venv "$VIRTUAL_ENV" \
+  && pip install --no-cache-dir --upgrade pip \
+  && if [ -n "$AGENT_PYTHON_PACKAGES" ]; then \
+       pip install --no-cache-dir --retries 5 --timeout 120 $AGENT_PYTHON_PACKAGES; \
+     else \
+       echo 'build: AGENT_PYTHON_PACKAGES is empty; the agent gets a bare environment'; \
+     fi \
   && find "$VIRTUAL_ENV" -name '__pycache__' -type d -prune -exec rm -rf {} + \
   && rm -rf /root/.cache/pip
 
@@ -321,8 +354,8 @@ RUN for name in PATH DSH_BIN DSH_HOME HOME DSH_PERMISSION_MODE NODE_ENV \
 # restored from it. `entrypoint.sh` needs an identity that only exists at
 # creation, so the gateway starts it through envd instead. The Docker simulation
 # has no envd and overrides both the entrypoint and the command.
-COPY --from=ghcr.io/tencentcloud/cubesandbox-base:2026.16 /usr/bin/envd /usr/bin/envd
-COPY --from=ghcr.io/tencentcloud/cubesandbox-base:2026.16 /usr/local/bin/cube-entrypoint.sh /usr/local/bin/cube-entrypoint.sh
+COPY --from=cube-tools /usr/bin/envd /usr/bin/envd
+COPY --from=cube-tools /usr/local/bin/cube-entrypoint.sh /usr/local/bin/cube-entrypoint.sh
 
 RUN mkdir -p /workspace
 WORKDIR /workspace
@@ -377,6 +410,13 @@ COPY packages/tunnel-protocol /packages/tunnel-protocol
 COPY gateway/package.json ./
 RUN npm install --omit=dev --no-audit --no-fund && rm -rf /root/.npm
 COPY gateway ./gateway
+# The harness version the login page footer names. It is the pin at the top of
+# this file rather than anything the gateway can read for itself: this image
+# deliberately carries no `@deepseek-ai` code — CI asserts its absence — so the
+# one place that knows which release a tenant is about to run is the argument
+# that installed it. A deployment can still override it in the environment.
+ARG DSH_VERSION
+ENV DSH_VERSION=${DSH_VERSION}
 ENV PORT=8080
 EXPOSE 8080
 CMD ["node", "gateway/src/server.js"]
