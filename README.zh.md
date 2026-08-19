@@ -4,6 +4,8 @@
 
 [English](README.md) | 中文
 
+项目主页：**<https://huchundong.github.io/DshCloud/>** — 一页看懂它是什么。
+
 项目介绍：[微信公众号文章](https://mp.weixin.qq.com/s/lDd3rK6syoCB7TANxwCRsQ)
 
 > [!IMPORTANT]
