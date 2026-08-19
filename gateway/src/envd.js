@@ -198,7 +198,7 @@ async function envdRequest(handle, path, body, headers, method = 'POST') {
  * @returns {Promise<{exitCode: number, stdout: string, stderr: string}>} what the command did.
  * @throws {Error} when envd refuses the call or the stream ends with no exit code.
  */
-async function runCommand(handle, command, envs) {
+export async function runCommand(handle, command, envs) {
   const payload = {
     process: { cmd: '/bin/bash', args: ['-l', '-c', command], envs },
     stdin: false,

@@ -44,8 +44,12 @@ switch (command) {
     break
   }
   case 'exec': {
-    const [sandboxId, ...rest] = args
-    const { exitCode, stdout, stderr } = await runCommand(sandboxId, rest.join(' '), {})
+    // CubeSandbox's own id, which is the runtime handle envd is addressed by —
+    // never the gateway's `sandboxId` for the same machine. The two are
+    // unrelated here, and confusing them reaches nothing; `ids` above prints
+    // this one because it comes from the Cube API.
+    const [handle, ...rest] = args
+    const { exitCode, stdout, stderr } = await runCommand(handle, rest.join(' '), {})
     process.stdout.write(stdout)
     process.stderr.write(stderr)
     process.exit(exitCode)
