@@ -324,29 +324,46 @@ window.__ModuleLoader__.load({
     const useTree = () => React.useSyncExternalStore(treeStore.subscribe, treeStore.read)
 
     /**
+     * How often the panel looks again ANYWAY, with a watch running.
+     *
+     * A watch is an accelerator, never the source of truth, and this is what
+     * makes that true. inotify drops events: the kernel's queue overflows and
+     * what was in it is gone, on any filesystem at all. On a shared one it is
+     * worse, and it was measured rather than feared — two sandboxes may mount
+     * one volume, and a watcher in the first is never told about a write made
+     * from the second, while listing the directory shows both files. envd
+     * refuses these filesystems for precisely that reason.
+     *
+     * So the panel re-reads on a slow beat regardless. Nothing here scans: it
+     * re-reads the directories that are open and asks once which page is
+     * newest, which is what a change event makes it do anyway.
+     */
+    const SAFETY_INTERVAL_MS = 30000
+
+    /**
+     * How often it re-asks when there is no watch at all.
+     *
+     * Faster, because then it is the only thing that will ever notice.
+     */
+    const STALE_INTERVAL_MS = 5000
+
+    /**
      * The workspace's own changes, as they happen.
      *
-     * One subscription for the whole panel, opened when it mounts. What
-     * replaced it is worth naming: the tree used to re-read a directory
-     * whenever it was drawn, and the canvas asked every two seconds which page
-     * was newest. Both were polling for news the sandbox can volunteer —
-     * envd watches the filesystem and the gateway fans the events out, so a
-     * file that changes reaches the panel in the time it takes to travel, and
-     * a workspace that does not change costs nothing at all.
+     * One subscription for the whole panel, opened when it mounts. What it
+     * replaced is worth naming: the tree used to re-read a directory whenever
+     * it was drawn, and the canvas asked every two seconds which page was
+     * newest. Both were asking constantly for news that can be volunteered, so
+     * a file that changes now reaches the panel in the time it takes to
+     * travel.
+     *
+     * It is not the only way the panel finds out, and it must not be — see
+     * SAFETY_INTERVAL_MS. Events arrive quickly and are allowed to be
+     * incomplete; the slow re-read is what makes them merely an accelerator.
      *
      * Listeners register by name so the tree and the canvas can each take what
      * they need without knowing about the other.
      */
-    /**
-     * How often the panel re-asks when nothing will tell it.
-     *
-     * Only ever used where events are unavailable. The canvas used to poll at
-     * two seconds and the tree on every draw; this is slower than both on
-     * purpose, because it now covers the whole panel at once and a workspace
-     * that changed is usually one a person just changed themselves — and they
-     * have a button.
-     */
-    const STALE_INTERVAL_MS = 5000
 
     const workspaceWatch = (() => {
       const listeners = new Set()
@@ -371,20 +388,33 @@ window.__ModuleLoader__.load({
        * workspace may have moved on, never what moved. Subscribers re-read
        * whatever they are showing.
        */
-      const fallBackToAsking = () => {
-        if (timer !== undefined) return
-        timer = window.setInterval(() => { announce({ stale: true, path: ROOT }) }, STALE_INTERVAL_MS)
+      /**
+       * Look again every so often, whatever the watch is doing.
+       *
+       * What is sent is `stale`, not a path: this knows only that the
+       * workspace may have moved on, never what moved. Subscribers re-read
+       * whatever they are showing.
+       *
+       * @param {number} every - milliseconds between looks.
+       */
+      const keepAsking = (every) => {
+        if (timer !== undefined) window.clearInterval(timer)
+        timer = window.setInterval(() => { announce({ stale: true, path: ROOT }) }, every)
       }
 
       const start = () => {
         if (source !== undefined) return
         source = new EventSource('/sandbox/watch')
+        // Started WITH the watch, not instead of it — see SAFETY_INTERVAL_MS.
+        // Events are the fast path and they are allowed to be incomplete.
+        keepAsking(SAFETY_INTERVAL_MS)
         source.addEventListener('message', (event) => {
           let change
           try { change = JSON.parse(event.data) } catch { return }
           // The gateway says so down the stream rather than closing it, so
           // that the browser does not reconnect to a watch that cannot exist.
-          if (change.watching === false) { fallBackToAsking(); return }
+          // Asking is already happening; it only has to happen sooner.
+          if (change.watching === false) { keepAsking(STALE_INTERVAL_MS); return }
           const path = `${ROOT}/${String(change.name ?? '')}`
           announce({ ...change, path })
         })
