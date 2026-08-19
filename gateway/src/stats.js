@@ -28,6 +28,15 @@ import { ROOT } from './panel-path.js'
  */
 const SILENCE_MS = 20000
 
+/**
+ * How long a stream waits before trying to attach again.
+ *
+ * Used when a sandbox is not up yet, or when the one it was attached to went
+ * away: the stream stays open and reconnects underneath, so a browser never
+ * sees the gap as a closed subscription.
+ */
+const RETRY_MS = 5000
+
 /** Sandboxes being watched: handle → { stream, watchers, last, id, timer }. */
 const watched = new Map()
 
@@ -199,7 +208,7 @@ function serveStream(req, res, attach) {
       timer = undefined
       detach()
       void open()
-    }, SAMPLE_MS)
+    }, RETRY_MS)
   }
 
   const open = async () => {
