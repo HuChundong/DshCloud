@@ -29,7 +29,9 @@
   It is served twice from the same bytes: as the project page on GitHub Pages,
   where it sits at the site root, and inside the web image at `/welcome/`, where
   an anonymous visitor to `/` is sent. So every asset reference is relative and
-  every link into the application is absolute.
+  every link into the application is absolute. The mark is assembled beside the
+  page in both deployments; its error fallback points to the repository source
+  so this file also renders when opened directly from the checkout.
 
   And it reaches no other host. The three faces are in `fonts/`, latin subsets,
   72 KB together: this deployment runs on laptops and on private networks,
@@ -42,10 +44,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>DshCloud — your Agent workstation</title>
-<meta name="description" content="An isolated cloud Agent workstation. Agents browse, edit files and run code on their own machine. Ready in seconds. Still running when you leave. Open source.">
+<title>DshCloud — DSH, hosted in the cloud</title>
+<meta name="description" content="DSH, hosted in the cloud. Runs in a dedicated sandbox with a replaceable runtime. Bring your own key. Open source. Free to start.">
 <meta name="color-scheme" content="light dark">
-<link rel="icon" href="mark.svg">
+<link rel="icon" href="mark.svg" onerror="this.onerror=null;this.href='../../gateway/assets/mark.svg'">
 <link rel="preload" href="fonts/host-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/dm-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/fragment-mono-latin.woff2" as="font" type="font/woff2" crossorigin>
@@ -204,7 +206,6 @@ p  { margin: 0 0 18px; }
 p:last-child { margin-bottom: 0; }
 code { font-family: var(--mono); font-size: .9em; color: var(--text-2); }
 
-.eyebrow { font-size: 15px; color: var(--text-3); margin: 0 0 20px; }
 .lede { font-size: clamp(16px, 1.4vw, 18px); color: var(--text-3); max-width: 34em; }
 
 /* ---------- header ---------- */
@@ -485,49 +486,29 @@ a.work {
 }
 a.work:hover { border-color: var(--border-strong); background: var(--surface-2); }
 .work-preview {
-  height: 168px; overflow: hidden; pointer-events: none;
-  background: var(--bg-sunken); border-bottom: 1px solid var(--border-soft);
+  position: relative; height: clamp(190px, 28vw, 230px);
+  overflow: hidden; pointer-events: none;
+  background: #090b0c; border-bottom: 1px solid var(--border-soft);
 }
+.work-preview::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(180deg, transparent 68%, rgba(0, 0, 0, .16));
+}
+.work-preview img {
+  width: 100%; height: 100%; object-fit: cover; object-position: var(--focal, 50% 50%);
+  filter: saturate(.92) contrast(1.02); transform: scale(1.01);
+  transition: transform .5s cubic-bezier(.2, .7, .2, 1), filter .5s ease;
+}
+a.work:hover .work-preview img { transform: scale(1.035); filter: saturate(1) contrast(1.04); }
+@media (min-width: 1120px) {
+  .works .work:nth-child(-n+2) .work-preview { height: 240px; }
+  .works .work:nth-child(n+3) .work-preview  { height: 190px; }
+}
+@media (prefers-reduced-motion: reduce) { .work-preview img { transition: none; } }
 .work-meta { padding: clamp(18px, 2vw, 24px); }
 .work-meta .en { font-family: var(--mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin: 0 0 10px; }
 .work-meta h3 { margin-bottom: 8px; }
 .work-meta p { color: var(--text-3); font-size: 14.5px; line-height: 1.55; }
-
-/* Fixed-height scenes. They are pictures of the work, not of the stack. */
-.pv { height: 100%; padding: 16px 16px 0; }
-.pv-chrome { display: flex; align-items: center; gap: 6px; margin-bottom: 12px; }
-.pv-chrome i { width: 7px; height: 7px; border-radius: 50%; background: var(--border); }
-.pv-chrome span {
-  margin-left: 6px; font-family: var(--mono); font-size: 10px; color: var(--text-4);
-  padding: 2px 8px; border-radius: var(--radius-pill); background: var(--surface-2);
-}
-.pv-site { display: grid; gap: 8px; }
-.pv-site .banner { height: 44px; border-radius: 8px; background: color-mix(in srgb, var(--accent) 18%, var(--bg-raised)); }
-.pv-site .row { display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 8px; }
-.pv-site .row b { height: 68px; border-radius: 8px; background: var(--surface-1); }
-
-.pv-doc { display: grid; gap: 8px; padding-top: 8px; }
-.pv-doc em { height: 10px; border-radius: 4px; background: var(--surface-1); display: block; }
-.pv-doc em:nth-child(1) { width: 42%; background: color-mix(in srgb, var(--accent) 35%, var(--surface-1)); }
-.pv-doc em:nth-child(2) { width: 88%; }
-.pv-doc em:nth-child(3) { width: 76%; }
-.pv-doc em:nth-child(4) { width: 64%; }
-.pv-doc .cite { margin-top: 10px; display: flex; gap: 6px; }
-.pv-doc .cite i { height: 22px; width: 72px; border-radius: 6px; background: var(--surface-2); }
-
-.pv-table { display: grid; gap: 6px; padding-top: 4px; }
-.pv-table .th, .pv-table .tr { display: grid; grid-template-columns: 1.4fr 1fr .8fr; gap: 8px; }
-.pv-table .th i, .pv-table .tr i { height: 18px; border-radius: 4px; background: var(--surface-1); }
-.pv-table .th i { background: color-mix(in srgb, var(--accent) 22%, var(--surface-1)); }
-
-.pv-sh { font-family: var(--mono); font-size: 11px; line-height: 1.7; color: var(--text-3); padding-top: 2px; }
-.pv-sh .ok { color: var(--accent); }
-
-.pv-repo { display: grid; gap: 7px; padding-top: 6px; }
-.pv-repo span { display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 11px; color: var(--text-3); }
-.pv-repo span::before { content: ""; width: 8px; height: 8px; border-radius: 2px; background: var(--surface-1); }
-.pv-repo span.on { color: var(--text-2); }
-.pv-repo span.on::before { background: var(--accent); }
 
 .task {
   margin-top: clamp(16px, 2vw, 22px);
@@ -597,7 +578,7 @@ a.work:hover { border-color: var(--border-strong); background: var(--surface-2);
 /* ---------- closing ---------- */
 
 .close { text-align: center; }
-.close h2, .close .lede { margin-left: auto; margin-right: auto; }
+.close h2 { margin-left: auto; margin-right: auto; }
 .close .cta { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 32px; }
 
 /*
@@ -625,12 +606,12 @@ footer.foot a:hover { color: var(--text-2); }
 <header class="top">
   <div class="rail">
     <div class="capsule">
-      <a class="brand" href="./"><img src="mark.svg" alt="" width="24" height="24">DshCloud</a>
+      <a class="brand" href="./"><img src="mark.svg" alt="" width="24" height="24" onerror="this.onerror=null;this.src='../../gateway/assets/mark.svg'">DshCloud</a>
       <span class="chip" data-t="nav.chip">Open source · MIT</span>
       <span class="spacer"></span>
       <nav>
         <a href="#work" data-t="nav.work">Work</a>
-        <a href="#sandbox" data-t="nav.sandbox">The sandbox</a>
+        <a href="#sandbox" data-t="nav.sandbox">Why host it</a>
         <a href="#run" data-t="nav.run">Get started</a>
       </nav>
       <a class="btn btn-ghost btn-sm" href="https://github.com/HuChundong/DshCloud">
@@ -641,7 +622,7 @@ footer.foot a:hover { color: var(--text-2); }
         <button type="button" data-lang="zh" aria-pressed="false">中文</button>
         <button type="button" data-lang="en" aria-pressed="true">EN</button>
       </div>
-      <a class="btn btn-primary btn-sm" href="/login" data-t="nav.cta">Start free</a>
+      <a class="btn btn-primary btn-sm" href="/login" data-t="nav.cta">Get started for free</a>
     </div>
   </div>
 </header>
@@ -651,13 +632,13 @@ footer.foot a:hover { color: var(--text-2); }
   <div class="rail">
 
     <div class="headline">
-      <h1 data-t="hero.h1">Your Agent workstation</h1>
-      <p data-t="hero.p">Your agents get an isolated workstation in the cloud. They can browse, edit files and run code there. Ready a few seconds after you sign in, and still running after you close the laptop. Free to start. The source is public.</p>
+      <h1 data-t="hero.h1">DSH, hosted in the cloud</h1>
+      <p data-t="hero.p">The same DSH, running in its own sandbox. Bring your own key.</p>
     </div>
 
     <div class="app">
       <aside class="app-side" aria-hidden="true">
-        <div class="top"><img src="mark.svg" alt="" width="19" height="19">DshCloud</div>
+        <div class="top"><img src="mark.svg" alt="" width="19" height="19" onerror="this.onerror=null;this.src='../../gateway/assets/mark.svg'">DshCloud</div>
         <div class="app-new">
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" width="14" height="14"><circle cx="8" cy="8" r="6"/><path d="M8 5.5v5M5.5 8h5"/></svg>
           <span data-t="app.new">New session</span>
@@ -691,7 +672,7 @@ footer.foot a:hover { color: var(--text-2); }
       <div class="app-main">
         <div class="app-centre">
           <div class="app-greet">
-            <img src="mark.svg" alt="" width="27" height="27">
+            <img src="mark.svg" alt="" width="27" height="27" onerror="this.onerror=null;this.src='../../gateway/assets/mark.svg'">
             <span class="said" data-t="app.greet">What are we building today?</span>
             <span class="plan" data-t="app.free">Free</span>
           </div>
@@ -720,10 +701,10 @@ footer.foot a:hover { color: var(--text-2); }
 
     <div class="under">
       <div class="cta">
-        <a class="btn btn-primary" href="/login" data-t="hero.cta1">Start free</a>
+        <a class="btn btn-primary" href="/login" data-t="hero.cta1">Get started for free</a>
         <a class="btn btn-ghost" href="https://github.com/HuChundong/DshCloud" data-t="hero.cta2">Read the source</a>
       </div>
-      <p class="note" data-t="hero.note">The free plan is open. New workstations still need an invite; we do not have enough machines yet.</p>
+      <p class="note" data-t="hero.note">The free plan is open. New workstations are handed out by invitation.</p>
     </div>
 
   </div>
@@ -731,86 +712,58 @@ footer.foot a:hover { color: var(--text-2); }
 
 <section class="band" id="work">
   <div class="rail">
-    <p class="eyebrow" data-t="work.eyebrow">What they can do</p>
-    <h2 data-t="work.h2">What an Agent workstation is for</h2>
-    <p class="lede" data-t="work.lede">They can put up a site, write a brief, clean a table or run a script. You can watch them do it.</p>
+    <h2 data-t="work.h2">The DSH you already know</h2>
+    <p class="lede" data-t="work.lede">Build websites. Research. Ship code. The experience does not change — only where it runs.</p>
 
     <div class="works">
       <a class="work" href="/login">
         <div class="work-preview" aria-hidden="true">
-          <div class="pv">
-            <div class="pv-chrome"><i></i><i></i><i></i><span>localhost:3000</span></div>
-            <div class="pv-site"><div class="banner"></div><div class="row"><b></b><b></b><b></b></div></div>
-          </div>
+          <img src="images/work-build.jpg" alt="" width="1280" height="853" loading="lazy" decoding="async" style="--focal: 50% 48%">
         </div>
         <div class="work-meta">
           <p class="en">Build</p>
-          <h3 data-t="work.w1h">A site that goes live</h3>
-          <p data-t="work.w1b">From a prompt to pages and a deploy. The files stay on the workstation.</p>
+          <h3 data-t="work.w1h">Product launch landing page</h3>
+          <p data-t="work.w1b">From a sentence to pages you can open.</p>
         </div>
       </a>
       <a class="work" href="/login">
         <div class="work-preview" aria-hidden="true">
-          <div class="pv">
-            <div class="pv-doc"><em></em><em></em><em></em><em></em><span class="cite"><i></i><i></i><i></i></span></div>
-          </div>
+          <img src="images/work-research.jpg" alt="" width="1280" height="853" loading="lazy" decoding="async" style="--focal: 50% 50%">
         </div>
         <div class="work-meta">
           <p class="en">Research</p>
-          <h3 data-t="work.w2h">A brief you can send</h3>
-          <p data-t="work.w2b">Sources, notes and a finished write-up, kept on the workstation.</p>
+          <h3 data-t="work.w2h">Competitive research brief</h3>
+          <p data-t="work.w2b">Sources, notes, and a write-up you can send.</p>
         </div>
       </a>
       <a class="work" href="/login">
         <div class="work-preview" aria-hidden="true">
-          <div class="pv">
-            <div class="pv-table">
-              <div class="th"><i></i><i></i><i></i></div>
-              <div class="tr"><i></i><i></i><i></i></div>
-              <div class="tr"><i></i><i></i><i></i></div>
-              <div class="tr"><i></i><i></i><i></i></div>
-              <div class="tr"><i></i><i></i><i></i></div>
-            </div>
-          </div>
+          <img src="images/work-data.jpg" alt="" width="1280" height="720" loading="lazy" decoding="async" style="--focal: 50% 51%">
         </div>
         <div class="work-meta">
           <p class="en">Data</p>
-          <h3 data-t="work.w3h">A table you can use</h3>
-          <p data-t="work.w3b">Clean it, join it, export it. The files stay put.</p>
+          <h3 data-t="work.w3h">Weekly sales table, cleaned</h3>
+          <p data-t="work.w3b">Clean, join, export. Files stay on the workstation.</p>
         </div>
       </a>
       <a class="work" href="/login">
         <div class="work-preview" aria-hidden="true">
-          <div class="pv">
-            <div class="pv-sh">
-              <div>$ npm test</div>
-              <div class="ok">27 passed</div>
-              <div>$ python train.py --epochs 3</div>
-              <div class="ok">checkpoint saved</div>
-            </div>
-          </div>
+          <img src="images/work-scripts.jpg" alt="" width="1280" height="853" loading="lazy" decoding="async" style="--focal: 50% 53%">
         </div>
         <div class="work-meta">
           <p class="en">Scripts</p>
-          <h3 data-t="work.w4h">A script that runs</h3>
-          <p data-t="work.w4b">They can install packages and run the thing they just wrote.</p>
+          <h3 data-t="work.w4h">A nightly report that runs</h3>
+          <p data-t="work.w4b">Install, build, run — on the same machine.</p>
         </div>
       </a>
       <a class="work" href="/login">
         <div class="work-preview" aria-hidden="true">
-          <div class="pv">
-            <div class="pv-repo">
-              <span>README.md</span>
-              <span class="on">src/app.ts</span>
-              <span>src/lib/tunnel.ts</span>
-              <span>package.json</span>
-            </div>
-          </div>
+          <img src="images/work-repo.jpg" alt="" width="1280" height="698" loading="lazy" decoding="async" style="--focal: 50% 49%">
         </div>
         <div class="work-meta">
           <p class="en">Repos</p>
-          <h3 data-t="work.w5h">Open a repo and change it</h3>
-          <p data-t="work.w5b">Search, edit, commit. The history stays on that machine.</p>
+          <h3 data-t="work.w5h">Read a repository</h3>
+          <p data-t="work.w5b">Clone, search, patch.</p>
         </div>
       </a>
     </div>
@@ -819,30 +772,29 @@ footer.foot a:hover { color: var(--text-2); }
 
 <section class="band" id="sandbox">
   <div class="rail">
-    <p class="eyebrow" data-t="value.eyebrow">The sandbox</p>
-    <h2 data-t="value.h2">Each agent works on its own workstation</h2>
-    <p class="lede" data-t="value.lede">They can browse, edit files and run code. They cannot open anyone else's workstation.</p>
+    <h2 data-t="value.h2">Runs in a sandbox. Always on.</h2>
+    <p class="lede" data-t="value.lede">One sandbox per person. Close the computer — DSH keeps working. Bring your own key.</p>
 
     <div class="quad">
       <div class="card">
-        <p class="en">Isolated</p>
-        <h3 data-t="value.c1h">Separate from your laptop</h3>
-        <p class="body" data-t="value.c1b">One workstation per person. It cannot see your laptop or another tenant.</p>
+        <p class="en">Same DSH</p>
+        <h3 data-t="value.c1h">Same DSH</h3>
+        <p class="body" data-t="value.c1b">The interface you already know. Nothing new to learn.</p>
       </div>
       <div class="card">
-        <p class="en">Ready in seconds</p>
-        <h3 data-t="value.c2h">Ready when you sign in</h3>
-        <p class="body" data-t="value.c2b">The workstation is there when you sign in. No install, no API key to paste.</p>
+        <p class="en">Pluggable runtime</p>
+        <h3 data-t="value.c2h">Swap the sandbox runtime</h3>
+        <p class="body" data-t="value.c2b">Docker and CubeSandbox are supported today; the latter uses an E2B-compatible API.</p>
       </div>
       <div class="card">
-        <p class="en">Always on</p>
-        <h3 data-t="value.c3h">Still running after you leave</h3>
-        <p class="body" data-t="value.c3b">Close the laptop. The agents keep working. Files and history are there when you come back.</p>
+        <p class="en">Not your laptop</p>
+        <h3 data-t="value.c3h">Not your laptop</h3>
+        <p class="body" data-t="value.c3b">Keeps working even when your computer is off.</p>
       </div>
       <div class="card">
-        <p class="en">Visible</p>
-        <h3 data-t="value.c4h">You can see the steps</h3>
-        <p class="body" data-t="value.c4b">Reasoning and commands show up as they happen. You can stop it.</p>
+        <p class="en">BYOK</p>
+        <h3 data-t="value.c4h">Bring your own key</h3>
+        <p class="body" data-t="value.c4b">Use your own key. It stays on your workstation.</p>
       </div>
     </div>
 
@@ -860,29 +812,28 @@ footer.foot a:hover { color: var(--text-2); }
 
 <section class="band" id="run">
   <div class="rail">
-    <p class="eyebrow" data-t="run.eyebrow">How you get it</p>
-    <h2 data-t="run.h2">Hosted for free, or on your own cloud</h2>
-    <p class="lede" data-t="run.lede">Same product. Self-hosting is the same repository.</p>
+    <h2 data-t="run.h2">Choose how to run DSH</h2>
+    <p class="lede" data-t="run.lede">Use the hosted service, or deploy it to your own cloud.</p>
 
     <div class="pair">
       <div class="card">
         <p class="en">Hosted · Free</p>
-        <h3 data-t="run.ah">Use the hosted plan</h3>
+        <h3 data-t="run.ah">Start on ours</h3>
         <ul>
-          <li data-t="run.a1">A free Agent workstation, set up and updated for you.</li>
-          <li data-t="run.a2">New ones still need an invite while we are short on machines.</li>
-          <li data-t="run.a3">Your files stay on your workstation.</li>
+          <li data-t="run.a1">Open DSH in your browser. Nothing to install or configure.</li>
+          <li data-t="run.a2">Your sandbox keeps running after your computer turns off.</li>
+          <li data-t="run.a3">Files and sessions stay there, ready when you come back.</li>
         </ul>
-        <div class="tail"><a class="btn btn-primary" href="/login" data-t="run.acta">Start free</a></div>
+        <div class="tail"><a class="btn btn-primary" href="/login" data-t="run.acta">Get started for free</a></div>
       </div>
 
       <div class="card">
         <p class="en">Self-hosted · MIT</p>
-        <h3 data-t="run.bh">Deploy it yourself</h3>
+        <h3 data-t="run.bh">Or run it on your own cloud</h3>
         <ul>
-          <li data-t="run.b1">The hosted plan runs this same public code.</li>
-          <li data-t="run.b2">Docker for a trial, CubeSandbox microVMs in production.</li>
-          <li data-t="run.b3">Credentials and data stay on your side.</li>
+          <li data-t="run.b1">Every line is public.</li>
+          <li data-t="run.b2">Swap runtimes: Docker for a trial, CubeSandbox microVMs in production.</li>
+          <li data-t="run.b3">Your credentials, your data, your perimeter.</li>
         </ul>
         <div class="tail">
           <div class="tabs" role="tablist">
@@ -916,10 +867,9 @@ footer.foot a:hover { color: var(--text-2); }
 
 <section class="band close">
   <div class="rail">
-    <h2 data-t="close.h2">Get an Agent workstation</h2>
-    <p class="lede" data-t="close.lede">An invite opens a hosted workstation. The repo is there if you want it on your own cloud.</p>
+    <h2 data-t="close.h2">Ready to run DSH in the cloud?</h2>
     <div class="cta">
-      <a class="btn btn-primary" href="/login" data-t="close.cta1">Start free</a>
+      <a class="btn btn-primary" href="/login" data-t="close.cta1">Get started for free</a>
       <a class="btn btn-ghost" href="https://github.com/HuChundong/DshCloud" data-t="close.cta2">Star on GitHub</a>
     </div>
   </div>
@@ -936,7 +886,6 @@ footer.foot a:hover { color: var(--text-2); }
   <div class="rail">
     <span>MIT</span>
     <a href="https://github.com/HuChundong/DshCloud">GitHub</a>
-    <a href="https://github.com/HuChundong/DshCloud/blob/main/docs/design.md" data-t="foot.design">Design notes</a>
     <a href="https://github.com/deepseek-ai/deepseek-harness" data-t="foot.dsh">DSH (upstream)</a>
     <a href="https://github.com/TencentCloud/CubeSandbox">CubeSandbox</a>
   </div>
@@ -955,17 +904,17 @@ footer.foot a:hover { color: var(--text-2); }
 const T = {
   'nav.chip':     { en: 'Open source · MIT',   zh: '开源 · MIT' },
   'nav.work':     { en: 'Work',                zh: '能力' },
-  'nav.sandbox':  { en: 'The sandbox',         zh: '沙箱' },
+  'nav.sandbox':  { en: 'Why host it',         zh: '为何托管' },
   'nav.run':      { en: 'Get started',         zh: '开始' },
-  'nav.cta':      { en: 'Start free',          zh: '免费开始' },
+  'nav.cta':      { en: 'Get started for free', zh: '免费开始' },
 
-  'hero.h1':      { en: 'Your Agent workstation', zh: '你的 Agent 工作站' },
-  'hero.p':       { en: 'Your agents get an isolated workstation in the cloud. They can browse, edit files and run code there. Ready a few seconds after you sign in, and still running after you close the laptop. Free to start. The source is public.',
-                    zh: '给你的 Agent 一台隔离的云端工作站。浏览网页、改文件、跑代码，都在这台别人进不去的机器上。登录后几秒就能用，合上电脑它还在跑。免费开始，源码公开。' },
-  'hero.cta1':    { en: 'Start free',          zh: '免费开始' },
+  'hero.h1':      { en: 'DSH, hosted in the cloud', zh: '云端托管的 DSH' },
+  'hero.p':       { en: 'The same DSH, running in its own sandbox. Bring your own key.',
+                    zh: '还是原来的 DSH，运行在独立沙箱中。用你自己的 Key。' },
+  'hero.cta1':    { en: 'Get started for free', zh: '免费开始' },
   'hero.cta2':    { en: 'Read the source',     zh: '查看源码' },
-  'hero.note':    { en: 'The free plan is open. New workstations still need an invite; we do not have enough machines yet.',
-                    zh: '免费套餐已经开放。机器还不够，新工作站暂时要邀请码。' },
+  'hero.note':    { en: 'The free plan is open. New workstations are handed out by invitation.',
+                    zh: '免费套餐已开放。新工作站暂以邀请码发放。' },
 
   'app.new':      { en: 'New session',         zh: '新会话' },
   'app.workspace':{ en: 'Workspace',           zh: '工作区' },
@@ -988,62 +937,49 @@ const T = {
   'app.s4':       { en: 'Ship a script',       zh: '写个脚本跑起来' },
   'app.s5':       { en: 'Read a repository',   zh: '读一个仓库' },
 
-  'work.eyebrow': { en: 'What they can do',    zh: '能做什么' },
-  'work.h2':      { en: 'What an Agent workstation is for', zh: 'Agent 工作站是用来干活的' },
-  'work.lede':    { en: 'They can put up a site, write a brief, clean a table or run a script. You can watch them do it.',
-                    zh: '能做网站、写简报、洗数据、跑脚本。过程你看得到。' },
-  'work.w1h':     { en: 'A site that goes live', zh: '能上线的网站' },
-  'work.w1b':     { en: 'From a prompt to pages and a deploy. The files stay on the workstation.',
-                    zh: '从一句话做到页面和部署。文件留在工作站上。' },
-  'work.w2h':     { en: 'A brief you can send', zh: '能发出去的简报' },
-  'work.w2b':     { en: 'Sources, notes and a finished write-up, kept on the workstation.',
-                    zh: '来源、笔记和成稿，都在工作站里。' },
-  'work.w3h':     { en: 'A table you can use', zh: '能接着用的表' },
-  'work.w3b':     { en: 'Clean it, join it, export it. The files stay put.',
-                    zh: '清理、拼接、导出。文件还在原地。' },
-  'work.w4h':     { en: 'A script that runs',  zh: '跑得起来的脚本' },
-  'work.w4b':     { en: 'They can install packages and run the thing they just wrote.',
-                    zh: '装好依赖，把刚写的脚本跑完。' },
-  'work.w5h':     { en: 'Open a repo and change it', zh: '打开仓库，改完再交' },
-  'work.w5b':     { en: 'Search, edit, commit. The history stays on that machine.',
-                    zh: '搜索、修改、提交。历史留在这台机器上。' },
-  'value.eyebrow':{ en: 'The sandbox',         zh: '沙箱' },
-  'value.h2':     { en: 'Each agent works on its own workstation', zh: '每个 Agent 都有自己的工作站' },
-  'value.lede':   { en: "They can browse, edit files and run code. They cannot open anyone else's workstation.",
-                    zh: '可以浏览网页、改文件、跑代码。打不开别人的工作站。' },
-  'value.c1h':    { en: 'Separate from your laptop', zh: '跟你的电脑分开' },
-  'value.c1b':    { en: 'One workstation per person. It cannot see your laptop or another tenant.',
-                    zh: '每人一台。看不到你的笔记本，也看不到别人的。' },
-  'value.c2h':    { en: 'Ready when you sign in', zh: '登录就能用' },
-  'value.c2b':    { en: 'The workstation is there when you sign in. No install, no API key to paste.',
-                    zh: '登录时工作站已经在。不用安装，也不用粘模型密钥。' },
-  'value.c3h':    { en: 'Still running after you leave', zh: '你走了还在跑' },
-  'value.c3b':    { en: 'Close the laptop. The agents keep working. Files and history are there when you come back.',
-                    zh: '合上笔记本，Agent 还在干活。文件和历史，回来还在。' },
-  'value.c4h':    { en: 'You can see the steps', zh: '步骤看得到' },
-  'value.c4b':    { en: 'Reasoning and commands show up as they happen. You can stop it.',
-                    zh: '思考和命令会当场显示。随时能停。' },
+  'work.h2':      { en: 'The DSH you already know', zh: '你已经熟悉的 DSH' },
+  'work.lede':    { en: 'Build websites. Research. Ship code. The experience does not change — only where it runs.',
+                    zh: '做网站、做调研、把代码跑起来。体验不变，变的只是它跑在哪。' },
+  'work.w1h':     { en: 'Product launch landing page', zh: '产品上线落地页' },
+  'work.w1b':     { en: 'From a sentence to pages you can open.', zh: '从一句话到能打开的页面。' },
+  'work.w2h':     { en: 'Competitive research brief', zh: '竞品调研简报' },
+  'work.w2b':     { en: 'Sources, notes, and a write-up you can send.', zh: '来源、笔记，和一份能发出去的成稿。' },
+  'work.w3h':     { en: 'Weekly sales table, cleaned', zh: '清洗好的周销售表' },
+  'work.w3b':     { en: 'Clean, join, export. Files stay on the workstation.', zh: '清理、拼接、导出。文件留在工作站。' },
+  'work.w4h':     { en: 'A nightly report that runs', zh: '每晚自动跑的报表' },
+  'work.w4b':     { en: 'Install, build, run — on the same machine.', zh: '安装、构建、运行，就在这台机器上。' },
+  'work.w5h':     { en: 'Read a repository',   zh: '读一个仓库' },
+  'work.w5b':     { en: 'Clone, search, patch.', zh: '克隆、搜索、改代码。' },
+  'value.h2':     { en: 'Runs in a sandbox. Always on.', zh: '在沙箱中运行。电脑关了也不停。' },
+  'value.lede':   { en: 'One sandbox per person. Close the computer — DSH keeps working. Bring your own key.',
+                    zh: '一人一个沙箱。合上电脑，DSH 还在跑。用你自己的 Key。' },
+  'value.c1h':    { en: 'Same DSH',            zh: '体验不变' },
+  'value.c1b':    { en: 'The interface you already know. Nothing new to learn.', zh: '还是你熟悉的 DSH，不用重新学。' },
+  'value.c2h':    { en: 'Swap the sandbox runtime', zh: '沙箱运行时可替换' },
+  'value.c2b':    { en: 'Docker and CubeSandbox are supported today; the latter uses an E2B-compatible API.', zh: '目前支持 Docker 与 CubeSandbox，后者通过 E2B 兼容 API 接入。' },
+  'value.c3h':    { en: 'Not your laptop',     zh: '不用担心自己的电脑' },
+  'value.c3b':    { en: 'Keeps working even when your computer is off.', zh: '电脑关了也还在干活。' },
+  'value.c4h':    { en: 'Bring your own key',  zh: '使用自己的 Key' },
+  'value.c4b':    { en: 'Use your own key. It stays on your workstation.', zh: 'BYOK。Key 留在你的工作站里。' },
 
   'task.state':   { en: 'Running',             zh: '运行中' },
   'task.title':   { en: "Draft this week's revenue report", zh: '起草本周营收报告' },
   'task.prompt':  { en: "Draft this week's revenue report and send it to my team", zh: '起草本周营收报告，发给团队' },
   'task.thinking':{ en: 'Thinking…',           zh: '思考中…' },
 
-  'run.eyebrow':  { en: 'How you run it',      zh: '如何获得' },
-  'run.h2':       { en: 'Hosted for free, or on your own cloud', zh: '免费托管，或部署到自己的云上' },
-  'run.lede':     { en: 'The same product both ways. Self-hosting is the same code, which is why the hosted plan can be trusted.',
-                    zh: '同一套产品，两种交付。自己部署就是这份代码，托管版没有藏着的另一份。' },
+  'run.h2':       { en: 'Choose how to run DSH', zh: '选择 DSH 的运行方式' },
+  'run.lede':     { en: 'Use the hosted service, or deploy it to your own cloud.', zh: '直接使用托管版，或部署到自己的云上。' },
   'run.ah':       { en: 'Start on ours',       zh: '直接用我们的' },
-  'run.a1':       { en: 'An Agent workstation on the free plan, provisioned and kept current for you.',
-                    zh: '免费套餐即得一台 Agent 工作站，开通与更新都由我们负责。' },
-  'run.a2':       { en: 'Invitations while capacity catches up, so nobody queues behind a stranger.',
-                    zh: '容量跟上之前以邀请码发放，不必排在陌生人后面。' },
-  'run.a3':       { en: 'Your machine, your files, your history.', zh: '你的机器、你的文件、你的历史。' },
-  'run.acta':     { en: 'Start free',          zh: '免费开始' },
-  'run.bh':       { en: 'Run it on your own cloud', zh: '部署到自己的云上' },
-  'run.b1':       { en: 'Every line is public. Nothing about the hosted plan is hidden from you.',
-                    zh: '每一行代码都是公开的。托管版里没有一处是你看不到的。' },
-  'run.b2':       { en: 'Docker for a trial, CubeSandbox microVMs in production.', zh: '试跑用 Docker，生产用 CubeSandbox 微虚机。' },
+  'run.a1':       { en: 'Open DSH in your browser. Nothing to install or configure.',
+                    zh: '打开浏览器就是 DSH，不用安装，也不用配置环境。' },
+  'run.a2':       { en: 'Your sandbox keeps running after your computer turns off.',
+                    zh: '你的沙箱跑在云端，电脑关了也不会停。' },
+  'run.a3':       { en: 'Files and sessions stay there, ready when you come back.',
+                    zh: '文件和会话留在工作站里，下次登录接着做。' },
+  'run.acta':     { en: 'Get started for free', zh: '免费开始' },
+  'run.bh':       { en: 'Or run it on your own cloud', zh: '或部署到自己的云上' },
+  'run.b1':       { en: 'Every line is public.', zh: '每一行代码都是公开的。' },
+  'run.b2':       { en: 'Swap runtimes: Docker for a trial, CubeSandbox microVMs in production.', zh: '沙箱运行时可替换：试跑用 Docker，生产用 CubeSandbox 微虚机。' },
   'run.b3':       { en: 'Your credentials, your data, your perimeter.', zh: '你的密钥、你的数据、你的边界。' },
 
   'term.tab1':    { en: 'Docker',              zh: 'Docker' },
@@ -1053,23 +989,20 @@ const T = {
   'term.c2':      { en: '# a microVM per person — what production runs',
                     zh: '# 一人一台微虚机——生产环境的形态' },
 
-  'close.h2':     { en: 'Open your Agent workstation', zh: '开通你的 Agent 工作站' },
-  'close.lede':   { en: 'An invite gets you a hosted workstation. The source is there if you want it on your own cloud.',
-                    zh: '邀请码即可开通托管工作站。想跑在自己云上，源码在 GitHub。' },
-  'close.cta1':   { en: 'Start free',          zh: '免费开始' },
+  'close.h2':     { en: 'Ready to run DSH in the cloud?', zh: '准备好在云上用 DSH 了吗？' },
+  'close.cta1':   { en: 'Get started for free', zh: '免费开始' },
   'close.cta2':   { en: 'Star on GitHub',      zh: '去 GitHub 点个 Star' },
 
   'notice.tag':   { en: 'Independent project', zh: '独立项目声明' },
   'notice.body':  { en: '<strong>DshCloud is an independently developed, unofficial project. DshCloud and DSH are not products of the same company or organization.</strong> This project is not affiliated with, sponsored by, endorsed by, or maintained by DeepSeek AI, the <code>deepseek-ai</code> organization, Tencent Cloud, or the maintainers of DSH or CubeSandbox. Their names and marks are used only to identify interoperability and upstream dependencies; this project claims no ownership of them.',
                     zh: '<strong>DshCloud 是独立开发维护的非官方项目。DshCloud 与 DSH 不是同一家公司或组织的产品。</strong>本项目不隶属于、不代表，也未获得 DeepSeek AI、GitHub 上的 <code>deepseek-ai</code> 组织、腾讯云、DSH 或 CubeSandbox 维护方的赞助、背书或维护。文中相关名称与标识仅用于说明兼容性和上游依赖；本项目不主张对其享有任何权利。' },
 
-  'foot.design':  { en: 'Design notes',        zh: '设计笔记' },
   'foot.dsh':     { en: 'DSH (upstream)',      zh: 'DSH（上游）' },
 
   'copy.idle':    { en: 'Copy',                zh: '复制' },
   'copy.done':    { en: 'Copied',              zh: '已复制' },
 
-  'doc.title':    { en: 'DshCloud — your Agent workstation', zh: 'DshCloud — 你的 Agent 工作站' },
+  'doc.title':    { en: 'DshCloud — DSH, hosted in the cloud', zh: 'DshCloud — 云端托管的 DSH' },
 }
 
 /*

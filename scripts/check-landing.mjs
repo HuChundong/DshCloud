@@ -119,6 +119,19 @@ for (const match of source.matchAll(/\s(?:src|href)="([^"]+)"/g)) {
   }
 }
 
+// The deployed page gets mark.svg during assembly, but people also open the
+// source file directly while designing it. Each visible mark and the favicon
+// must fall back to the gateway-owned source without creating a second copy.
+const checkoutMark = '../../gateway/assets/mark.svg'
+const imageFallback = `onerror="this.onerror=null;this.src='${checkoutMark}'"`
+const iconFallback = `onerror="this.onerror=null;this.href='${checkoutMark}'"`
+const imageFallbacks = source.split(imageFallback).length - 1
+if (imageFallbacks !== 3) problems.push(`mark.svg: expected 3 checkout image fallbacks, found ${imageFallbacks}`)
+if (!source.includes(iconFallback)) problems.push('mark.svg: the favicon has no checkout fallback')
+if (!existsSync(resolve(join(root, 'web/landing'), checkoutMark))) {
+  problems.push(`${checkoutMark}: checkout fallback resolves to nothing`)
+}
+
 // ---- the faces the design is set in are actually in the tree ----
 
 // A missing woff2 does not fail anything at build time and does not error in a
