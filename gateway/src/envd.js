@@ -690,15 +690,75 @@ export async function metrics(handle) {
  * @param {{onEvent: (event: {name: string, type: string}) => void, onEnd: () => void, onError: (error: Error) => void}} sink - where the changes go.
  * @returns {Promise<{close: () => void}>} a handle that ends the watch.
  */
+/**
+ * The watcher that runs inside the sandbox, as a source string.
+ *
+ * Node's own recursive watch, because envd's will not do it here — see
+ * {@link watchDir}. One line of JSON per change on stdout, which is the
+ * cheapest thing to parse out of a process stream.
+ *
+ * `name` is relative to the root, which is the same shape envd's own watcher
+ * reports, so nothing downstream can tell which one it is talking to.
+ */
+const WATCHER_SOURCE = `
+const fs = require('fs')
+const root = process.argv[1]
+const watcher = fs.watch(root, { recursive: true }, (type, name) => {
+  if (name) process.stdout.write(JSON.stringify({ type, name }) + '\\n')
+})
+watcher.on('error', (error) => {
+  process.stderr.write(String(error && error.message) + '\\n')
+  process.exit(1)
+})
+process.stdin.resume()
+`
+
+/**
+ * Hear about changes under a directory.
+ *
+ * Run as a PROCESS in the sandbox rather than through envd's own `WatchDir`,
+ * and the reason is specific: envd refuses to watch a network filesystem, and
+ * a tenant's workspace is one wherever it is a volume. It decides by the
+ * filesystem's magic number — JuiceFS mounts as `fuseblk`, so the refusal is
+ * `cannot watch path on network filesystem` — and it arrives AFTER the stream
+ * is established, so the watch appeared to start and was dead a moment later.
+ *
+ * That refusal is sound in general and wrong here. What inotify cannot see on
+ * a shared filesystem is a write made through somebody ELSE's mount; a
+ * tenant's workspace has exactly one writer, this sandbox, through this mount.
+ * Measured rather than assumed: a recursive `fs.watch` on the volume reports
+ * creations, writes, and files in directories that did not exist when the
+ * watch began.
+ *
+ * envd cannot be taught this — the amd64 binary arrives prebuilt — so the
+ * watcher is a process instead. One implementation for both runtimes, on
+ * purpose: a path that only runs in the simulation is a path whose failure is
+ * discovered in production, which is how every bug this file has had was
+ * found.
+ *
+ * The cost is a node process per watched sandbox, and one real limit: a
+ * recursive watch takes an inotify handle per directory, so a workspace with
+ * an enormous tree can exhaust the kernel's allowance. That surfaces as an
+ * error on the stream, and the panel falls back to asking on a timer.
+ *
+ * @param {string} handle - the runtime's address for the sandbox.
+ * @param {string} path - the directory to watch.
+ * @param {{onEvent: Function, onEnd: Function, onError: Function}} sink - where changes go.
+ * @returns {Promise<{close: () => void}>} the live watch.
+ * @throws {Error} when the process cannot be started.
+ */
 export async function watchDir(handle, path, sink) {
   const endpoint = endpointOf(handle)
-  const body = encodeEnvelope({ path, recursive: true, username: ENVD_USER })
+  const body = encodeEnvelope({
+    process: { cmd: 'node', args: ['-e', WATCHER_SOURCE, path], envs: {}, cwd: '/' },
+    stdin: true,
+  })
   return await new Promise((resolve, reject) => {
     const request = http.request({
       host: endpoint.host,
       port: endpoint.port,
       method: 'POST',
-      path: `${FILESYSTEM}/WatchDir`,
+      path: `${PROCESS}/Start`,
       headers: {
         ...CONNECT_HEADERS,
         ...(endpoint.hostHeader === undefined ? {} : { Host: endpoint.hostHeader }),
@@ -710,16 +770,28 @@ export async function watchDir(handle, path, sink) {
         reject(new Error(`envd: watching ${path} in ${handle} failed (${String(response.statusCode)})`))
         return
       }
+      // stdout arrives in chunks that respect nothing; a change is a line.
+      let pending = ''
       readEnvelopes(response, (flags, message) => {
         if ((flags & END_STREAM_FLAG) !== 0) {
           if (message.error !== undefined) sink.onError(new Error(JSON.stringify(message.error)))
           return
         }
-        // The first frame is `{start:{}}`, which says the watch is live rather
-        // than that anything changed.
-        const event = message.filesystem
-        if (event === undefined) return
-        sink.onEvent({ name: String(event.name ?? ''), type: String(event.type ?? '') })
+        const event = message.event ?? {}
+        if (event.data?.stderr !== undefined) {
+          sink.onError(new Error(Buffer.from(event.data.stderr, 'base64').toString('utf8').trim()))
+          return
+        }
+        if (event.data?.stdout === undefined) return
+        pending += Buffer.from(event.data.stdout, 'base64').toString('utf8')
+        const lines = pending.split('\n')
+        pending = lines.pop() ?? ''
+        for (const line of lines) {
+          if (line === '') continue
+          let change
+          try { change = JSON.parse(line) } catch { continue }
+          sink.onEvent({ name: String(change.name ?? ''), type: String(change.type ?? '') })
+        }
       })
       response.on('end', () => { sink.onEnd() })
       response.on('error', (error) => { sink.onError(error) })
