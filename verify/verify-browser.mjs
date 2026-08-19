@@ -21,7 +21,11 @@
 import { createRequire } from 'node:module'
 import process from 'node:process'
 
-const require = createRequire(new URL(process.env.PLAYWRIGHT_FROM ?? '../package.json', import.meta.url))
+// Resolved from THIS directory, which is where `npm install playwright` puts it
+// and where verify.sh looks before deciding to run this file. Pointing at the
+// repository root made the two disagree: the guard resolved it and this failed
+// to require it, so the suite died here instead of skipping.
+const require = createRequire(new URL(process.env.PLAYWRIGHT_FROM ?? './package.json', import.meta.url))
 const { chromium } = require('playwright')
 
 const GATEWAY = process.env.GATEWAY ?? 'http://localhost:8080'

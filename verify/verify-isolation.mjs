@@ -48,7 +48,7 @@ async function rpc(cookie, method, payload) {
 const alice = await signIn(GATEWAY, process.env.VERIFY_ALICE ?? 'delivered+alice@resend.dev')
 const bob = await signIn(GATEWAY, process.env.VERIFY_BOB ?? 'delivered+bob@resend.dev')
 
-const created = await rpc(alice, 'session.create', { cwd: '/workspace' })
+const created = await rpc(alice, 'session.create', { cwd: '/mnt/workspace' })
 const aliceSession = created.value.sessionId
 console.log(`\nalice created ${aliceSession}`)
 

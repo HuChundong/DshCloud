@@ -72,8 +72,8 @@ mint_invite() {  # mint_invite -> one unused code
         ) SELECT code FROM minted"
 }
 
-login() {  # login <email> <cookiejar> -> status of the final step
-  local code invite
+login() {  # login <email> <cookiejar> -> status of the sign-in step
+  local code invite status
   # Minted before the code is asked for, not after. A code only goes out to an
   # address the deployment already knows or a request that carries a usable
   # invite — otherwise the form would be a way to mail anyone. This is the flow
@@ -86,9 +86,23 @@ login() {  # login <email> <cookiejar> -> status of the final step
   curl -s -o /dev/null -c "$2" -X POST "$GATEWAY/login" \
     --data-urlencode "email=$1" --data-urlencode "invite=$invite"
   code=$(code_for "$1")
-  curl -s -o /dev/null -w '%{http_code}' -b "$2" -c "$2" \
+  status=$(curl -s -o /dev/null -w '%{http_code}' -b "$2" -c "$2" \
     -X POST "$GATEWAY/login" --data-urlencode "email=$1" --data-urlencode "code=$code" \
-    --data-urlencode "invite=$invite"
+    --data-urlencode "invite=$invite")
+
+  # Signing in is not finishing signing up. Until an account has a name, the
+  # gateway answers 403 for the shell document and nginx turns that into a
+  # redirect to /profile — deliberately unskippable, so that a tenant who has
+  # never answered cannot reach the application. This suite predates that gate,
+  # so every account it made stopped on the profile page, and the check that
+  # the frontend loads without a sandbox measured the redirect instead.
+  #
+  # Answered with the address's own local part, which is what a person would
+  # have typed and is unique per tenant here.
+  curl -s -o /dev/null -b "$2" -c "$2" -X POST "$GATEWAY/profile" \
+    --data-urlencode "name=${1%%@*}"
+
+  printf '%s' "$status"
 }
 
 DSH_LABEL='dsh.gateway.sandbox'
@@ -357,11 +371,12 @@ check 'the sandbox runs as production' production "$(fact NODE_ENV)"
 # starting it anywhere else would hand the tenant that directory as their
 # workspace — with full access inside the sandbox, the harness's own
 # installation.
-# Either name is right: without a volume the working directory is /workspace,
-# and with one that path is a symlink onto the volume, which is what a resolved
-# cwd reports. What must never appear here is /app.
+# One name, whether or not a volume is attached: the workspace is a real
+# directory on the mount, and the paths do not change when the volume does.
+# It used to be a symlink onto the volume, so a resolved cwd reported one of two
+# names and both had to be accepted here. What must never appear is /app.
 check 'the tenant workspace is their own' 1 \
-  "$(case "$(fact cwd)" in /workspace|/persist/workspace) echo 1 ;; *) echo 0 ;; esac)"
+  "$(case "$(fact cwd)" in /mnt/workspace) echo 1 ;; *) echo 0 ;; esac)"
 check 'the gateway runs as production' production \
   "$(docker compose exec -T gateway printenv NODE_ENV | tr -d '\r')"
 
@@ -373,9 +388,15 @@ check 'the gateway runs as production' production \
 BACKEND_PATH=$(fact PATH)
 check 'the backend PATH carries the python virtualenv' 1 \
   "$(case "$BACKEND_PATH" in *"/opt/agent-python/bin"*) echo 1 ;; *) echo 0 ;; esac)"
+# The skill root travels the same way PATH does and is checked the same way:
+# taken from the environment the BACKEND actually holds, not from this shell's.
+# Passing only PATH left the skill test reading an unset variable and reporting
+# a bundled skill missing that was present in the image all along.
+BACKEND_SKILLS=$(fact DSH_BUNDLED_SKILL_DIR)
 check 'every promised tool is reachable with it' '' \
   "$(sandbox_run_script "$(sandbox_handles_of "$ALICE" | head -1)" verify-sandbox-tools.sh \
-      "PATH='$BACKEND_PATH'" | tr -d '\r' | tr -s ' ' | sed 's/ *$//')"
+      "PATH='$BACKEND_PATH'; DSH_BUNDLED_SKILL_DIR='$BACKEND_SKILLS'; export DSH_BUNDLED_SKILL_DIR" \
+      | tr -d '\r' | tr -s ' ' | sed 's/ *$//')"
 
 # The agent inside runs with full access on the tenant's behalf, so anything in
 # its environment is something a prompt can be made to read back. Where the
@@ -424,7 +445,7 @@ COMMITTED=$(rpc "$JAR_A" upload.commit "{\"id\":\"$UPLOAD_ID\"}")
 UPLOAD_PATH=$(printf '%s' "$COMMITTED" | sed -n 's/.*"path":"\([^"]*\)".*/\1/p')
 
 check 'it lands under the tenant workspace' 1 \
-  "$(case "$UPLOAD_PATH" in */workspace/uploads/*) echo 1 ;; *) echo 0 ;; esac)"
+  "$(case "$UPLOAD_PATH" in */mnt/workspace/uploads/*) echo 1 ;; *) echo 0 ;; esac)"
 check 'the name became one path segment' "$PROBE" "$(basename "$UPLOAD_PATH")"
 ALICE_BOX=$(sandbox_handles_of "$ALICE" | head -1)
 check 'the bytes are in the sandbox, whole' "$MARKER" \
@@ -432,7 +453,7 @@ check 'the bytes are in the sandbox, whole' "$MARKER" \
 # Nothing is published before commit, so a staging file left behind is a file an
 # agent could read as if it were finished.
 check 'nothing is left staged' 0 \
-  "$(sandbox_sh "$ALICE_BOX" 'ls /workspace/uploads/.staging 2>/dev/null | wc -l' | tr -d ' \r')"
+  "$(sandbox_sh "$ALICE_BOX" 'ls /mnt/workspace/uploads/.staging 2>/dev/null | wc -l' | tr -d ' \r')"
 check 'an unknown upload id is refused' 1 \
   "$(rpc "$JAR_A" upload.commit '{"id":"no-such-upload"}' | grep -c '"ok":false')"
 
@@ -446,9 +467,9 @@ rpc "$JAR_B" upload.chunk \
   "{\"id\":\"$BOB_ID\",\"data\":\"$(printf '%s' "$MARKER" | base64 | tr -d '\n')\"}" > /dev/null
 rpc "$JAR_B" upload.commit "{\"id\":\"$BOB_ID\"}" > /dev/null
 check "bob's upload is not in alice's sandbox" 0 \
-  "$(sandbox_sh "$ALICE_BOX" "ls /workspace/uploads/*/$BOB_PROBE 2>/dev/null | wc -l" | tr -d ' \r')"
+  "$(sandbox_sh "$ALICE_BOX" "ls /mnt/workspace/uploads/*/$BOB_PROBE 2>/dev/null | wc -l" | tr -d ' \r')"
 check "and is in bob's" 1 \
-  "$(sandbox_sh "$(sandbox_handles_of "$BOB" | head -1)" "ls /workspace/uploads/*/$BOB_PROBE 2>/dev/null | wc -l" | tr -d ' \r')"
+  "$(sandbox_sh "$(sandbox_handles_of "$BOB" | head -1)" "ls /mnt/workspace/uploads/*/$BOB_PROBE 2>/dev/null | wc -l" | tr -d ' \r')"
 
 # The configuration document, which is what the Settings page shows in place of
 # the control that would have handed it to a desktop.
@@ -597,13 +618,13 @@ if docker compose exec -T gateway node -e 'import("/app/gateway/src/persistence.
   api "$JAR_A" host.describe > /dev/null
   MARKER="kept-$$"
   BEFORE=$(sandbox_handles_of "$ALICE" | head -1)
-  sandbox_sh "$BEFORE" "printf '%s' '$MARKER' > /workspace/.verify-marker" > /dev/null
+  sandbox_sh "$BEFORE" "printf '%s' '$MARKER' > /mnt/workspace/.verify-marker" > /dev/null
   sandbox_remove_all
   api "$JAR_A" host.describe > /dev/null
   AFTER=$(sandbox_handles_of "$ALICE" | head -1)
   check 'the sandbox really is a different one' 1 "$([ "$AFTER" != "$BEFORE" ] && echo 1 || echo 0)"
   check 'the workspace came back with it' "$MARKER" \
-    "$(sandbox_sh "$AFTER" 'cat /workspace/.verify-marker 2>/dev/null')"
+    "$(sandbox_sh "$AFTER" 'cat /mnt/workspace/.verify-marker 2>/dev/null')"
 fi
 
 echo

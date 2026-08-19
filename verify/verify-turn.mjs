@@ -53,7 +53,7 @@ await new Promise((resolve, reject) => {
 })
 console.log('mux downlink open')
 
-const { sessionId } = await rpc('session.create', { cwd: '/workspace' })
+const { sessionId } = await rpc('session.create', { cwd: '/mnt/workspace' })
 console.log(`session: ${sessionId}`)
 
 /** Text parts of the assistant messages this turn produced, in arrival order. */
