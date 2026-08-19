@@ -2058,16 +2058,36 @@ window.__ModuleLoader__.load({
       const [text, setText] = React.useState({ status: 'loading' })
       const [ticket, setTicket] = React.useState({ status: 'loading' })
 
+      /**
+       * Bumped whenever what is on screen might no longer be the file.
+       *
+       * Everything below keys off the path, and a path does not change when
+       * its contents do — so an agent rewriting the open file, or a person
+       * pressing refresh, changed nothing here. The frame was the visible
+       * case, because a browser will not re-fetch a src it already has, but
+       * text and images were just as stale and quieter about it.
+       *
+       * `stale` means the sandbox knows something moved without knowing what,
+       * which is also what the refresh control sends.
+       */
+      const [revision, setRevision] = React.useState(0)
+      React.useEffect(() => workspaceWatch.subscribe((change) => {
+        if (change.stale === true || change.path === path) setRevision((n) => n + 1)
+      }), [path])
+
       React.useEffect(() => {
         if (kind !== 'html') return undefined
         let live = true
         setTicket({ status: 'loading' })
+        // Reminted rather than reused: a ticket lasts minutes and a tab can be
+        // open for hours, so refreshing an old one with a stale ticket would
+        // load a page whose every asset 401s.
         mintTicket().then(
           (value) => { if (live) setTicket({ status: 'ready', value }) },
           (error) => { if (live) setTicket({ status: 'failed', message: error.message }) },
         )
         return () => { live = false }
-      }, [path, kind])
+      }, [path, kind, revision])
 
       React.useEffect(() => {
         if (!wants) return undefined
@@ -2089,10 +2109,11 @@ window.__ModuleLoader__.load({
           (error) => { if (live) setText({ status: 'failed', message: error.message }) },
         )
         return () => { live = false }
-      }, [path, wants])
+      }, [path, wants, revision])
 
       if (kind === 'image') {
-        return h('div', { className: `${NS}-media` }, h('img', { className: `${NS}-image`, src: rawUrl(path), alt: basename(path) }))
+        return h('div', { className: `${NS}-media` },
+          h('img', { key: `${path}:${String(revision)}`, className: `${NS}-image`, src: rawUrl(path), alt: basename(path) }))
       }
       if (kind === 'html') {
         if (ticket.status === 'loading') return h('div', { className: `${NS}-placeholder` }, '准备预览…')
@@ -2103,7 +2124,11 @@ window.__ModuleLoader__.load({
         // the page is opened outside this frame. That opacity is also why the
         // URL carries a ticket: an opaque origin sends no cookies, so without
         // one the page would load and every asset in it would 401.
+        // Keyed by revision as well as path, which is what actually reloads
+        // it: React reuses an iframe whose src is unchanged, and the src has
+        // to stay unchanged so the page's own relative assets keep resolving.
         return h('iframe', {
+          key: `${path}:${String(revision)}`,
           className: `${NS}-frame`,
           src: previewUrl(ticket.value, path),
           sandbox: 'allow-scripts allow-popups allow-downloads allow-modals',

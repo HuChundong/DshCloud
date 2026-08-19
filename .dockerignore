@@ -4,4 +4,9 @@ node_modules
 .env
 .env.*
 !.env.example
+# Prose does not belong in a build context — but the landing page's images do,
+# and they are the README's own so that the two cannot drift apart. Without the
+# exception `COPY docs/assets` fails, which a warm cache hides for as long as
+# that layer is never rebuilt: it broke only on a machine that had no cache.
 docs
+!docs/assets

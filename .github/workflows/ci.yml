@@ -49,6 +49,13 @@ jobs:
       - name: Documentation
         run: node scripts/check-docs.mjs
 
+      # The landing page is served from two roots and carries both languages in
+      # one file, and neither of those survives being assumed. Here rather than
+      # only in the Pages workflow, because a pull request that breaks it should
+      # fail before it is merged, not after it is published.
+      - name: Landing page
+        run: node scripts/check-landing.mjs
+
       # The upload store, which needs only the tree: names that traverse, chunks
       # that overrun, a second file of one name on one day. The acceptance suite
       # sends a real file through the real tunnel; it would never think to

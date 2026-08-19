@@ -1,0 +1,69 @@
+name: Pages
+
+# The project page, from the same file the web image serves at `/welcome/`.
+# Nothing is built: the page is one document that fetches nothing, so publishing
+# it is a copy — the same two copies `scripts/landing-preview.sh` and the
+# `web` stage of the Dockerfile make, for the same reason.
+
+on:
+  push:
+    branches: [main]
+    # Only what the site is made of. A push that touches neither leaves the
+    # published page exactly as it was, so republishing it says nothing.
+    paths:
+      - 'web/landing/**'
+      - 'docs/assets/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time, and the newest wins. `cancel-in-progress: false`
+# unlike CI: a half-finished deployment is a published page, and cancelling one
+# leaves the site in whatever state it reached.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      # The same gate CI runs. It is repeated here rather than assumed, because
+      # this workflow can be dispatched by hand against a tree CI never saw.
+      - name: Landing page
+        run: node scripts/check-landing.mjs
+
+      - name: Assemble
+        run: |
+          # Everything under web/landing — the page and its fonts — plus the
+          # README's screenshots, which live in docs/assets so that the two
+          # cannot show different pictures.
+          mkdir -p _site/assets
+          cp -R web/landing/. _site/
+          cp docs/assets/* _site/assets/
+          cp gateway/assets/mark.svg _site/
+          # Pages runs Jekyll over an artifact unless told not to, and Jekyll
+          # drops files and directories whose names begin with an underscore.
+          # Nothing here starts with one today; this keeps that from becoming a
+          # thing anyone has to remember.
+          touch _site/.nojekyll
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - id: deploy
+        uses: actions/deploy-pages@v4

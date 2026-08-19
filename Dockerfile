@@ -501,6 +501,21 @@ FROM nginx:alpine AS web
 RUN apk add --no-cache openssl
 COPY --from=deps /app/node_modules/@deepseek-ai/dsh-web-frontend/dist /usr/share/nginx/html
 COPY --from=shell /shell /usr/share/nginx/html
+# The landing page, which is what an anonymous visitor to `/` is shown. Its own
+# root rather than a directory under the shell's, because the shell's root is
+# upstream's published build and anything added to it is one npm release away
+# from colliding with a name that build starts using.
+#
+# Two copies, not one: the page references its images relatively so that the
+# same bytes work at the site root on GitHub Pages, and the images themselves
+# are `docs/assets` — the README's, not a second set that could fall out of
+# date with it.
+COPY web/landing /usr/share/nginx/landing
+COPY docs/assets /usr/share/nginx/landing/assets
+# The mark the login, profile and admin pages already wear. Copied from the one
+# file the gateway serves rather than duplicated into `web/`, so a replacement
+# lands on the front door and the sign-in page at the same time.
+COPY gateway/assets/mark.svg /usr/share/nginx/landing/mark.svg
 COPY web/nginx.conf /etc/nginx/conf.d/default.conf
 # Not under conf.d: everything matching conf.d/*.conf is included at the http
 # level, and this is a fragment of a server block.

@@ -183,6 +183,16 @@ location = /_auth {
 
 location @login { return 303 /login; }
 
+# Someone who has not signed in and did not arrive at `/login` on purpose. They
+# used to be sent straight to the sign-in form, which asks for an invite code
+# from a stranger who has not yet been told what any of this is; they meet the
+# landing page instead, and reach the form from a button on it.
+#
+# Only `/` and the shell document redirect here. A 401 on `/api` stays a 401:
+# an application that lost its session needs a status its client can act on,
+# not a page it will try to parse as JSON.
+location @landing { return 303 /welcome/; }
+
 # Signed in, but not finished signing up. The gate answers 403 for that, and
 # only for the shell document, so an account that has never chosen a name meets
 # the profile page instead of an application it is halfway into.
@@ -209,7 +219,7 @@ location = / {
   auth_request /_auth;
   auth_request_set $renew_access $upstream_http_x_renew_access;
   auth_request_set $renew_refresh $upstream_http_x_renew_refresh;
-  error_page 401 = @login;
+  error_page 401 = @landing;
   error_page 403 = @profile;
   try_files /index.html =404;
   add_header Set-Cookie $renew_access;
@@ -221,7 +231,7 @@ location = /index.html {
   auth_request /_auth;
   auth_request_set $renew_access $upstream_http_x_renew_access;
   auth_request_set $renew_refresh $upstream_http_x_renew_refresh;
-  error_page 401 = @login;
+  error_page 401 = @landing;
   error_page 403 = @profile;
   add_header Set-Cookie $renew_access;
   add_header Set-Cookie $renew_refresh;
@@ -249,6 +259,43 @@ location /assets/ {
 # server-level `types` block replaces the inherited map wholesale.
 location = /manifest.webmanifest {
   default_type application/manifest+json;
+}
+
+# ---- the landing page ----
+
+# Anonymous, and it has to be: it is what someone sees before they have an
+# account. It sits in its own root rather than under the shell's, because the
+# shell's root is upstream's published build and a file added beside it is one
+# release away from colliding with a name that build starts using.
+#
+# The trailing slash is load-bearing. The page references its images relatively
+# — `assets/…`, no leading slash — so that the same bytes serve from the site
+# root on GitHub Pages and from here. Reached at `/welcome`, the browser would
+# resolve those against `/` and ask the shell's root for them; the exact-match
+# redirect below is what stops that, and it is why `@landing` names the slashed
+# form directly rather than relying on nginx to add it.
+location = /welcome { return 303 /welcome/; }
+
+# `try_files` with a literal path rather than `alias` pointed straight at the
+# document. Aliasing the file looks tidier and does not work: this location's
+# URI ends in a slash, so the index module runs first and asks for
+# `…/index.htmlindex.html`, which nginx reports as a 500 and an alert about a
+# path that is not a directory.
+location = /welcome/ {
+  alias /usr/share/nginx/landing/;
+  try_files /index.html =404;
+  # One document, edited in place and never hashed, so a cached copy is a stale
+  # copy. It revalidates rather than refetching: the page is small, and the 304
+  # costs less than the redirect that brought the visitor here.
+  add_header Cache-Control "no-cache";
+}
+
+# The images. A short expiry rather than the shell's `1y, immutable`: these
+# filenames are `screenshot-workspace.png`, not a content hash, so the same
+# name means something different after every redesign.
+location /welcome/ {
+  alias /usr/share/nginx/landing/;
+  expires 1h;
 }
 
 location / {

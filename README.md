@@ -152,6 +152,38 @@ up as they are reclaimed and recreated.
 The first request after a login waits for that tenant's container to start and
 dsh to boot, so it is noticeably slower than the ones after it.
 
+## The landing page
+
+`http://localhost:8080/` answers a signed-in tenant with the application and
+everyone else with [`web/landing/index.html`](web/landing/index.html), at
+`/welcome/`. It is one document that reaches no other host — no CDN, no
+framework, no analytics — because a deployment on a private network is a place
+where an external request is not slow but unanswered. The three faces it is set
+in are in `web/landing/fonts/`, latin subsets, 72 KB together; they are
+[SIL Open Font Licence](https://openfontlicense.org) and redistributing them
+beside this MIT source is what that licence is for.
+
+`web/landing/avatar.webp` is the one asset in the tree that is derived rather
+than authored. It is the head of `gateway/assets/ad.webp` — the project's
+mascot — cropped to the box `(0.28, 0.12)`–`(0.72, 0.56)` of the original,
+resampled to 128px and re-encoded: 5 KB instead of 701 KB, and without the
+strapline the source carries across its lower third. Regenerate it from the
+source rather than editing it in place.
+
+The same file is the project page on GitHub Pages, published by
+[`.github/workflows/pages.yml`](.github/workflows/pages.yml). Serving from two
+roots is why its images are referenced relatively and its application links
+absolutely; `scripts/check-landing.mjs` asserts that, along with both languages
+being present for every string it shows.
+
+```sh
+scripts/landing-preview.sh        # assembles it the way both deployments do
+```
+
+The page cannot be opened straight from the tree: it references `assets/…`, and
+those are `docs/assets` — the README's own screenshots, so that the two cannot
+show different pictures.
+
 ## Running on CubeSandbox
 
 ```sh
