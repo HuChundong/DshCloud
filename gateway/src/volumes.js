@@ -31,8 +31,13 @@ const DRIVER = process.env.SANDBOX_VOLUME_DRIVER ?? 'juicefs'
  * are both subdirectories, and both are reached by their real names. Nothing
  * is linked or bound out of here: the paths the sandbox uses ARE these paths,
  * because which path the workspace has was always ours to choose.
+ *
+ * `||` rather than `??`, because compose passes an unset variable through as
+ * an empty string and `??` would keep it — mounting the volume at "" while the
+ * image writes to /mnt. The same value is spelled again in `compose.cube.yml`,
+ * and the two disagreeing is silent data loss rather than an error.
  */
-const MOUNT_PATH = process.env.SANDBOX_VOLUME_MOUNT ?? '/mnt'
+const MOUNT_PATH = process.env.SANDBOX_VOLUME_MOUNT || '/mnt'
 
 /**
  * Whether this deployment gives tenants a volume.

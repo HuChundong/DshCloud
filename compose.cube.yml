@@ -38,4 +38,10 @@ services:
       # driver in integrations/cube-volume-juicefs/. `off` makes sandboxes ephemeral.
       SANDBOX_VOLUMES: ${SANDBOX_VOLUMES:-on}
       SANDBOX_VOLUME_DRIVER: ${SANDBOX_VOLUME_DRIVER:-juicefs}
-      SANDBOX_VOLUME_MOUNT: ${SANDBOX_VOLUME_MOUNT:-/persist}
+      # MUST match the default in gateway/src/volumes.js and the paths the
+      # sandbox image is built around. A default here that disagreed with the
+      # code is not a misconfiguration, it is silent data loss: the volume
+      # mounts at one path while the workspace and DSH_HOME are written at
+      # another, so everything a tenant does lives in the writable layer and
+      # dies with the sandbox — with no error anywhere.
+      SANDBOX_VOLUME_MOUNT: ${SANDBOX_VOLUME_MOUNT:-/mnt}
