@@ -15,17 +15,17 @@
  *
  * Two rules, both of which have a specific failure behind them.
  *
- * Absolute only, and never assembled from a relative one. `ENV HOME=/workspace`
- * in the Dockerfile is a container environment variable, not root's home in
- * `/etc/passwd`, and envd resolves a relative path against passwd — so `notes.md`
- * does not mean `/workspace/notes.md`, it means `/root/notes.md`. Guessing a
- * base would therefore land somewhere the caller never named. The client
- * resolves against the session's cwd before it asks.
+ * Absolute only, and never assembled from a relative one. `ENV HOME` in the
+ * Dockerfile is a container environment variable, not root's home in
+ * `/etc/passwd`, and envd resolves a relative path against passwd — so
+ * `notes.md` does not mean a file in the workspace, it means `/root/notes.md`.
+ * Guessing a base would therefore land somewhere the caller never named. The
+ * client resolves against the session's cwd before it asks.
  *
- * Inside `/workspace` after normalisation, checked segment-wise rather than by
- * `startsWith`. A raw prefix test admits `/workspace-of-someone-else`, which
- * is the oldest bug in this shape of code — and here it would simply be wrong,
- * since that is a different directory than the one being scoped to.
+ * Inside the root after normalisation, checked segment-wise rather than by
+ * `startsWith`. A raw prefix test admits `/mnt/workspace-of-someone-else`,
+ * which is the oldest bug in this shape of code — and here it would simply be
+ * wrong, since that is a different directory than the one being scoped to.
  *
  * Symlinks are deliberately NOT chased. A path spelled inside the workspace
  * that resolves elsewhere in the sandbox is followed, because a tenant who
@@ -42,11 +42,12 @@ import path from 'node:path/posix'
 /**
  * The directory the panel is a browser of.
  *
- * The sandbox's `/workspace` is a symlink to the tenant's volume, so this is
- * where their own files are and the only part of that filesystem that is
- * theirs rather than the image's.
+ * A real directory on the tenant's mount, and the same path whether or not
+ * they have a volume. It used to be `/workspace`, a symlink into the volume —
+ * which meant the workspace had two names, and the one the panel used was the
+ * one `find` refuses to follow.
  */
-export const ROOT = '/workspace'
+export const ROOT = '/mnt/workspace'
 
 /** What a refusal carries: a status the route can answer with, and a reason. */
 export class PathRefused extends Error {
@@ -65,8 +66,8 @@ export class PathRefused extends Error {
  * Whether `target` is `base` or lies under it.
  *
  * Segment-wise: equal, or prefixed by `base` and a separator. `startsWith` on
- * its own would accept `/workspace-evil` for a base of `/workspace`, and that
- * is a real escape rather than a theoretical one — the sandbox's root has
+ * its own would accept `/mnt/workspace-evil` for a base of `/mnt/workspace`,
+ * and that is a real escape rather than a theoretical one — the mount has
  * sibling directories a tenant can create.
  *
  * Both sides are expected to be already normalised, which is what
@@ -87,8 +88,8 @@ export function isWithin(base, target) {
  * Refuses anything that is not already absolute rather than resolving it
  * against a base — see the module comment for why a base would be the wrong
  * one. A NUL byte is refused outright: it truncates the path in every C API it
- * eventually reaches, so `/workspace/ok\0/../../etc/shadow` would be judged as
- * one path and read as another.
+ * eventually reaches, so `/mnt/workspace/ok\0/../../etc/shadow` would be
+ * judged as one path and read as another.
  *
  * @param {unknown} value - what the caller sent.
  * @returns {string} the normalised absolute path.

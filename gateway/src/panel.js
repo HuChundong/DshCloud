@@ -17,7 +17,7 @@
  * root shell they type into. Anything the panel could be tricked into reading,
  * they can read by asking for it.
  *
- * So `/workspace` is the panel's SCOPE, not a fence: it is what makes this a
+ * So the workspace is the panel's SCOPE, not a fence: it is what makes this a
  * workspace browser rather than a filesystem browser, and it keeps paths
  * absolute and rooted. An earlier version also resolved every path through
  * `realpath` and re-checked the answer, to stop a symlink out of the

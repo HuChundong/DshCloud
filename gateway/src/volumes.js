@@ -24,8 +24,15 @@ import process from 'node:process'
 /** The driver CubeMaster routes create/destroy/attach/detach to. */
 const DRIVER = process.env.SANDBOX_VOLUME_DRIVER ?? 'juicefs'
 
-/** Where a tenant's volume is mounted inside their sandbox. */
-const MOUNT_PATH = process.env.SANDBOX_VOLUME_MOUNT ?? '/persist'
+/**
+ * Where a tenant's volume is mounted inside their sandbox.
+ *
+ * Everything of theirs lives under it — the workspace and the harness's state
+ * are both subdirectories, and both are reached by their real names. Nothing
+ * is linked or bound out of here: the paths the sandbox uses ARE these paths,
+ * because which path the workspace has was always ours to choose.
+ */
+const MOUNT_PATH = process.env.SANDBOX_VOLUME_MOUNT ?? '/mnt'
 
 /**
  * Whether this deployment gives tenants a volume.

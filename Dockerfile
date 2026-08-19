@@ -330,10 +330,29 @@ RUN chmod +x /app/sandbox/entrypoint.sh
 # as `dsh`, named explicitly so the entrypoint does not depend on PATH.
 ENV DSH_BIN=/app/node_modules/@deepseek-ai/dsh/lib/bin.js
 
+# Everything of the tenant's lives under one mount, and the paths are the same
+# whether or not a volume is attached — see `sandbox/entrypoint.sh` for why that
+# sameness is the point rather than a convenience.
+ENV MOUNT=/mnt
+ENV WORKSPACE=/mnt/workspace
+
+# Where the IMAGE keeps its own harness home. Only `profiles/` in here is ever
+# used at runtime: the entrypoint links it into the tenant's DSH_HOME, because
+# the harness hardcodes that location and that one directory belongs to the
+# image rather than to the tenant.
+ENV IMAGE_DSH_HOME=/root/.dsh
+
+# THE BUILD RUNS AGAINST THE IMAGE'S HOME. Everything below that composes a
+# profile writes into it — `--dump-config` materializes the flat fallback
+# `profiles/node_modules`, and the plugin install fills `profiles/web`. Pointing
+# DSH_HOME at the mount this early sent both into a directory that only exists
+# at runtime, and the image shipped a profile the harness could not boot.
+# It is switched to the tenant's home further down, before `env.sh` records it.
+ENV DSH_HOME=$IMAGE_DSH_HOME
+
 # The tenant's workspace is also their home, so the in-app directory picker
 # opens on it rather than on an empty /root.
-ENV DSH_HOME=/root/.dsh
-ENV HOME=/workspace
+ENV HOME=/mnt/workspace
 
 # The container is the sandbox. Asking a tenant to approve each file write and
 # each command would be guarding the inside of a box that exists to be written
@@ -382,7 +401,7 @@ COPY --from=panel-build /panel/lib /src/packages/dsh-artifact-panel/lib
 # unresolvable and the tunnel plugin dead on its first import. Copies put the
 # plugin and everything it needs under the profile, where the registry looks.
 RUN npm install --omit=dev --no-audit --no-fund --install-links \
-      --prefix /root/.dsh/profiles/web \
+      --prefix "$IMAGE_DSH_HOME/profiles/web" \
       /src/packages/dsh-gateway-tunnel \
       /src/packages/dsh-sandbox-host \
       /src/packages/dsh-tenant-account \
@@ -404,7 +423,13 @@ RUN npm install --omit=dev --no-audit --no-fund --install-links \
 # image's PATH names, so a tenant's agent found `officecli` in /usr/local/bin
 # and no `python` at all. Anything installed outside the default directories
 # has to be reachable through this file or it does not exist to the backend.
-RUN for name in PATH DSH_BIN DSH_HOME HOME DSH_PERMISSION_MODE NODE_ENV \
+#
+# The tenant's harness state, on the mount beside their files. Set HERE, after
+# everything that composes a profile has run against the image's own home and
+# before this file records what the backend will start with.
+ENV DSH_HOME=/mnt/dsh
+
+RUN for name in PATH DSH_BIN DSH_HOME IMAGE_DSH_HOME MOUNT WORKSPACE HOME DSH_PERMISSION_MODE NODE_ENV \
                 NODE_EXTRA_CA_CERTS TZ VIRTUAL_ENV MPLBACKEND MPLCONFIGDIR \
                 OFFICECLI_SKIP_UPDATE DSH_BUNDLED_SKILL_DIR; do \
       printf 'export %s=%s\n' "$name" "$(printenv "$name")"; \
@@ -427,14 +452,14 @@ COPY --from=cube-tools /usr/local/bin/cube-entrypoint.sh /usr/local/bin/cube-ent
 
 # The tenant's workspace, and nothing else in it.
 #
-# HOME is /workspace, so every npm and corepack call above wrote a cache here.
-# That is what made the entrypoint's `rmdir /workspace` fail, silently, and
-# sent every tenant's files to a writable layer that dies with the sandbox.
-# Emptied here as well as handled there, because the entrypoint's fallback
-# moves whatever it finds into the tenant's volume — and a build artefact is
-# not something a tenant should find in their files.
-RUN mkdir -p /workspace && rm -rf /workspace/.[!.]* /workspace/* 2>/dev/null || true
-WORKDIR /workspace
+# HOME is the workspace, so every npm and corepack call above wrote a cache
+# here. A build artefact is not something a tenant should find in their files,
+# and with a volume attached this directory is shadowed by the mount anyway —
+# what is emptied here is what the Docker simulation would otherwise start
+# with.
+RUN mkdir -p "$WORKSPACE" "$DSH_HOME" \
+ && rm -rf "$WORKSPACE"/.[!.]* "$WORKSPACE"/* 2>/dev/null || true
+WORKDIR /mnt/workspace
 EXPOSE 49983
 ENTRYPOINT ["/usr/local/bin/cube-entrypoint.sh"]
 
@@ -451,7 +476,14 @@ ENTRYPOINT ["/usr/local/bin/cube-entrypoint.sh"]
 FROM sandbox AS shell
 WORKDIR /app
 COPY web/harvest-shell.mjs sandbox/harvest.patch.yml web/patch-loopback.mjs ./web/
-RUN node web/harvest-shell.mjs /shell
+# Harvested against the IMAGE's harness home, not the tenant's.
+#
+# `DSH_HOME` points at the mount, where `profiles/` is a link the entrypoint
+# makes at boot — and nothing has booted here. Overridden for this one command
+# rather than by moving the profile, because these are the same directory: at
+# runtime the tenant's `$DSH_HOME/profiles` links straight back to this one, so
+# what is harvested is what the backend will serve.
+RUN DSH_HOME="$IMAGE_DSH_HOME" node web/harvest-shell.mjs /shell
 # The one patch this repository applies to the harness, and the only one. It
 # enables the settings plane for browsers that are not on loopback — which is
 # every tenant of a deployment reached by a domain name. `web/patch-loopback.mjs`

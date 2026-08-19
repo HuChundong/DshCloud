@@ -75,27 +75,27 @@ const refused = (value, status) => {
 // ---- what is allowed through --------------------------------------------
 
 t('a plain path inside the workspace passes', () => {
-  assert.equal(requireInsideRoot('/workspace/notes.md'), '/workspace/notes.md')
+  assert.equal(requireInsideRoot(`${ROOT}/notes.md`), `${ROOT}/notes.md`)
 })
 
 t('the workspace itself passes', () => {
-  assert.equal(requireInsideRoot('/workspace'), '/workspace')
+  assert.equal(requireInsideRoot(`${ROOT}`), `${ROOT}`)
 })
 
 t('a trailing slash is dropped so two spellings are one path', () => {
-  assert.equal(requireInsideRoot('/workspace/src/'), '/workspace/src')
+  assert.equal(requireInsideRoot(`${ROOT}/src/`), `${ROOT}/src`)
 })
 
 t('interior traversal that stays inside is normalised, not refused', () => {
-  assert.equal(requireInsideRoot('/workspace/a/../b/c.txt'), '/workspace/b/c.txt')
+  assert.equal(requireInsideRoot(`${ROOT}/a/../b/c.txt`), `${ROOT}/b/c.txt`)
 })
 
 t('repeated separators collapse', () => {
-  assert.equal(requireInsideRoot('/workspace//a///b.txt'), '/workspace/a/b.txt')
+  assert.equal(requireInsideRoot(`${ROOT}//a///b.txt`), `${ROOT}/a/b.txt`)
 })
 
 t('a name that merely looks like a traversal is a name', () => {
-  assert.equal(requireInsideRoot('/workspace/..hidden'), '/workspace/..hidden')
+  assert.equal(requireInsideRoot(`${ROOT}/..hidden`), `${ROOT}/..hidden`)
 })
 
 // ---- what is turned away ------------------------------------------------
@@ -113,18 +113,18 @@ t('an empty path is refused', () => {
 t('a non-string path is refused', () => {
   refused(undefined, 400)
   refused(42, 400)
-  refused({ path: '/workspace' }, 400)
+  refused({ path: `${ROOT}` }, 400)
 })
 
 t('a null byte is refused', () => {
   // It truncates the path in the C API this eventually reaches, so the path
   // judged here and the path opened there would differ.
-  refused('/workspace/ok\0/../../etc/shadow', 400)
+  refused(`${ROOT}/ok\0/../../etc/shadow`, 400)
 })
 
 t('traversal out of the workspace is refused', () => {
-  refused('/workspace/../etc/shadow', 403)
-  refused('/workspace/a/../../root/.dsh', 403)
+  refused(`${ROOT}/../etc/shadow`, 403)
+  refused(`${ROOT}/a/../../root/.dsh`, 403)
 })
 
 t('the tenant secrets directory is refused', () => {
@@ -138,10 +138,10 @@ t('a path outside the workspace is out of scope', () => {
 })
 
 t('a sibling directory sharing the prefix is refused', () => {
-  // `startsWith('/workspace')` alone would let all of these through.
-  refused('/workspace-evil/x', 403)
-  refused('/workspaces/x', 403)
-  refused('/workspace.bak', 403)
+  // `startsWith(`${ROOT}`)` alone would let all of these through.
+  refused(`${ROOT}-evil/x`, 403)
+  refused(`${ROOT}s/x`, 403)
+  refused(`${ROOT}.bak`, 403)
 })
 
 t('the filesystem root is refused', () => {
@@ -175,18 +175,18 @@ t('requireAbsolute normalises without judging where it points', () => {
 // ---- the raw route's URL vocabulary -------------------------------------
 
 t('a raw URL round-trips', () => {
-  const p = '/workspace/reports/2026 Q1.md'
+  const p = `${ROOT}/reports/2026 Q1.md`
   assert.equal(pathFromRawUrl(rawUrl(p)), p)
 })
 
 t('a raw URL encodes each segment, keeping the separators as separators', () => {
   // Path-encoded rather than a query parameter, so a previewed page's
   // `./style.css` resolves back into this same route.
-  assert.equal(rawUrl('/workspace/a b/c#d.html'), `${RAW_PREFIX}workspace/a%20b/c%23d.html`)
+  assert.equal(rawUrl(`${ROOT}/a b/c#d.html`), `${RAW_PREFIX}mnt/workspace/a%20b/c%23d.html`)
 })
 
 t('a raw URL of a path with a slash-bearing name cannot forge a segment', () => {
-  assert.equal(pathFromRawUrl(rawUrl('/workspace/a%2Fb')), '/workspace/a%2Fb')
+  assert.equal(pathFromRawUrl(rawUrl(`${ROOT}/a%2Fb`)), `${ROOT}/a%2Fb`)
 })
 
 t('a URL that is not ours decodes to nothing', () => {
@@ -195,18 +195,18 @@ t('a URL that is not ours decodes to nothing', () => {
 })
 
 t('malformed percent-encoding decodes to nothing rather than throwing', () => {
-  assert.equal(pathFromRawUrl(`${RAW_PREFIX}workspace/%zz`), undefined)
+  assert.equal(pathFromRawUrl(`${RAW_PREFIX}mnt/workspace/%zz`), undefined)
 })
 
 t('an encoded traversal decodes, and is then refused by the fence', () => {
   // The decoder does not judge; this is the pair that makes it safe.
-  const decoded = pathFromRawUrl(`${RAW_PREFIX}workspace/%2e%2e/%2e%2e/root`)
-  assert.equal(decoded, '/workspace/../../root')
+  const decoded = pathFromRawUrl(`${RAW_PREFIX}mnt/workspace/%2e%2e/%2e%2e/root`)
+  assert.equal(decoded, `${ROOT}/../../root`)
   refused(decoded, 403)
 })
 
 t('the root the fence bounds is the workspace', () => {
-  assert.equal(ROOT, '/workspace')
+  assert.equal(ROOT, `${ROOT}`)
 })
 
 // ---- preview tickets -----------------------------------------------------
@@ -244,9 +244,9 @@ t('nonsense in the ticket slot is refused rather than thrown at', () => {
 
 t('a ticket survives a URL path, which is where it lives', () => {
   const ticket = mintTicket(SECRET, 'acct-1', NOW)
-  const parsed = readPreviewUrl(previewUrl(ticket, '/workspace/a b/index.html'))
+  const parsed = readPreviewUrl(previewUrl(ticket, `${ROOT}/a b/index.html`))
   assert.equal(parsed.ticket, ticket)
-  assert.equal(parsed.path, '/workspace/a b/index.html')
+  assert.equal(parsed.path, `${ROOT}/a b/index.html`)
   assert.equal(readTicket(SECRET, parsed.ticket, NOW), 'acct-1')
 })
 
@@ -255,11 +255,11 @@ t('a relative asset resolves to a URL that still carries the ticket', () => {
   // algorithm drops the query of a path-relative reference, and with it the
   // only thing authenticating the request.
   const ticket = mintTicket(SECRET, 'acct-1', NOW)
-  const page = new URL(previewUrl(ticket, '/workspace/report/index.html'), 'https://example.test')
+  const page = new URL(previewUrl(ticket, `${ROOT}/report/index.html`), 'https://example.test')
   const asset = new URL('./assets/style.css', page)
   const parsed = readPreviewUrl(asset.pathname)
   assert.equal(readTicket(SECRET, parsed.ticket, NOW), 'acct-1')
-  assert.equal(parsed.path, '/workspace/report/assets/style.css')
+  assert.equal(parsed.path, `${ROOT}/report/assets/style.css`)
 })
 
 t('a preview URL with no file part is not one of ours', () => {
@@ -270,7 +270,7 @@ t('a preview URL with no file part is not one of ours', () => {
 
 t('a preview path is still bounded by the same scope', () => {
   const ticket = mintTicket(SECRET, 'acct-1', NOW)
-  const parsed = readPreviewUrl(previewUrl(ticket, '/workspace/../root/.dsh'))
+  const parsed = readPreviewUrl(previewUrl(ticket, `${ROOT}/../root/.dsh`))
   refused(parsed.path, 403)
 })
 

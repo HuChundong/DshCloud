@@ -11,8 +11,8 @@
  *
  * So the preview's URLs authenticate themselves. The ticket is one path segment
  * and it sits BEFORE the file's path, which is the whole trick: a page at
- * `/sandbox/preview/<ticket>/workspace/a/index.html` resolves `./style.css` to
- * `/sandbox/preview/<ticket>/workspace/a/style.css`, carrying the ticket along
+ * `/sandbox/preview/<ticket>/mnt/workspace/a/index.html` resolves `./style.css`
+ * to the same directory, carrying the ticket along
  * without the page knowing it exists. A query parameter cannot do this — the
  * URL algorithm drops the query of a path-relative reference.
  *

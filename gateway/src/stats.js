@@ -1,66 +1,35 @@
 /**
- * One sample per sandbox, however many people are watching it.
+ * One stream per sandbox, however many people are watching it.
  *
- * The status bar used to poll: every open tab asked its own sandbox for its
- * own numbers every five seconds, down the tunnel, and went on asking while
- * the tab sat in the background with nobody looking at it. The cost of that
- * grows with tabs, which is the wrong thing for it to grow with — a machine
- * has one temperature no matter how many thermometers are pointed at it.
+ * The status bar used to poll from every open tab: each asked its own sandbox
+ * for its own numbers every five seconds, and went on asking while the tab sat
+ * in the background with nobody looking at it. That was moved to the gateway,
+ * which fixed the growth with tabs but left a timer per sandbox on the one
+ * machine that has every sandbox.
  *
- * So the sampling moved here. A sandbox is sampled while at least one browser
- * is watching it and not otherwise, at one interval regardless of how many
- * are, and every watcher gets the same reading. A tenant with three tabs open
- * costs exactly what a tenant with one does; a tenant with none costs nothing.
- *
- * What this is NOT is a push from the sandbox. Nothing about CPU usage is an
- * event — envd offers a `GET /metrics` and something has to ask it. Pushing
- * would not remove the sampling, only move it; what removes work is asking
- * once for everyone, and not asking when nobody is listening.
+ * Now the sandbox samples itself and this module holds a pipe. The gateway is
+ * shared and a sandbox is not: work that runs whether or not anything changed
+ * belongs on the end that is already per-tenant. What is left here is fan-out —
+ * one stream per sandbox regardless of how many browsers are watching it, torn
+ * down when the last one leaves.
  *
  * @module stats
  */
 
-import { metrics, watchDir } from './envd.js'
+import { streamMetrics, watchDir } from './envd.js'
 import { ROOT } from './panel-path.js'
 
 /**
- * How often a watched sandbox is measured.
+ * How long a stream may say nothing before it is treated as dead.
  *
- * The same cadence the browser used to poll at, so nothing about how the
- * numbers move on screen changes — only how many times they are fetched.
+ * The sampler inside the sandbox reports every five seconds, so silence for
+ * several times that is not a quiet machine — it is a machine that stopped
+ * answering, which is a status a person needs to see.
  */
-const SAMPLE_MS = 5000
+const SILENCE_MS = 20000
 
-/** Sandboxes being watched: id → { timer, watchers, last }. */
+/** Sandboxes being watched: handle → { stream, watchers, last, id, timer }. */
 const watched = new Map()
-
-/**
- * Sample one sandbox and hand the reading to everyone watching it.
- *
- * A failed sample is reported as a failure rather than skipped: to a person a
- * sandbox that stops answering is the status, not the absence of one.
- *
- * @param {string} handle - the runtime's address for the sandbox to measure.
- */
-async function sample(handle) {
-  const entry = watched.get(handle)
-  if (entry === undefined) return
-  let reading
-  try {
-    // The id rides along with the numbers because the page that shows them
-    // also shows it: it is the one thing a tenant has to quote when reporting
-    // that their machine misbehaved. Harmless to tell its owner — reaching the
-    // sandbox needs the token, which never leaves the sandbox and the gateway.
-    reading = { ok: true, stats: { id: entry.id, ...shape(await metrics(handle)) } }
-  } catch {
-    reading = { ok: false }
-  }
-  // Watchers can leave while a sample is in flight.
-  const current = watched.get(handle)
-  if (current === undefined) return
-  current.last = reading
-  for (const watcher of current.watchers) watcher(reading)
-}
 
 /**
  * envd's reading, reshaped into what the status bar draws.
@@ -86,25 +55,58 @@ function shape(raw) {
 }
 
 /**
- * Watch one sandbox.
+ * Watch one sandbox's own measurements.
  *
- * The first watcher starts the timer and gets a reading immediately; the last
- * one to leave stops it. A watcher that arrives while a sandbox is already
- * being sampled is handed the last reading at once rather than waiting out an
- * interval for the first one.
+ * The first watcher starts the sandbox's sampler; the last one to leave stops
+ * it. A watcher that arrives while a sandbox is already streaming is handed the
+ * last reading at once rather than waiting out an interval for the first one.
  *
  * @param {string} handle - the runtime's address for the sandbox to watch.
  * @param {string} id - the gateway's id for it, which is what the bar shows.
  * @param {(reading: {ok: boolean, stats?: object}) => void} onReading - called with every sample.
- * @returns {() => void} stop watching.
+ * @returns {Promise<() => void>} stop watching.
  */
-export function watchSandbox(handle, id, onReading) {
+async function watchSandbox(handle, id, onReading) {
   let entry = watched.get(handle)
   if (entry === undefined) {
-    entry = { timer: undefined, watchers: new Set(), last: undefined, id }
+    entry = { stream: undefined, watchers: new Set(), last: undefined, id, timer: undefined }
     watched.set(handle, entry)
-    entry.timer = setInterval(() => { void sample(handle) }, SAMPLE_MS)
-    void sample(handle)
+
+    /** @param {{ok: boolean, stats?: object}} reading - what to hand out. */
+    const publish = (reading) => {
+      const current = watched.get(handle)
+      if (current === undefined) return
+      current.last = reading
+      for (const watcher of current.watchers) watcher(reading)
+    }
+
+    // A stream that goes quiet is a sandbox that stopped answering, and to a
+    // person that IS the status. Rearmed on every reading rather than checked
+    // on a schedule, so a healthy sandbox costs one cleared timeout per sample.
+    const heard = () => {
+      const current = watched.get(handle)
+      if (current === undefined) return
+      if (current.timer !== undefined) clearTimeout(current.timer)
+      current.timer = setTimeout(() => { publish({ ok: false }) }, SILENCE_MS)
+    }
+
+    try {
+      entry.stream = await streamMetrics(handle, {
+        onSample: (raw) => {
+          heard()
+          // The id rides along with the numbers because the page that shows
+          // them also shows it: it is the one thing a tenant has to quote when
+          // reporting that their machine misbehaved.
+          publish({ ok: true, stats: { id, ...shape(raw) } })
+        },
+        onEnd: () => { publish({ ok: false }) },
+        onError: () => { publish({ ok: false }) },
+      })
+      heard()
+    } catch (error) {
+      watched.delete(handle)
+      throw error
+    }
   }
   entry.watchers.add(onReading)
   if (entry.last !== undefined) onReading(entry.last)
@@ -114,7 +116,8 @@ export function watchSandbox(handle, id, onReading) {
     if (current === undefined) return
     current.watchers.delete(onReading)
     if (current.watchers.size > 0) return
-    clearInterval(current.timer)
+    if (current.timer !== undefined) clearTimeout(current.timer)
+    current.stream?.close()
     watched.delete(handle)
   }
 }
@@ -244,7 +247,7 @@ export function serveStats(req, res, resolve) {
       send({ ok: false })
       return undefined
     }
-    return watchSandbox(where.handle, where.sandboxId, (reading) => {
+    return await watchSandbox(where.handle, where.sandboxId, (reading) => {
       send(reading)
       // A sandbox that stops answering may simply have been replaced, so the
       // next attempt starts over at `resolve` rather than asking this id again.
@@ -277,7 +280,7 @@ const watching = new Map()
  * @param {(event: {name: string, type: string}) => void} onEvent - called with each change.
  * @returns {Promise<() => void>} stop watching.
  */
-export async function watchWorkspace(handle, onEvent) {
+async function watchWorkspace(handle, onEvent) {
   let entry = watching.get(handle)
   if (entry === undefined) {
     entry = { handle: undefined, watchers: new Set() }

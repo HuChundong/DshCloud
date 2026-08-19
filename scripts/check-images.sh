@@ -18,6 +18,8 @@ set -euo pipefail
 SANDBOX="${1:-dsh-sandbox:latest}"
 GATEWAY="${2:-dsh-gateway:latest}"
 WEB="${3:-dsh-web:latest}"
+# The IMAGE's profile directory. At runtime the entrypoint links it into the
+# tenant's DSH_HOME on the mount; here we check the copy the image ships.
 PROFILE=/root/.dsh/profiles/web
 
 fail=0

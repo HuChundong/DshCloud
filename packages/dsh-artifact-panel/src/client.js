@@ -324,26 +324,16 @@ window.__ModuleLoader__.load({
     const useTree = () => React.useSyncExternalStore(treeStore.subscribe, treeStore.read)
 
     /**
-     * How often the panel looks again ANYWAY, with a watch running.
+     * How often the panel re-asks when there is no watch at all.
      *
-     * A watch is an accelerator, never the source of truth, and this is what
-     * makes that true. inotify drops events: the kernel's queue overflows and
-     * what was in it is gone, on any filesystem at all. On a shared one it is
-     * worse, and it was measured rather than feared — two sandboxes may mount
-     * one volume, and a watcher in the first is never told about a write made
-     * from the second, while listing the directory shows both files. envd
-     * refuses these filesystems for precisely that reason.
-     *
-     * So the panel re-reads on a slow beat regardless. Nothing here scans: it
-     * re-reads the directories that are open and asks once which page is
-     * newest, which is what a change event makes it do anyway.
-     */
-    const SAFETY_INTERVAL_MS = 30000
-
-    /**
-     * How often it re-asks when there is no watch at all.
-     *
-     * Faster, because then it is the only thing that will ever notice.
+     * The only timer left in the browser, and it runs only when the gateway
+     * has said no watch is possible. While one IS running, the panel holds no
+     * timer of its own: inotify can miss things — the kernel queue overflows,
+     * and a write through another sandbox's mount is never seen — but noticing
+     * that is the SANDBOX's job now. It sweeps its own directories and says
+     * `stale` when they moved without an event, so a browser that has nothing
+     * to do does nothing, and the gateway is not asked on a schedule by every
+     * open tab.
      */
     const STALE_INTERVAL_MS = 5000
 
@@ -357,9 +347,12 @@ window.__ModuleLoader__.load({
      * a file that changes now reaches the panel in the time it takes to
      * travel.
      *
-     * It is not the only way the panel finds out, and it must not be — see
-     * SAFETY_INTERVAL_MS. Events arrive quickly and are allowed to be
-     * incomplete; the slow re-read is what makes them merely an accelerator.
+     * Events arrive quickly and are allowed to be incomplete — inotify drops
+     * things. What makes that safe is a sweep, and the sweep runs in the
+     * sandbox beside the watcher rather than here: it reports `stale` when the
+     * workspace moved without an event, and the panel re-reads then. So this
+     * subscription is the only thing the panel runs, and it is idle whenever
+     * the workspace is.
      *
      * Listeners register by name so the tree and the canvas can each take what
      * they need without knowing about the other.
@@ -405,16 +398,17 @@ window.__ModuleLoader__.load({
       const start = () => {
         if (source !== undefined) return
         source = new EventSource('/sandbox/watch')
-        // Started WITH the watch, not instead of it — see SAFETY_INTERVAL_MS.
-        // Events are the fast path and they are allowed to be incomplete.
-        keepAsking(SAFETY_INTERVAL_MS)
         source.addEventListener('message', (event) => {
           let change
           try { change = JSON.parse(event.data) } catch { return }
           // The gateway says so down the stream rather than closing it, so
           // that the browser does not reconnect to a watch that cannot exist.
-          // Asking is already happening; it only has to happen sooner.
+          // This is the one case that puts a timer back in the browser.
           if (change.watching === false) { keepAsking(STALE_INTERVAL_MS); return }
+          // The sandbox swept its own directories and found them moved without
+          // an event to match. It does not know what moved, only that
+          // something did.
+          if (change.stale === true) { announce({ stale: true, path: ROOT }); return }
           const path = `${ROOT}/${String(change.name ?? '')}`
           announce({ ...change, path })
         })
@@ -1561,8 +1555,14 @@ window.__ModuleLoader__.load({
       { id: 'canvas', label: '画布', note: '看 agent 正在做的页面', path: ICON_BROWSER },
     ]
 
-    /** Where the workspace tree is rooted. The gateway bounds paths to this too. */
-    const ROOT = '/workspace'
+    /**
+     * Where the workspace tree is rooted.
+     *
+     * Must agree with `ROOT` in the gateway's `panel-path.js`, which bounds
+     * every path to it — two copies of one fact, because they are on opposite
+     * sides of the wire and nothing can be imported across it.
+     */
+    const ROOT = '/mnt/workspace'
 
     /**
      * Ask the gateway about the tenant's workspace.

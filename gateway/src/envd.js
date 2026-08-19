@@ -430,17 +430,12 @@ export async function newestFile(handle, root, pattern) {
   const payload = {
     process: {
       cmd: '/usr/bin/find',
-      // `-H` because the root is a SYMLINK wherever a tenant has a volume:
-      // the entrypoint points `/workspace` at `/persist/workspace`, and find
-      // does not follow a link named on its command line unless told to. It
-      // reported nothing, every time, and the canvas concluded the workspace
-      // held no page — while the file tree, which reaches the same directory
-      // through envd's own stat, listed it perfectly. The simulation has no
-      // volume and therefore no link, so this was invisible there.
-      //
-      // `-H` and not `-L`: the root is followed, links INSIDE the tree are
-      // not. That is enough to see the workspace, and it cannot walk into a
-      // cycle a tenant left behind.
+      // `-H` follows a symlink named on the command line, and nothing inside
+      // the tree. The workspace is a real directory now, so this is no longer
+      // load-bearing for it — but a root that was a link once cost the canvas
+      // every page in production while the simulation looked perfect, and a
+      // tenant may still point this at a link of their own. `-L` would follow
+      // links inside the tree too, and could walk into a cycle.
       args: ['-H', root, '-type', 'f', '-name', pattern, '-printf', '%T@\\t%p\\n'],
       envs: {},
     },
@@ -691,66 +686,26 @@ export async function metrics(handle) {
  * @returns {Promise<{close: () => void}>} a handle that ends the watch.
  */
 /**
- * The watcher that runs inside the sandbox, as a source string.
+ * Run a long-lived process in the sandbox and read its stdout a line at a time.
  *
- * Node's own recursive watch, because envd's will not do it here — see
- * {@link watchDir}. One line of JSON per change on stdout, which is the
- * cheapest thing to parse out of a process stream.
- *
- * `name` is relative to the root, which is the same shape envd's own watcher
- * reports, so nothing downstream can tell which one it is talking to.
- */
-const WATCHER_SOURCE = `
-const fs = require('fs')
-const root = process.argv[1]
-const watcher = fs.watch(root, { recursive: true }, (type, name) => {
-  if (name) process.stdout.write(JSON.stringify({ type, name }) + '\\n')
-})
-watcher.on('error', (error) => {
-  process.stderr.write(String(error && error.message) + '\\n')
-  process.exit(1)
-})
-process.stdin.resume()
-`
-
-/**
- * Hear about changes under a directory.
- *
- * Run as a PROCESS in the sandbox rather than through envd's own `WatchDir`,
- * and the reason is specific: envd refuses to watch a network filesystem, and
- * a tenant's workspace is one wherever it is a volume. It decides by the
- * filesystem's magic number — JuiceFS mounts as `fuseblk`, so the refusal is
- * `cannot watch path on network filesystem` — and it arrives AFTER the stream
- * is established, so the watch appeared to start and was dead a moment later.
- *
- * That refusal is sound in general and wrong here. What inotify cannot see on
- * a shared filesystem is a write made through somebody ELSE's mount; a
- * tenant's workspace has exactly one writer, this sandbox, through this mount.
- * Measured rather than assumed: a recursive `fs.watch` on the volume reports
- * creations, writes, and files in directories that did not exist when the
- * watch began.
- *
- * envd cannot be taught this — the amd64 binary arrives prebuilt — so the
- * watcher is a process instead. One implementation for both runtimes, on
- * purpose: a path that only runs in the simulation is a path whose failure is
- * discovered in production, which is how every bug this file has had was
- * found.
- *
- * The cost is a node process per watched sandbox, and one real limit: a
- * recursive watch takes an inotify handle per directory, so a workspace with
- * an enormous tree can exhaust the kernel's allowance. That surfaces as an
- * error on the stream, and the panel falls back to asking on a timer.
+ * The shape both of the panel's background jobs take, and the reason they are
+ * jobs at all: the gateway is one machine serving every tenant, while a sandbox
+ * is one machine serving one. Work that runs whether or not anything changed —
+ * watching a directory, sampling a machine — belongs on the end that is already
+ * per-tenant. The gateway then holds a pipe rather than a timer, and its cost
+ * stops scaling with how many sandboxes exist.
  *
  * @param {string} handle - the runtime's address for the sandbox.
- * @param {string} path - the directory to watch.
- * @param {{onEvent: Function, onEnd: Function, onError: Function}} sink - where changes go.
- * @returns {Promise<{close: () => void}>} the live watch.
+ * @param {string[]} args - the argv to run, `node` implied as the command.
+ * @param {{onLine: (line: string) => void, onEnd: () => void, onError: (error: Error) => void}} sink - where output goes.
+ * @returns {Promise<{close: () => void}>} the live process.
  * @throws {Error} when the process cannot be started.
  */
-export async function watchDir(handle, path, sink) {
+async function streamLines(handle, args, sink) {
   const endpoint = endpointOf(handle)
   const body = encodeEnvelope({
-    process: { cmd: 'node', args: ['-e', WATCHER_SOURCE, path], envs: {}, cwd: '/' },
+    process: { cmd: 'node', args, envs: {}, cwd: '/' },
+    // Kept open so the process is not handed EOF on stdin and does not exit.
     stdin: true,
   })
   return await new Promise((resolve, reject) => {
@@ -767,10 +722,10 @@ export async function watchDir(handle, path, sink) {
     }, (response) => {
       if ((response.statusCode ?? 502) >= 400) {
         response.resume()
-        reject(new Error(`envd: watching ${path} in ${handle} failed (${String(response.statusCode)})`))
+        reject(new Error(`envd: starting a background job in ${handle} failed (${String(response.statusCode)})`))
         return
       }
-      // stdout arrives in chunks that respect nothing; a change is a line.
+      // stdout arrives in chunks that respect nothing; a message is a line.
       let pending = ''
       readEnvelopes(response, (flags, message) => {
         if ((flags & END_STREAM_FLAG) !== 0) {
@@ -786,12 +741,7 @@ export async function watchDir(handle, path, sink) {
         pending += Buffer.from(event.data.stdout, 'base64').toString('utf8')
         const lines = pending.split('\n')
         pending = lines.pop() ?? ''
-        for (const line of lines) {
-          if (line === '') continue
-          let change
-          try { change = JSON.parse(line) } catch { continue }
-          sink.onEvent({ name: String(change.name ?? ''), type: String(change.type ?? '') })
-        }
+        for (const line of lines) if (line !== '') sink.onLine(line)
       })
       response.on('end', () => { sink.onEnd() })
       response.on('error', (error) => { sink.onError(error) })
@@ -799,5 +749,163 @@ export async function watchDir(handle, path, sink) {
     })
     request.on('error', reject)
     request.end(body)
+  })
+}
+
+/**
+ * The watcher that runs inside the sandbox, as a source string.
+ *
+ * Two jobs in one process, because they answer the same question at different
+ * speeds. `fs.watch` reports a change as it happens. The sweep beside it exists
+ * because inotify is allowed to miss things: the kernel queue overflows, and on
+ * a shared filesystem a write made through another sandbox's mount is never
+ * seen at all — both measured, not feared. So a directory whose mtime moved
+ * without a matching event is reported as `stale`, and the panel re-reads.
+ *
+ * Directory mtimes rather than a full stat of every file: a directory's mtime
+ * changes when an entry is added or removed under it, which is exactly the case
+ * events can miss, and it costs one stat per directory instead of one per file.
+ *
+ * The sweep runs HERE rather than in each browser. It used to be a timer in the
+ * panel, which meant every open tab re-read every open directory through the
+ * gateway forever; now one process per sandbox looks at its own disk, and says
+ * something only when there is something to say.
+ */
+const WATCHER_SOURCE = `
+const fs = require('fs')
+const path = require('path')
+const root = process.argv[1]
+const SWEEP_MS = 30000
+const MAX_DIRS = 20000
+
+const say = (message) => process.stdout.write(JSON.stringify(message) + '\\n')
+
+fs.watch(root, { recursive: true }, (type, name) => {
+  if (name) say({ type, name })
+}).on('error', (error) => {
+  process.stderr.write(String(error && error.message) + '\\n')
+  process.exit(1)
+})
+
+const snapshot = () => {
+  const seen = new Map()
+  const stack = [root]
+  while (stack.length > 0 && seen.size < MAX_DIRS) {
+    const dir = stack.pop()
+    let entries
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true })
+      seen.set(dir, fs.statSync(dir).mtimeMs)
+    } catch { continue }
+    for (const entry of entries) {
+      if (entry.isDirectory()) stack.push(path.join(dir, entry.name))
+    }
+  }
+  return seen
+}
+
+let previous = snapshot()
+setInterval(() => {
+  const current = snapshot()
+  let moved = current.size !== previous.size
+  if (!moved) {
+    for (const [dir, mtime] of current) {
+      if (previous.get(dir) !== mtime) { moved = true; break }
+    }
+  }
+  previous = current
+  if (moved) say({ stale: true })
+}, SWEEP_MS)
+
+process.stdin.resume()
+`
+
+/**
+ * Hear about changes under a directory.
+ *
+ * Run as a PROCESS in the sandbox rather than through envd's own `WatchDir`,
+ * and the reason is specific: envd refuses to watch a network filesystem, and
+ * every CubeSandbox volume is one. It decides by the filesystem's magic number,
+ * and a volume arrives over virtiofs whose magic IS `FUSE_SUPER_MAGIC` — so the
+ * refusal follows the volume to whatever path it is mounted at, and no change
+ * of layout can avoid it.
+ *
+ * envd cannot be taught otherwise — the amd64 binary arrives prebuilt — and
+ * teaching it would be the wrong direction anyway: the work belongs in the
+ * sandbox, which is where a process already puts it.
+ *
+ * One implementation for both runtimes, deliberately. A path that only runs in
+ * the simulation is a path whose failure is discovered in production.
+ *
+ * @param {string} handle - the runtime's address for the sandbox.
+ * @param {string} path - the directory to watch.
+ * @param {{onEvent: (event: object) => void, onEnd: () => void, onError: (error: Error) => void}} sink - where changes go.
+ * @returns {Promise<{close: () => void}>} the live watch.
+ * @throws {Error} when the watcher cannot be started.
+ */
+export async function watchDir(handle, path, sink) {
+  return await streamLines(handle, ['-e', WATCHER_SOURCE, path], {
+    onLine: (line) => {
+      let change
+      try { change = JSON.parse(line) } catch { return }
+      if (change.stale === true) { sink.onEvent({ stale: true }); return }
+      sink.onEvent({ name: String(change.name ?? ''), type: String(change.type ?? '') })
+    },
+    onEnd: sink.onEnd,
+    onError: sink.onError,
+  })
+}
+
+/**
+ * The sampler that runs inside the sandbox, as a source string.
+ *
+ * It asks envd — the same `/metrics` the gateway used to ask for, over the
+ * sandbox's own loopback, where the round trip costs nothing. What moved is not
+ * the measurement but WHO is holding the timer: one per sandbox instead of one
+ * per sandbox held by the single machine that has all of them.
+ */
+const SAMPLER_SOURCE = `
+const http = require('http')
+const auth = 'Basic ' + Buffer.from('root:').toString('base64')
+const SAMPLE_MS = 5000
+
+const sample = () => {
+  const request = http.get(
+    { host: '127.0.0.1', port: 49983, path: '/metrics', headers: { Authorization: auth } },
+    (response) => {
+      let body = ''
+      response.on('data', (chunk) => { body += chunk })
+      response.on('end', () => {
+        if (response.statusCode === 200) process.stdout.write(body.trim() + '\\n')
+      })
+    },
+  )
+  // A sandbox whose envd is not answering yet is an ordinary state during
+  // start-up, not a reason to die: the next tick tries again.
+  request.on('error', () => {})
+}
+
+sample()
+setInterval(sample, SAMPLE_MS)
+process.stdin.resume()
+`
+
+/**
+ * Hear a sandbox's own measurements as it takes them.
+ *
+ * @param {string} handle - the runtime's address for the sandbox.
+ * @param {{onSample: (reading: object) => void, onEnd: () => void, onError: (error: Error) => void}} sink - where readings go.
+ * @returns {Promise<{close: () => void}>} the live sampler.
+ * @throws {Error} when the sampler cannot be started.
+ */
+export async function streamMetrics(handle, sink) {
+  return await streamLines(handle, ['-e', SAMPLER_SOURCE], {
+    onLine: (line) => {
+      let reading
+      try { reading = JSON.parse(line) } catch { return }
+      sink.onSample(reading)
+    },
+    onEnd: sink.onEnd,
+    onError: sink.onError,
   })
 }
