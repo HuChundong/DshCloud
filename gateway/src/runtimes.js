@@ -27,7 +27,7 @@ export const OWNER_KEY = 'dsh.gateway.sandbox'
  * @property {string} name - which runtime this is, for diagnostics.
  * @property {(owner: {username: string, accountId: string}, env: Record<string, string>) => Promise<string>} create - start a sandbox and return the handle used to reclaim it.
  * @property {(handle: string) => Promise<void>} remove - reclaim a sandbox, tolerating one that is already gone.
- * @property {() => Promise<string[]>} listOwned - handles of sandboxes this deployment owns, for reclaiming what a previous process left.
+ * @property {() => Promise<string[]>} listOwned - handles of sandboxes this deployment owns, for reclaiming what a previous process left. MUST be the same spelling `create` returns: startup matches these against stored handles to decide what to adopt.
  */
 
 /**
@@ -110,7 +110,13 @@ const docker = {
     return name
   },
   remove: async (handle) => { await removeContainer(handle) },
-  listOwned: async () => (await listContainers(OWNER_KEY).catch(() => [])).map((container) => container.Id),
+  // NAMES, because that is what `create` returns and what `envd.js` dials —
+  // and because adoption compares the two. Docker reports a name with a
+  // leading slash. Returning ids here instead was invisible while nothing
+  // matched these against a stored handle; the moment startup tried to claim
+  // its own sandboxes, every one of them looked like a stranger's.
+  listOwned: async () => (await listContainers(OWNER_KEY).catch(() => []))
+    .flatMap((container) => (container.Names ?? []).map((name) => name.replace(/^\//, ''))),
 }
 
 /**

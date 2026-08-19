@@ -128,6 +128,7 @@ const LOGIN_ASSETS = {
   },
 }
 const sandboxes = new SandboxManager({
+  db,
   gatewayTunnelUrl: GATEWAY_TUNNEL_URL,
   // Model credentials belong to the deployment, not to the tenant, so they are
   // handed to the sandbox rather than to the browser. Resolved per creation:
@@ -627,7 +628,7 @@ server.on('upgrade', (req, socket, head) => {
   })
 })
 
-await sandboxes.reapOrphans()
+await sandboxes.adopt()
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`gateway: listening on http://0.0.0.0:${PORT}; anyone with an email address can register`)
 })

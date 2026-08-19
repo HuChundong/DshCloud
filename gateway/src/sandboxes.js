@@ -10,9 +10,26 @@
  * Which runtime provides that machine — CubeSandbox, or the Docker simulation
  * — is chosen in `runtimes.js`. Nothing else here knows the difference: the
  * sandbox dials the gateway, so no code path depends on being able to reach in.
+ *
+ * WHO OWNS WHICH SANDBOX IS IN THE DATABASE, not in this process. The table is
+ * the truth and the map below is this instance's cache of it, filled once at
+ * startup and written through on every change.
+ *
+ * That distinction is the point rather than an implementation detail. Held only
+ * in memory, the registry made a restart destroy every sandbox — a tenant whose
+ * session outlived the gateway came back to an empty workspace, which is losing
+ * their history silently. It also made a second gateway impossible: the first
+ * thing a new instance did was reap every sandbox it did not know about, which
+ * is all of another instance's. And two instances could each start a sandbox
+ * for one tenant, mounting one volume twice.
+ *
+ * A row is claimed rather than recreated. `adopt()` at startup keeps what is
+ * still running and clears what is not, so a sandbox that survived the gateway
+ * is redialed and recognized — the sandbox client redials on its own.
  */
 
 import { randomBytes, randomUUID } from 'node:crypto'
+import { hostname } from 'node:os'
 import process from 'node:process'
 import { selectRuntime } from './runtimes.js'
 
@@ -40,9 +57,33 @@ const REAP_INTERVAL_MS = 60_000
 /** How long to wait for a freshly started sandbox to dial in. */
 export const DIAL_IN_TIMEOUT_MS = Number(process.env.SANDBOX_DIAL_IN_TIMEOUT_MS ?? 60_000)
 
+/**
+ * Which gateway this is.
+ *
+ * Recorded on every sandbox it starts, because the tunnel that sandbox dials
+ * can only land on the instance whose address it was given — so this is the
+ * instance that can serve it. Nothing reads it yet; routing will.
+ *
+ * The hostname is right for a container per instance, which is what a compose
+ * or Kubernetes deployment gives. An operator running two on one host sets the
+ * variable.
+ */
+const GATEWAY_ID = process.env.GATEWAY_ID || hostname()
+
+/**
+ * How stale a row's `last_used_at` may get before the sweep writes it back.
+ *
+ * Every request touches its tenant's sandbox, and a write per request would
+ * make this table the busiest thing in the database for a value read once a
+ * minute. The idle TTLs are measured in minutes, so a stamp a minute behind
+ * changes no decision.
+ */
+const TOUCH_FLUSH_MS = 60_000
+
 export class SandboxManager {
   /**
    * @param {object} options - manager configuration.
+   * @param {import('pg').Pool} options.db - the connected pool; the sandbox registry lives there.
    * @param {string} options.gatewayTunnelUrl - URL the sandbox dials back on.
    * @param {() => Promise<Record<string, string>>} options.env - extra environment for a sandbox about to start (model credentials and endpoint), resolved per creation so a credential changed in the console reaches the next sandbox.
    * @param {(username: string) => Promise<Record<string, string>>} options.secrets - the tenant's own environment, applied beneath everything the deployment sets.
@@ -50,14 +91,45 @@ export class SandboxManager {
    */
   constructor(options) {
     this.options = options
-    /** @type {Map<string, {sandboxId: string, token: string, handle: string, lastUsedAt: number}>} */
+    this.db = options.db
+    /**
+     * This instance's cache of the table, so the common path does not query.
+     * @type {Map<string, {sandboxId: string, token: string, handle: string, accountId: string, lastUsedAt: number, flushedAt: number}>}
+     */
     this.byUser = new Map()
     /** @type {Map<string, string>} */
     this.tokenBySandbox = new Map()
-    /** In-flight creations, so concurrent first requests share one sandbox. @type {Map<string, Promise<{sandboxId: string, token: string}>>} */
+    /** In-flight creations, so concurrent first requests share one sandbox. @type {Map<string, Promise<{sandboxId: string, token: string, handle: string}>>} */
     this.creating = new Map()
     this.timer = setInterval(() => { void this.reapIdle() }, REAP_INTERVAL_MS)
     this.timer.unref()
+  }
+
+  /**
+   * Put one row into the cache.
+   * @param {object} row - a `sandboxes` row.
+   */
+  #remember(row) {
+    this.byUser.set(row.username, {
+      sandboxId: row.sandbox_id,
+      token: row.token,
+      handle: row.handle,
+      accountId: row.account_id,
+      lastUsedAt: new Date(row.last_used_at).getTime(),
+      flushedAt: Date.now(),
+    })
+    this.tokenBySandbox.set(row.sandbox_id, row.token)
+  }
+
+  /**
+   * Forget one tenant here and in the table.
+   * @param {string} username - the owning user.
+   * @param {string} sandboxId - the sandbox being dropped.
+   */
+  async #erase(username, sandboxId) {
+    this.byUser.delete(username)
+    this.tokenBySandbox.delete(sandboxId)
+    await this.db.query('DELETE FROM sandboxes WHERE username = $1 AND sandbox_id = $2', [username, sandboxId])
   }
 
   /**
@@ -146,7 +218,32 @@ export class SandboxManager {
       ...await this.options.env(),
     })
 
-    this.byUser.set(username, { sandboxId, token, handle, lastUsedAt: Date.now() })
+    // The table decides who won, not this process. Two gateways can reach here
+    // for one tenant at the same time — the in-flight map above only covers
+    // this one — and the primary key on `username` is what stops both from
+    // keeping their sandbox. The loser destroys the machine it just built
+    // rather than leaving a second one mounted on the same volume.
+    const { rows } = await this.db.query(
+      `INSERT INTO sandboxes (username, account_id, sandbox_id, handle, token, gateway_id)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (username) DO NOTHING
+       RETURNING *`,
+      [username, accountId, sandboxId, handle, token, GATEWAY_ID],
+    )
+    if (rows.length === 0) {
+      this.tokenBySandbox.delete(sandboxId)
+      await runtime.remove(handle).catch(() => {})
+      const existing = await this.db.query('SELECT * FROM sandboxes WHERE username = $1', [username])
+      if (existing.rows.length === 0) {
+        throw new Error(`gateway: lost the race for ${username}'s sandbox and found no winner`)
+      }
+      console.log(`gateway: discarded a second sandbox for ${username}; another gateway had one`)
+      this.#remember(existing.rows[0])
+      const won = this.byUser.get(username)
+      return { sandboxId: won.sandboxId, token: won.token, handle: won.handle }
+    }
+
+    this.#remember(rows[0])
     console.log(`gateway: started sandbox ${sandboxId} for ${username}`)
     return { sandboxId, token, handle }
   }
@@ -171,7 +268,16 @@ export class SandboxManager {
    */
   touch(username) {
     const record = this.byUser.get(username)
-    if (record !== undefined) record.lastUsedAt = Date.now()
+    if (record === undefined) return
+    const now = Date.now()
+    record.lastUsedAt = now
+    // Written back on a slow beat, not per request — see TOUCH_FLUSH_MS. The
+    // in-memory value is what this instance's own sweep reads; the column is
+    // what survives a restart and what another instance would read.
+    if (now - record.flushedAt < TOUCH_FLUSH_MS) return
+    record.flushedAt = now
+    void this.db.query('UPDATE sandboxes SET last_used_at = now() WHERE username = $1', [username])
+      .catch((error) => { console.error(`gateway: could not stamp ${username}'s sandbox: ${error.message}`) })
   }
 
   /**
@@ -192,8 +298,7 @@ export class SandboxManager {
     // since, another request already replaced it and this one must not undo
     // that — it would discard a working sandbox and build a third.
     if (sandboxId !== undefined && record.sandboxId !== sandboxId) return
-    this.byUser.delete(username)
-    this.tokenBySandbox.delete(record.sandboxId)
+    await this.#erase(username, record.sandboxId)
     // Best-effort: the sandbox is usually already gone, which is why we are here.
     await runtime.remove(record.handle).catch(() => {})
     console.log(`gateway: forgot unreachable sandbox ${record.sandboxId} for ${username}`)
@@ -206,8 +311,7 @@ export class SandboxManager {
   async release(username) {
     const record = this.byUser.get(username)
     if (record === undefined) return
-    this.byUser.delete(username)
-    this.tokenBySandbox.delete(record.sandboxId)
+    await this.#erase(username, record.sandboxId)
     await runtime.remove(record.handle)
     console.log(`gateway: released sandbox ${record.sandboxId} for ${username}`)
   }
@@ -251,24 +355,58 @@ export class SandboxManager {
   }
 
   /**
-   * Remove sandboxes left behind by a previous gateway process.
+   * Claim the sandboxes this deployment already has.
    *
-   * Their tokens died with that process, so they can never dial in again and
-   * would otherwise sit idle holding memory until an operator noticed.
+   * Called once at startup, in place of the reap that used to happen there.
+   * The reap destroyed every sandbox the runtime knew about, on the reasoning
+   * that their tokens died with the process that issued them — true while the
+   * registry was a Map, and the reason a tenant whose session outlived a
+   * restart came back to an empty workspace. The tokens are in the table now,
+   * so a surviving sandbox can be recognized when it redials, which it does on
+   * its own.
    *
-   * TODO: adopt them instead of reaping them. Sessions now outlive a restart,
-   * so a tenant stays signed in across one and is handed a fresh workspace with
-   * no conversation history — silent loss of their work where being signed out
-   * at least made the reset visible. Persisting this registry (id, token,
-   * container, owner) beside the session store would let a surviving container
-   * redial and be recognized; the sandbox client already redials on its own.
-   * Sandbox filesystems also need a volume before adoption is worth much.
+   * Three cases, and the third is why this cannot simply trust the table:
+   *
+   * - **In the table and still running.** Kept. Its row already says who it
+   *   belongs to and what token proves it.
+   * - **In the table and gone.** The row is deleted, so the next request builds
+   *   a fresh one instead of waiting for a dial-in that will never come.
+   * - **Running and in no row.** Destroyed — but only after the table has been
+   *   read, and only for rows this deployment owns. That ordering is the whole
+   *   difference between reaping leftovers and reaping another gateway's
+   *   tenants.
+   *
+   * @returns {Promise<void>} resolves once the registry matches reality.
    */
-  async reapOrphans() {
-    const handles = await runtime.listOwned().catch(() => [])
-    for (const handle of handles) {
+  async adopt() {
+    const [{ rows }, handles] = await Promise.all([
+      this.db.query('SELECT * FROM sandboxes'),
+      runtime.listOwned().catch(() => []),
+    ])
+    const live = new Set(handles)
+
+    let kept = 0
+    let lost = 0
+    for (const row of rows) {
+      if (live.has(row.handle)) {
+        this.#remember(row)
+        kept += 1
+        continue
+      }
+      // The machine is gone; the row would otherwise point every request at a
+      // sandbox that can never dial in.
+      await this.db.query('DELETE FROM sandboxes WHERE username = $1', [row.username])
+      lost += 1
+    }
+
+    const known = new Set(rows.map((row) => row.handle))
+    const orphans = handles.filter((handle) => !known.has(handle))
+    for (const handle of orphans) {
       await runtime.remove(handle).catch(() => {})
     }
-    if (handles.length > 0) console.log(`gateway: reaped ${handles.length} orphaned sandbox(es)`)
+
+    if (kept > 0) console.log(`gateway: adopted ${kept} running sandbox(es)`)
+    if (lost > 0) console.log(`gateway: dropped ${lost} record(s) whose sandbox was gone`)
+    if (orphans.length > 0) console.log(`gateway: reaped ${orphans.length} sandbox(es) no record claimed`)
   }
 }

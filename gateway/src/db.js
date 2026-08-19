@@ -115,6 +115,37 @@ CREATE TABLE IF NOT EXISTS sandbox_secrets (
   PRIMARY KEY (email, name)
 );
 
+-- Which sandbox belongs to whom, and where it is.
+--
+-- This was a Map in the gateway process, which made three things true that
+-- should not be. A restart forgot every sandbox and reaped them all, so a
+-- tenant who stayed signed in came back to an empty workspace — silent loss of
+-- their history, where being signed out at least made the reset visible. A
+-- second gateway would do the same to the first one's tenants on startup. And
+-- two gateways could each start a sandbox for one tenant, mounting one volume
+-- twice: two backends writing one settings file and one session log.
+--
+-- The username is the primary key because the rule is one sandbox per tenant,
+-- and that rule belongs where it can be enforced rather than in whichever
+-- process happens to be asking. Cascading from the account matters for the
+-- same reason it does for secrets: a row that outlived its owner would hand
+-- the next holder of that address a machine that is not theirs.
+--
+-- gateway_id is not read yet. It records which instance created the sandbox
+-- and therefore holds its tunnel, which is what routing will need when there
+-- is more than one instance; writing it now costs nothing and means the table
+-- does not have to change then.
+CREATE TABLE IF NOT EXISTS sandboxes (
+  username     text        PRIMARY KEY REFERENCES accounts(email) ON DELETE CASCADE ON UPDATE CASCADE,
+  account_id   text        NOT NULL,
+  sandbox_id   text        NOT NULL UNIQUE,
+  handle       text        NOT NULL,
+  token        text        NOT NULL,
+  gateway_id   text        NOT NULL,
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  last_used_at timestamptz NOT NULL DEFAULT now()
+);
+
 -- Redeemed rather than deleted, so an operator can see who used which invite.
 CREATE TABLE IF NOT EXISTS invites (
   code        text        PRIMARY KEY,
