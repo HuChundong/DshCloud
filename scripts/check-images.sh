@@ -92,9 +92,11 @@ for half in dsh-sandbox-host dsh-tenant-account dsh-artifact-panel; do
     const base = '$PROFILE/node_modules/$half'
     try {
       const manifest = JSON.parse(readFileSync(base + '/package.json', 'utf8'))
-      // Declared when there is something to declare, `client.js` by convention
-      // otherwise — which is how the registry itself resolves it, and how the
-      // two hand-written halves are found.
+      // Declared when there is something to declare, and client.js by
+      // convention otherwise — which is how the registry itself resolves it,
+      // and how the two hand-written halves are found.
+      // (No backticks: this whole program is inside a double-quoted shell
+      // string, where a backtick opens a command substitution.)
       const entry = manifest.dsh?.client?.main ?? 'client.js'
       new Function(readFileSync(path.join(base, entry), 'utf8'))
       console.log('parses')
