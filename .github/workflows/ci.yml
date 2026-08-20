@@ -76,6 +76,17 @@ jobs:
       # — and objects to Chinese outside a dictionary, to a key with only one
       # language, and to a component that calls `t` without binding one, which
       # no lint rule catches and which throws on first render.
+      # The one check that EVALUATES a plugin. Everything else here parses or
+      # reads; only one of these plugins goes through a bundler, so a browser
+      # half can pass every other gate and still throw the moment the shell
+      # imports it — which is how a constant declared below the stylesheet that
+      # interpolates it reached production.
+      - name: Plugins load
+        run: |
+          npm --prefix packages/dsh-artifact-panel ci --no-audit --no-fund
+          npm --prefix packages/dsh-artifact-panel run build
+          node scripts/check-plugin-load.mjs
+
       - name: Plugin languages
         run: node scripts/check-plugins.mjs
 

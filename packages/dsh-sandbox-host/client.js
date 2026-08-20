@@ -464,6 +464,19 @@ window.__ModuleLoader__.load({
      * declared on `body` by the theme — so building from the tokens tracks both
      * themes without this file knowing either.
      */
+    /**
+     * How often a reading arrives, which is what the arc's tween is paced to.
+     *
+     * The sampler's own period, and it has to stay that: this is `SAMPLE_MS` in
+     * `gateway/src/envd.js`, where the in-sandbox reader sits. Too short and the
+     * arc parks between readings; too long and it never catches up with one.
+     *
+     * Declared HERE, above the stylesheet, because `STYLE` interpolates it at
+     * module scope. Further down it was in the temporal dead zone by the time
+     * that template ran, and the plugin failed to import at all.
+     */
+    const SAMPLE_MS = 5000
+
     const STYLE = `
       .${P}-cards { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 14px 0; }
       .${P}-card {
@@ -987,15 +1000,6 @@ window.__ModuleLoader__.load({
     // --------------------------------------------------------- sandbox bar --
 
     /** How often the footer asks the sandbox how it is doing. */
-
-    /**
-     * How often a reading arrives, which is what the arc's tween is paced to.
-     *
-     * The sampler's own period, and it has to stay that: this is `SAMPLE_MS` in
-     * `gateway/src/envd.js`, where the in-sandbox reader sits. Too short and the
-     * arc parks between readings; too long and it never catches up with one.
-     */
-    const SAMPLE_MS = 5000
 
     /** Ring geometry, matching the 3px stroke the sidebar's own chrome uses. */
     const RING = { size: 34, r: 13, width: 3 }
