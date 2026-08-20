@@ -214,7 +214,7 @@ window.__ModuleLoader__.load({
     /** Everything this plugin says, in both languages. */
     const DICTIONARY = {
       zh: {
-        plan: 'Free 套餐',
+        plan: '预览版',
 
         'env.title': '环境变量',
         'env.what': '这些变量会在创建沙箱时注入它的环境。值只写入、不回显——保存后这里只显示名称。',
@@ -265,7 +265,7 @@ window.__ModuleLoader__.load({
         'error.avatar.large': '头像太大了，请换一张。',
       },
       en: {
-        plan: 'Free plan',
+        plan: 'Preview',
 
         'env.title': 'Environment variables',
         'env.what': 'These are put into the sandbox environment when it is created. Values are written and never read back — after saving, only the names are shown here.',

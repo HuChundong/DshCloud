@@ -153,6 +153,53 @@ window.__ModuleLoader__.load({
         --dsw-static-neutral-bluish-950: #151515;
         --dsw-static-neutral-bluish-1000: #101113;
       }
+
+      /* The composer, which has to be paper.
+
+         It fills with --dsw-specific-input-major, and that resolves to the
+         lightest step of the ramp — which is now the window's own off-white, so
+         the box the tenant types into became the same colour as the thing it
+         sits on and stopped having an edge. The front door has the same
+         layering and answers it the same way: its window is off-white and its
+         composer is white. */
+      html body { --dsw-specific-input-major: #ffffff; }
+
+      /* No blue.
+
+         The shell's action colour is DeepSeek's — a filled button, an accent
+         label, the highlight on a message. The front door's is ink: its send
+         button is near-black on light and near-white on dark, and its only
+         strong colour is the green a running sandbox wears. Two products'
+         worth of accent in one window is what made this look unresolved.
+
+         The fills and the accents therefore take the mark's own two colours,
+         and turn over with the theme exactly as the mark does. The TINTS —
+         bubbles, the active nav row — take neutral steps from the ramp above
+         rather than ink, because they are grounds and not marks: ink at 6% is
+         a grey, and inventing one here when the ramp already has one is how
+         two greys end up next to each other. */
+      html body {
+        --dsw-alias-button-info-fill: #101113;
+        --dsw-alias-button-info-hover: #2a2c2f;
+        --dsw-alias-state-business-primary: #101113;
+        --dsw-alias-brand-primary-new-colorprimary-new-color: #101113;
+        --dsw-alias-label-primary-bluish: #101113;
+        --dsw-alias-state-business-tertiary: var(--dsw-static-neutral-bluish-100);
+        --dsw-specific-bubble: var(--dsw-static-neutral-bluish-60);
+        --dsw-specific-bubble-highlight: var(--dsw-static-neutral-bluish-100);
+        --dsw-specific-sidebar-nav-item-active-accent: var(--dsw-static-neutral-bluish-100);
+      }
+      html body[data-ds-dark-theme] {
+        --dsw-alias-button-info-fill: #f4f4f2;
+        --dsw-alias-button-info-hover: #e4e4e2;
+        --dsw-alias-state-business-primary: #f4f4f2;
+        --dsw-alias-brand-primary-new-colorprimary-new-color: #f4f4f2;
+        --dsw-alias-label-primary-bluish: #f4f4f2;
+        --dsw-alias-state-business-tertiary: var(--dsw-static-neutral-bluish-800);
+        --dsw-specific-bubble: var(--dsw-static-neutral-bluish-850);
+        --dsw-specific-bubble-highlight: var(--dsw-static-neutral-bluish-800);
+        --dsw-specific-sidebar-nav-item-active-accent: var(--dsw-static-neutral-bluish-800);
+      }
     `
 
     /**

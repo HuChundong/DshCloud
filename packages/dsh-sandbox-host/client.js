@@ -589,7 +589,7 @@ window.__ModuleLoader__.load({
         position: absolute; line-height: 1;
         transition: opacity 120ms ease;
       }
-      .${P}-ring-label { font-size: 9px; color: var(--dsw-alias-label-tertiary, #81858c); }
+      .${P}-ring-label { font-size: 8px; color: var(--dsw-alias-label-tertiary, #81858c); }
       /* The number the ring is drawing, for a pointer that stops on it. The
          arc says roughly; this says exactly, without spending a row of the
          sidebar on three figures nobody is reading most of the time.
@@ -1010,8 +1010,16 @@ window.__ModuleLoader__.load({
 
     /** How often the footer asks the sandbox how it is doing. */
 
-    /** Ring geometry, matching the 3px stroke the sidebar's own chrome uses. */
-    const RING = { size: 34, r: 13, width: 3 }
+    /**
+     * Ring geometry, taken from the front door's own gauges.
+     *
+     * 32px across with a 2px band, which is what the landing page draws: a
+     * 32px circle with its middle punched out 2px in. The first version here
+     * was 34px with a 3px stroke, and beside the rest of that page it read as
+     * heavier than everything around it — the whole point of these being small
+     * is that a status bar is glanced at, not read.
+     */
+    const RING = { size: 32, r: 14, width: 2 }
     const CIRCUMFERENCE = 2 * Math.PI * RING.r
 
     /**

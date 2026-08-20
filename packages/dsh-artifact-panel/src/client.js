@@ -1024,7 +1024,6 @@ window.__ModuleLoader__.load({
       .${NS}-empty {
         display: flex;
         flex-direction: column;
-        align-items: stretch;
         justify-content: center;
         gap: 8px;
         height: 100%;
@@ -1037,20 +1036,31 @@ window.__ModuleLoader__.load({
         font-size: 12px;
         line-height: 18px;
       }
+      /* Cards in a row that wraps, not a stack of full-width bars.
+         auto-fit with a 118px floor puts three across the panel at its
+         narrowest — 480px less its padding leaves 432, which is three and the
+         gaps — and drops to two, then one, as it is dragged narrower. Nothing
+         here is pinned to a count: the floor is the promise, and the row
+         arranges itself. */
+      .${NS}-choices {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+        gap: 8px;
+      }
       .${NS}-choice {
         display: flex;
-        align-items: center;
-        gap: 10px;
-        width: 100%;
-        padding: 10px 12px;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+        padding: 12px;
         box-sizing: border-box;
         border: 1px solid var(--dsw-alias-border-l1);
         border-radius: 10px;
         background: transparent;
         color: var(--dsw-alias-label-primary);
         font-family: var(--dsw-font-family);
-        font-size: 14px;
-        line-height: 22px;
+        font-size: 13px;
+        line-height: 20px;
         text-align: left;
         cursor: pointer;
       }
@@ -1065,8 +1075,8 @@ window.__ModuleLoader__.load({
       }
       .${NS}-choice-note {
         color: var(--dsw-alias-label-tertiary);
-        font-size: 12px;
-        line-height: 18px;
+        font-size: 11px;
+        line-height: 16px;
       }
 
       /* The side column's own heading row, and the strip it folds into. */
@@ -2065,14 +2075,14 @@ window.__ModuleLoader__.load({
       const t = useT()
       return h('div', { className: `${NS}-empty` },
         h('div', { className: `${NS}-empty-title` }, t('empty.title')),
-        TOOLS.map((tool) => h('button', {
-          key: tool.id,
-          type: 'button',
-          className: `${NS}-choice`,
-          onClick: () => onOpen(tool),
-        },
-        h('span', { className: `${NS}-choice-icon` }, icon(tool.path, 18)),
-        h('span', null,
+        h('div', { className: `${NS}-choices` },
+          TOOLS.map((tool) => h('button', {
+            key: tool.id,
+            type: 'button',
+            className: `${NS}-choice`,
+            onClick: () => onOpen(tool),
+          },
+          h('span', { className: `${NS}-choice-icon` }, icon(tool.path, 18)),
           h('span', null, t(`tool.${tool.id}`)),
           h('div', { className: `${NS}-choice-note` },
             // Already open reads as a state, not as a disabled control: the
