@@ -25,7 +25,9 @@ import {
   GROUND_CSS,
   GROUND_HTML,
   GROUND_SCRIPT,
+  BRAND_CSS,
   PALETTE_CSS,
+  WORDMARK,
   THEME_TOGGLE,
   TOAST_CSS,
   escapeHtml,
@@ -169,6 +171,7 @@ export function profilePage(state) {
 ${FONT_PRELOAD}
 <style>
 ${PALETTE_CSS}
+${BRAND_CSS}
 ${GROUND_CSS}
   * { box-sizing: border-box; }
   html, body { height: 100%; }
@@ -194,7 +197,6 @@ ${GROUND_CSS}
 
   .brand { display: flex; align-items: center; gap: .5rem; margin-bottom: 1.75rem; }
   .brand img { height: 26px; width: auto; display: block; }
-  .brand .word { font-family: var(--display); font-size: 1.5rem; font-weight: 600; letter-spacing: -.03em; color: var(--fg); }
 
   /* The sign-in page's card, holding the one column this page has: the two are
      met one after the other and a form that changed its ground between them
@@ -421,7 +423,7 @@ ${GROUND_HTML}
 <main>
   <div class="brand">
     <img src="${asset('hamster.svg')}" alt="">
-    <span class="word">HamsterHQ</span>
+    ${WORDMARK}
   </div>
 
   <form method="post" action="/profile" id="form">

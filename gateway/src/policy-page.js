@@ -37,7 +37,9 @@ import {
   GROUND_CSS,
   GROUND_HTML,
   GROUND_SCRIPT,
+  BRAND_CSS,
   PALETTE_CSS,
+  WORDMARK,
   THEME_TOGGLE,
   escapeHtml,
   langToggle,
@@ -764,6 +766,7 @@ export function policyPage(slug, state = {}) {
 ${FONT_PRELOAD}
 <style>
 ${PALETTE_CSS}
+${BRAND_CSS}
 ${GROUND_CSS}
   * { box-sizing: border-box; }
   body {
@@ -784,7 +787,6 @@ ${GROUND_CSS}
      out past the end of the word. */
   .brand { display: flex; align-items: center; gap: .5rem; margin-bottom: 2.5rem; text-decoration: none; color: inherit; border-bottom: 0; }
   .brand img { height: 22px; width: auto; display: block; }
-  .brand .word { font-family: var(--display); font-size: 1.25rem; font-weight: 600; letter-spacing: -.03em; color: var(--fg); }
 
   /* The paper the document sits on, on the same recipe as the sign-in card:
      a reading column laid over the lattice rather than floating in it. */
@@ -835,7 +837,7 @@ ${GROUND_HTML}
 <main>
   <a class="brand" href="/">
     <img src="${asset('hamster.svg')}" alt="">
-    <span class="word">HamsterHQ</span>
+    ${WORDMARK}
   </a>
 
   <article>

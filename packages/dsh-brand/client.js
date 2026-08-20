@@ -30,8 +30,24 @@ window.__ModuleLoader__.load({
   factory: (require) => {
     const React = require('react')
 
-    /** What this deployment is called, in the one place the sidebar shows it. */
-    const NAME = 'HamsterHQ'
+    /** What this plugin's own rules are scoped to; nothing else uses it. */
+    const CLASS = 'dsh-brand'
+
+    /**
+     * What this deployment is called, in two parts.
+     *
+     * `Hamster` is the word and `HQ` is the mark on it — a rounded rectangle in
+     * the deployment's own green, which is the same treatment the sign-in page
+     * and the front door give it. Green here and nowhere else in the lockup:
+     * the hamster is a monochrome line drawing so that the two do not compete,
+     * and this is the one place the wordmark carries the brand colour.
+     */
+    const NAME = 'Hamster'
+    const MARK_TEXT = 'HQ'
+
+    /** The deployment's green, which is not the shell's accent and must not be. */
+    const BRAND_GREEN = '#0a7d55'
+    const BRAND_GREEN_DARK = '#40d99b'
 
     /**
      * The mark, served by nginx from the deployment's own root.
@@ -89,6 +105,26 @@ window.__ModuleLoader__.load({
     const MARK_CSS = `
       img[src="${MARK}"] { filter: none; }
       body[data-ds-dark-theme] img[src="${MARK}"] { filter: invert(1); }
+
+      /* A chip, not a highlight: its own box, its own baseline, and enough air
+         that the two letters are not touching its corners. Sized in em units so
+         it tracks whatever the sidebar sets the word at. */
+      .${CLASS}-hq {
+        display: inline-block;
+        padding: .06em .24em .1em;
+        border-radius: .24em;
+        background: ${BRAND_GREEN};
+        color: #ffffff;
+        /* A lockup rather than running text: the word's negative tracking would
+           pull these two letters into each other. */
+        letter-spacing: 0;
+      }
+      /* The green lightens on a dark ground for the same reason the rest of the
+         palette does, and the text on it darkens to match. */
+      body[data-ds-dark-theme] .${CLASS}-hq {
+        background: ${BRAND_GREEN_DARK};
+        color: #05231a;
+      }
     `
 
     function BrandMark({ size, className }) {
@@ -113,9 +149,18 @@ window.__ModuleLoader__.load({
      * @returns {object} the wordmark.
      */
     function BrandName() {
-      return React.createElement('span', {
-        style: { fontSize: '15px', fontWeight: 600, letterSpacing: '-0.02em', whiteSpace: 'nowrap' },
-      }, NAME)
+      return React.createElement(
+        'span',
+        {
+          className: `${CLASS}-word`,
+          style: {
+            fontSize: '15px', fontWeight: 600, letterSpacing: '-0.02em', whiteSpace: 'nowrap',
+            display: 'inline-flex', alignItems: 'baseline', gap: '.18em',
+          },
+        },
+        NAME,
+        React.createElement('span', { className: `${CLASS}-hq` }, MARK_TEXT),
+      )
     }
 
     return {

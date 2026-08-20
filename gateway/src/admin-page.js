@@ -19,7 +19,7 @@
  * and its sandbox with it.
  */
 
-import { FONT_PRELOAD, PALETTE_CSS, THEME_TOGGLE, TOAST_CSS, escapeHtml, langToggle, toast, toastEntry } from './page-chrome.js'
+import { BRAND_CSS, FONT_PRELOAD, PALETTE_CSS, THEME_TOGGLE, TOAST_CSS, WORDMARK, escapeHtml, langToggle, toast, toastEntry } from './page-chrome.js'
 import { asset } from './page-assets.js'
 import { describeKey } from './settings.js'
 
@@ -114,6 +114,7 @@ export function adminPage(state) {
 ${FONT_PRELOAD}
 <style>
 ${PALETTE_CSS}
+${BRAND_CSS}
 ${TOAST_CSS}
   * { box-sizing: border-box; }
   body {
@@ -132,7 +133,6 @@ ${TOAST_CSS}
 
   .brand { display: flex; align-items: center; gap: .5rem; margin-bottom: 2rem; }
   .brand img { height: 26px; width: auto; display: block; }
-  .brand .word { font-family: var(--display); font-size: 1.375rem; font-weight: 600; letter-spacing: -.03em; color: var(--fg); }
   /* Filled, not outlined: the wordmark reads as one lockup — the name and the
      product beside it — and a hairline chip there is a second thing to read
      rather than the other half of the first. --ink inverts with the theme, so
@@ -302,7 +302,7 @@ ${langToggle(table)}
 <main>
   <div class="brand">
     <img src="${asset('hamster.svg')}" alt="">
-    <span class="word">HamsterHQ</span>
+    ${WORDMARK}
     <span class="here">${escapeHtml(viewer)} · <a href="/" data-t="back">返回应用</a></span>
   </div>
 

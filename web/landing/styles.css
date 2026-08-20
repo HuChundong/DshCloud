@@ -217,6 +217,23 @@ header.top .rail { display: flex; justify-content: center; }
   backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
 }
 .brand { display: flex; align-items: center; gap: 9px; font-family: var(--display); font-weight: 600; font-size: 17px; letter-spacing: -.02em; }
+/* The name is two parts: `Hamster` is the word and `HQ` is the mark on it.
+   The mark sits in a rounded rectangle filled with the deployment's own green
+   — the same colour a running sandbox wears — and it is the one place the
+   wordmark carries the brand colour, which is why the hamster beside it is
+   monochrome. Sized in em units so the header and the footer, set at different
+   sizes, are one shape. */
+.brand .word, .top .word { display: inline-flex; align-items: baseline; gap: .18em; }
+.word-hq {
+  display: inline-block;
+  padding: .06em .22em .1em;
+  border-radius: .22em;
+  background: var(--accent);
+  color: var(--on-accent);
+  /* A lockup, not running text: the negative tracking around it would pull the
+     two letters into each other. */
+  letter-spacing: 0;
+}
 .brand img { width: 24px; height: 24px; }
 /* The mark, in whichever direction this page is being read.
 

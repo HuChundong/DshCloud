@@ -205,6 +205,50 @@ export const PALETTE_CSS = `${FONT_CSS}
  * Both are CSS animations rather than a script, so they behave the same on a
  * page whose scripting is off.
  */
+/**
+ * The deployment's name, set the way its brand sets it.
+ *
+ * Two parts, because the name is two parts: `Hamster` is the word and `HQ` is
+ * the mark on it. The mark sits in a rounded rectangle filled with the
+ * deployment's own green — the same colour the running-sandbox dot wears, and
+ * the reason it is green rather than ink: this is the one place the wordmark
+ * carries the brand colour, and the hamster beside it is deliberately
+ * monochrome so that they do not compete.
+ *
+ * Here rather than in each page, and as markup rather than as a rule, because
+ * four pages had four copies of a `.word` rule and a wordmark that is not
+ * identical in all of them is not a wordmark.
+ */
+export const WORDMARK = '<span class="word">Hamster<span class="word-hq">HQ</span></span>'
+
+/** What `WORDMARK` needs, for pages that show it. */
+export const BRAND_CSS = `
+  .brand .word {
+    display: inline-flex;
+    align-items: baseline;
+    gap: .18em;
+    font-family: var(--display);
+    font-size: 1.5rem;
+    font-weight: 600;
+    letter-spacing: -.03em;
+    color: var(--fg);
+  }
+  /* A chip, not a highlight: it has its own box, its own baseline, and enough
+     air that the two letters are not touching its corners. Sized in em units so
+     it tracks whatever the word around it is set at — the sign-in page and the
+     footer are different sizes and this is one shape. */
+  .brand .word-hq {
+    display: inline-block;
+    padding: .06em .22em .1em;
+    border-radius: .22em;
+    background: var(--accent);
+    color: var(--on-accent);
+    /* The chip is a lockup rather than running text: the negative tracking the
+       word carries would pull its two letters into each other. */
+    letter-spacing: 0;
+  }
+`
+
 export const TOAST_CSS = `
   .toast {
     position: fixed;

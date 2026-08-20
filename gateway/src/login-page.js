@@ -38,7 +38,9 @@ import {
   GROUND_CSS,
   GROUND_HTML,
   GROUND_SCRIPT,
+  BRAND_CSS,
   PALETTE_CSS,
+  WORDMARK,
   THEME_TOGGLE,
   langToggle,
   toastEntry,
@@ -210,6 +212,7 @@ export function loginPage(state = {}) {
 ${FONT_PRELOAD}
 <style>
 ${PALETTE_CSS}
+${BRAND_CSS}
 ${GROUND_CSS}
   * { box-sizing: border-box; }
   html, body { height: 100%; }
@@ -248,7 +251,6 @@ ${GROUND_CSS}
   /* Height, not width: the mark is a hamster standing rather than a disc,
      so it is wider than it is tall and a square box would letterbox it. */
   .brand img { height: 26px; width: auto; display: block; }
-  .brand .word { font-family: var(--display); font-size: 1.5rem; font-weight: 600; letter-spacing: -.03em; color: var(--fg); }
   /* Filled, not outlined: the wordmark reads as one lockup — the name and the
      product beside it — and a hairline chip there is a second thing to read
      rather than the other half of the first. --ink inverts with the theme, so
@@ -454,7 +456,7 @@ ${GROUND_HTML}
 <main>
   <a class="brand" href="/">
     <img src="${asset('hamster.svg')}" alt="">
-    <span class="word">HamsterHQ</span>
+    ${WORDMARK}
   </a>
 
   <div class="card">

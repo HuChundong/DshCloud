@@ -49,6 +49,33 @@ belly, and the eye is a solid circle.
 Keep the SVG as the single source of geometry. Pages should reference the file
 as an image instead of copying its path data into each consumer.
 
+## Wordmark
+
+The name is two parts and is set as two parts: **Hamster** is the word, and
+**HQ** is the mark on it — a rounded rectangle filled with the deployment's
+green, with the two letters in the colour that contrasts with it.
+
+Green here and nowhere else in the lockup. The hamster beside it is a
+monochrome line drawing precisely so that the two do not compete for the same
+attention, which leaves the wordmark as the one place the brand colour appears
+in the name.
+
+Three rules make it one shape wherever it is set:
+
+- it is sized in `em`, so the sign-in page at 1.5rem and the sidebar at 15px are
+  the same lockup rather than two designs;
+- the chip carries `letter-spacing: 0`, because the negative tracking the word
+  is set with pulls `H` and `Q` into each other;
+- the colours come from `--accent` and `--on-accent`, which flip together, so
+  the chip is dark green on white and light green on near-black rather than one
+  of those on both.
+
+It is defined once per surface and shared: `WORDMARK` and `BRAND_CSS` in
+`gateway/src/page-chrome.js` for the pages that the gateway renders, `.word-hq`
+in `web/landing/styles.css` for the front door, and `BrandName` in
+`packages/dsh-brand/client.js` for the application shell — which cannot use the
+tokens, since they are this deployment's and the shell's accent is DeepSeek's.
+
 ## Filled mascot and scenes
 
 Filled artwork is a separate illustration family, not a rasterisation of the
