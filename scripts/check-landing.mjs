@@ -42,6 +42,26 @@ const page = {
 /** Keys the page never marks up, because JavaScript writes them at runtime. */
 const RUNTIME_KEYS = new Set(['copy.idle', 'copy.done', 'doc.title'])
 
+/**
+ * Whether a document's tags open and close in order.
+ *
+ * @param {string} xml - the document.
+ * @throws {Error} naming the first tag that does not match.
+ */
+function balanced(xml) {
+  const stack = []
+  // Comments and CDATA hold text that is not markup, so they go first.
+  const text = xml.replaceAll(/<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>|<\?[\s\S]*?\?>/g, '')
+  for (const match of text.matchAll(/<(\/?)([a-zA-Z][\w:-]*)([^>]*)>/g)) {
+    const [, closing, name, rest] = match
+    if (rest.trimEnd().endsWith('/')) continue
+    if (closing === '') { stack.push(name); continue }
+    const open = stack.pop()
+    if (open !== name) throw new Error(`</${name}> closes <${open ?? 'nothing'}>`)
+  }
+  if (stack.length > 0) throw new Error(`<${stack[stack.length - 1]}> is never closed`)
+}
+
 const problems = []
 
 /**
@@ -195,6 +215,24 @@ for (const name of ['mark.svg', 'hamster.svg', 'favicon.svg', 'wechat-qr.webp'])
 // - every page that shows it must invert it when dark. A missing rule is not a
 //   broken layout or an error in a console; it is a mark that is simply not
 //   there, on the one screen its author was not looking at.
+// Parsed, before anything is asked about what it says. An SVG is XML, so a
+// stray `<` — in a comment, in a style element, anywhere — opens a tag and the
+// file stops being a document. A browser renders nothing at all for it and
+// reports it as an image that failed to load, which reads as a missing file
+// rather than as a broken one.
+for (const name of ['hamster.svg', 'favicon.svg', 'mark.svg']) {
+  const file = join(root, 'gateway/assets', name)
+  if (!existsSync(file)) { problems.push(`gateway/assets/${name}: missing`); continue }
+  try {
+    // No XML parser in the standard library, and none is needed: what breaks
+    // these files is an unbalanced or unexpected tag, and a parser that only
+    // matches opens against closes catches exactly that.
+    balanced(readFileSync(file, 'utf8'))
+  } catch (error) {
+    problems.push(`gateway/assets/${name}: is not well-formed XML — ${error.message}`)
+  }
+}
+
 const mark = readFileSync(join(root, 'gateway/assets/hamster.svg'), 'utf8')
 if (/@media[^{]*prefers-color-scheme/.test(mark)) {
   problems.push('gateway/assets/hamster.svg: carries its own prefers-color-scheme rule, which resolves against the system rather than the page it is embedded in')

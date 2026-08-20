@@ -3,13 +3,17 @@
   <title id="title">HamsterHQ</title>
   <desc id="description">HamsterHQ 的单色镂空线稿标志：一只侧身站立、露出白色腹部的仓鼠。</desc>
   <style>
-    /* One colour, and no media query of its own. This file is embedded with
-       an <img>, and an <img>-embedded SVG resolves prefers-color-scheme
+    /* One colour, and no media query of its own. This file is embedded with an
+       img element, and an img-embedded SVG resolves prefers-color-scheme
        against the SYSTEM — it cannot see the theme the page it sits in was
        switched to. A page set to dark by hand on a light system therefore got
        an ink-black mark on an ink-black ground. The pages invert it from
        outside, where the choice is known; #101113 inverts to #EFEEEC, which is
-       the warm white this is meant to be. */
+       the warm white this is meant to be.
+
+       No angle bracket anywhere in here: this is XML, so a less-than inside a
+       style element opens a tag and the whole file stops parsing — which is a
+       mark that does not render at all rather than one of the wrong colour. */
     :root { --mark-ink: #101113; }
     .ink { fill: var(--mark-ink); }
     .belly { fill: none; stroke: var(--mark-ink); stroke-width: 24; stroke-linecap: round; }
