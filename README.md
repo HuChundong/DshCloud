@@ -176,10 +176,10 @@ Dockerfile's `landing` stage, the Pages workflow, and the dev server below.
 [`gateway/assets/hamster.svg`](gateway/assets/hamster.svg) is the primary mark:
 a transparent, single-colour line drawing built from curvature-continuous
 Bézier contours. It draws in ink black on light surfaces and warm white on dark
-ones. The square `favicon.svg` uses the same geometry and line weights. The
-filled `web/landing/avatar.webp` is a compact account-avatar variant based on
-the same profile, not a rasterisation of the line mark; keep it as a separate
-variant.
+ones. The square `favicon.svg` uses the same geometry with a stronger small-size
+optical weight correction. The filled `web/landing/avatar.webp` is a compact
+account-avatar variant based on the same profile, not a rasterisation of the
+line mark; keep it as a separate variant.
 The anatomy, palette, scene roles, and review sizes are recorded in the
 [brand and mascot guide](docs/brand.md).
 

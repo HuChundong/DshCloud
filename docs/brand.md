@@ -40,11 +40,14 @@ belly, and the eye is a solid circle.
   `gateway/assets/favicon.svg`.
 - Leave the background transparent. Do not add a body fill, gradient, shadow,
   enclosure, or a second outline colour.
-- Do not edit the favicon independently: it uses the same paths and line
-  weights in a square viewBox.
+- The source contours stay identical at every size. Up to 40 px high (or 64 px
+  wide), the full mark adds a 16-unit optical stroke and raises the belly arc
+  from 24 to 38 units so thin features survive rasterisation.
+- The favicon uses the same paths in a square viewBox, with a stronger compact
+  correction: a 40-unit optical stroke and a 56-unit belly arc up to 64 px.
 
-The SVG switches ink through `prefers-color-scheme`, so pages should reference
-the file as an image instead of copying its path data into each consumer.
+Keep the SVG as the single source of geometry. Pages should reference the file
+as an image instead of copying its path data into each consumer.
 
 ## Filled mascot and scenes
 
@@ -104,11 +107,12 @@ landing build; generated files under `dist/` are not the editing source.
 
 ## Review checklist
 
-Before accepting a mark change, render it on light and dark backgrounds and at
-20, 28, 36, 48, 64, and 96 px high. Check the head, ear, back, belly junction,
-and both feet for flat spots, loops, or abrupt curvature. Compare its pixels
-with the previous approved silhouette; a cleaner curve may move a small number
-of edge pixels, but it must not change the posture.
+Before accepting a mark change, render it on light and dark backgrounds. Check
+the favicon at 16 and 32 px square and the full mark at 20, 24, 28, 36, 48, 64,
+and 96 px high. Check the head, ear, back, belly junction, and both feet for flat
+spots, loops, or abrupt curvature. Compare its pixels with the previous approved
+silhouette; a cleaner curve may move a small number of edge pixels, but it must
+not change the posture.
 
 Run the repository checks that cover these assets and their documentation:
 
