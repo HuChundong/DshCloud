@@ -282,6 +282,23 @@ location = /app {
 # The shell document under its own name, for anything that still asks for it.
 location = /index.html { return 303 /app; }
 
+# Source maps, which nothing here publishes.
+#
+# The shell's own plugins reference a `.map` beside each bundle and upstream
+# ships none, so every page load asks for a dozen files that were never built.
+# They already 404; what this changes is that they stop writing a line into the
+# error log each time, where they sit among things that actually went wrong and
+# make that log worth less.
+#
+# A regex location, so it wins over the `/plugins/` prefix below without having
+# to be repeated inside it. `/landing/` is `^~` and is not affected — if this
+# deployment ever does publish maps, they will be under a prefix that opts out.
+location ~ \.map$ {
+  access_log off;
+  log_not_found off;
+  return 404;
+}
+
 location /plugins/ {
   auth_request /_auth;
   error_page 401 = @login;

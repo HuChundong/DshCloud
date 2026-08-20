@@ -3076,13 +3076,23 @@ window.__ModuleLoader__.load({
         // the wrong one. Observed rather than listened for on the window: the
         // panel is resized by dragging its edge, which the window never hears
         // about.
+        // Next frame, not inside the callback. `refit` resizes the terminal,
+        // which resizes the very node being observed, and a mutation made
+        // during delivery is what produces the loop warning. A frame later the
+        // observation cycle has finished and the resize is an ordinary one.
+        let pending
         const observer = new ResizeObserver(() => {
-          if (!refit()) return
-          send({ type: 'size', cols: term.cols, rows: term.rows })
+          if (pending !== undefined) return
+          pending = requestAnimationFrame(() => {
+            pending = undefined
+            if (!refit()) return
+            send({ type: 'size', cols: term.cols, rows: term.rows })
+          })
         })
         observer.observe(node)
 
         return () => {
+          if (pending !== undefined) cancelAnimationFrame(pending)
           observer.disconnect()
           typed.dispose()
           socket.close()
@@ -3138,7 +3148,9 @@ window.__ModuleLoader__.load({
             // The last real height stands instead. A stale one is off by a few
             // pixels; a zero is a panel with no way out.
             if (height <= 0) return
-            root.style.setProperty(HEADER_HEIGHT_VAR, `${height}px`)
+            const next = `${height}px`
+            if (root.style.getPropertyValue(HEADER_HEIGHT_VAR) === next) return
+            root.style.setProperty(HEADER_HEIGHT_VAR, next)
           }
           publish()
           observer = new ResizeObserver(publish)
@@ -3260,7 +3272,15 @@ window.__ModuleLoader__.load({
         const root = document.documentElement
         const apply = () => {
           const taken = maximised ? (roomBesideSidebar() ?? width) : width
-          root.style.setProperty(WIDTH_VAR, open ? `${String(taken)}px` : '0px')
+          const next = open ? `${String(taken)}px` : '0px'
+          // Only when it actually changed. This value is written INTO the box
+          // the observer below is watching — it sets the margin that gives the
+          // conversation its width — so writing it unconditionally means every
+          // notification produces another one. The browser calls that
+          // "ResizeObserver loop completed with undelivered notifications",
+          // and the second pass is always computing the number it already has.
+          if (root.style.getPropertyValue(WIDTH_VAR) === next) return
+          root.style.setProperty(WIDTH_VAR, next)
         }
         apply()
         // While maximised the width is the window's, so it has to be recomputed
