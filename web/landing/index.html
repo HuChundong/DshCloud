@@ -12,10 +12,10 @@
   sentence and then asks you to sign in has wasted the sentence.
 
   Below it, the rhythm of happycapy.ai — what they can ship, what the machine
-  behind it is, how to get one. It is called a computer rather than a sandbox
-  wherever a visitor is being told what they get: "sandbox" is what it is made
-  of, and belongs in docs/design.md and in the policies, not in the sentence
-  that has to land first. Technology stays in docs/design.md. The header is ours
+  behind it is, how to get one. One word for that machine, and it is "sandbox":
+  the headline names it, the section is called it, and the only thing still
+  called a computer is the reader's own — which is the contrast the page is
+  making. Technology stays in docs/design.md. The header is ours
   and stays ours:
   this project is open source and that is the difference worth leading with, so
   the repository sits in the top bar rather than in a footer column.
@@ -51,7 +51,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>HamsterHQ — Agent in SANDBOX</title>
-<meta name="description" content="An agent in a sandbox of its own: one computer per account, running DSH in the cloud. Models configured. Open source. Free to start.">
+<meta name="description" content="An agent in a sandbox of its own: one per account, running DSH in the cloud. Models configured. Open source. Free to start.">
 <meta name="color-scheme" content="light dark">
 <link rel="icon" href="favicon.svg" onerror="this.onerror=null;this.href='../../gateway/assets/favicon.svg'">
 <link rel="preload" href="fonts/host-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
@@ -333,22 +333,33 @@ h1 { font-size: clamp(34px, 4vw, 52px); line-height: 1.14; letter-spacing: -.04e
 .headline p { color: var(--text-3); font-size: clamp(16px, 1.3vw, 18px); max-width: 32em; margin: 0 auto; }
 
 /*
-  The line under the headline that says whose harness this runs on. A capsule
-  rather than a sentence, and a link rather than a claim: it is the same shape
-  as the chip in the header, at the same weight as the footer, so it reads as
-  provenance rather than as a second headline.
+  The line under the headline that says whose harness this runs on.
+
+  Filled rather than outlined, in the ink the mark itself is drawn in: this is
+  how upstream sets its own badge, and a badge that looks like theirs is the
+  point — someone should recognise what is under this before they read the
+  words. It stays attribution rather than co-branding by being small: thirteen
+  pixels of type under a headline five times that, sitting alone above the
+  product still rather than beside our own wordmark.
 */
 .built {
   display: inline-flex; align-items: center; gap: 8px;
-  margin-top: 18px; padding: 7px 14px 7px 11px;
-  border: 1px solid var(--border-soft); border-radius: var(--radius-pill);
-  font-size: 13.5px; color: var(--text-3);
-  transition: border-color .16s, color .16s;
+  margin-top: 18px; padding: 7px 15px 7px 12px;
+  border-radius: var(--radius-pill);
+  background: var(--btn-bg); color: var(--btn-text);
+  font-size: 13px; font-weight: 500;
+  transition: background .16s;
 }
-.built:hover { border-color: var(--border-strong); color: var(--text-2); }
-/* Upstream's mark is a single-colour black glyph, so on the dark ground it
-   would be black on black. Same swap the footer's copy makes. */
-@media (prefers-color-scheme: dark) { .built .mark { filter: invert(1); } }
+.built:hover { background: var(--btn-bg-hover); }
+/*
+  The mark is a single-colour black glyph, and the capsule under it changes
+  colour with the theme: black in light, white in dark. So the glyph inverts in
+  light — white on the black capsule — and stays as drawn in dark, where the
+  capsule is the white one. This is the opposite of the rule the footer's copy
+  needs, which is why it is stated here rather than shared.
+*/
+.built .mark { filter: invert(1); }
+@media (prefers-color-scheme: dark) { .built .mark { filter: none; } }
 
 /* ---------- the workspace still ---------- */
 
@@ -716,7 +727,7 @@ footer.foot a:hover { color: var(--text-2); }
       <span class="spacer"></span>
       <nav>
         <a href="#work" data-t="nav.work">Work</a>
-        <a href="#computer" data-t="nav.sandbox">Your computer</a>
+        <a href="#sandbox" data-t="nav.sandbox">The sandbox</a>
         <a href="#run" data-t="nav.run">Get started</a>
       </nav>
       <a class="btn btn-ghost btn-sm" href="https://github.com/HuChundong/HamsterHQ">
@@ -858,7 +869,7 @@ footer.foot a:hover { color: var(--text-2); }
         <div class="work-meta">
           <p class="en">Data</p>
           <h3 data-t="work.w3h">Weekly sales table, cleaned</h3>
-          <p data-t="work.w3b">Clean, join, export. The files stay on it.</p>
+          <p data-t="work.w3b">Clean, join, export. The files stay in the sandbox.</p>
         </div>
       </a>
       <a class="work" href="/login">
@@ -885,9 +896,9 @@ footer.foot a:hover { color: var(--text-2); }
   </div>
 </section>
 
-<section class="band" id="computer">
+<section class="band" id="sandbox">
   <div class="rail">
-    <h2 data-t="value.h2">Everyone gets a computer.</h2>
+    <h2 data-t="value.h2">Everyone gets a sandbox.</h2>
     <p class="lede" data-t="value.lede">One per account: a shell, a filesystem, a network. Close your laptop — it keeps working.</p>
 
     <div class="quad">
@@ -927,7 +938,7 @@ footer.foot a:hover { color: var(--text-2); }
         <h3 data-t="run.ah">Start on ours</h3>
         <ul>
           <li data-t="run.a1">Open a browser. Nothing to install.</li>
-          <li data-t="run.a2">Your own computer can be off. That one keeps running.</li>
+          <li data-t="run.a2">Your own computer can be off. The sandbox keeps running.</li>
           <li data-t="run.a3">Files and sessions are there next time.</li>
         </ul>
         <div class="tail"><a class="btn btn-primary" href="/login" data-t="run.acta">Get started for free</a></div>
@@ -1029,7 +1040,7 @@ footer.foot a:hover { color: var(--text-2); }
 const T = {
   'nav.chip':     { en: 'Open source · MIT',   zh: '开源 · MIT' },
   'nav.work':     { en: 'Work',                zh: '能力' },
-  'nav.sandbox':  { en: 'Your computer',       zh: '你的电脑' },
+  'nav.sandbox':  { en: 'The sandbox',         zh: '沙箱' },
   'nav.run':      { en: 'Get started',         zh: '开始' },
   'nav.cta':      { en: 'Get started for free', zh: '免费开始' },
 
@@ -1067,14 +1078,14 @@ const T = {
   'work.w2h':     { en: 'Competitive research brief', zh: '竞品调研简报' },
   'work.w2b':     { en: 'Sources, notes, and a write-up you can send.', zh: '来源、笔记，和一份能发出去的成稿。' },
   'work.w3h':     { en: 'Weekly sales table, cleaned', zh: '清洗好的周销售表' },
-  'work.w3b':     { en: 'Clean, join, export. The files stay on it.', zh: '清理、拼接、导出，文件就留在这台电脑上。' },
+  'work.w3b':     { en: 'Clean, join, export. The files stay in the sandbox.', zh: '清理、拼接、导出，文件留在沙箱里。' },
   'work.w4h':     { en: 'A nightly report that runs', zh: '每晚自动跑的报表' },
   'work.w4b':     { en: 'Install, build, run — on the same machine.', zh: '安装、构建、运行，就在这台机器上。' },
   'work.w5h':     { en: 'Read a repository',   zh: '读一个仓库' },
   'work.w5b':     { en: 'Clone, search, patch.', zh: '克隆、搜索、改代码。' },
-  'value.h2':     { en: 'Everyone gets a computer.', zh: '每个人分到一台电脑。' },
+  'value.h2':     { en: 'Everyone gets a sandbox.', zh: '每个人分到一个沙箱。' },
   'value.lede':   { en: 'One per account: a shell, a filesystem, a network. Close your laptop — it keeps working.',
-                    zh: '一个账号一台：有终端、有文件系统、能联网。合上笔记本，它照样干活。' },
+                    zh: '一个账号一个：有终端、有文件系统、能联网。合上笔记本，它照样干活。' },
   'value.c1h':    { en: 'Same DSH',            zh: '体验不变' },
   'value.c1b':    { en: 'The interface you already know.', zh: '还是你熟悉的界面，不用重学。' },
   'value.c2h':    { en: 'Swap what it runs on', zh: '底层运行时可替换' },
@@ -1089,8 +1100,8 @@ const T = {
   'run.ah':       { en: 'Start on ours',       zh: '直接用我们的' },
   'run.a1':       { en: 'Open a browser. Nothing to install.',
                     zh: '打开浏览器就能用，不用安装。' },
-  'run.a2':       { en: 'Your own computer can be off. That one keeps running.',
-                    zh: '你的电脑关了，那台还在跑。' },
+  'run.a2':       { en: 'Your own computer can be off. The sandbox keeps running.',
+                    zh: '你的电脑关了，沙箱还在跑。' },
   'run.a3':       { en: 'Files and sessions are there next time.',
                     zh: '文件和会话都在，下次接着做。' },
   'run.acta':     { en: 'Get started for free', zh: '免费开始' },
