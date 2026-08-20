@@ -132,7 +132,7 @@ for (const match of source.matchAll(/\s(?:src|href)="([^"]+)"/g)) {
 for (const [file, images, icon] of [
   ['../../gateway/assets/hamster.svg', 3, false],
   ['../../gateway/assets/favicon.svg', 0, true],
-  ['../../gateway/assets/mark.svg', 1, false],
+  ['../../gateway/assets/mark.svg', 2, false],
 ]) {
   const imageFallback = `onerror="this.onerror=null;this.src='${file}'"`
   const found = source.split(imageFallback).length - 1

@@ -50,8 +50,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>HamsterHQ — your computer, built for an agent</title>
-<meta name="description" content="An agent-native computer, one per account, running DSH in the cloud. Models configured. Open source. Free to start.">
+<title>HamsterHQ — Agent in SANDBOX</title>
+<meta name="description" content="An agent in a sandbox of its own: one computer per account, running DSH in the cloud. Models configured. Open source. Free to start.">
 <meta name="color-scheme" content="light dark">
 <link rel="icon" href="favicon.svg" onerror="this.onerror=null;this.href='../../gateway/assets/favicon.svg'">
 <link rel="preload" href="fonts/host-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
@@ -331,6 +331,24 @@ header.top .rail { display: flex; justify-content: center; }
 .headline { text-align: center; margin: 0 auto clamp(30px, 4vw, 44px); max-width: 40em; }
 h1 { font-size: clamp(34px, 4vw, 52px); line-height: 1.14; letter-spacing: -.04em; margin: 0 0 16px; }
 .headline p { color: var(--text-3); font-size: clamp(16px, 1.3vw, 18px); max-width: 32em; margin: 0 auto; }
+
+/*
+  The line under the headline that says whose harness this runs on. A capsule
+  rather than a sentence, and a link rather than a claim: it is the same shape
+  as the chip in the header, at the same weight as the footer, so it reads as
+  provenance rather than as a second headline.
+*/
+.built {
+  display: inline-flex; align-items: center; gap: 8px;
+  margin-top: 18px; padding: 7px 14px 7px 11px;
+  border: 1px solid var(--border-soft); border-radius: var(--radius-pill);
+  font-size: 13.5px; color: var(--text-3);
+  transition: border-color .16s, color .16s;
+}
+.built:hover { border-color: var(--border-strong); color: var(--text-2); }
+/* Upstream's mark is a single-colour black glyph, so on the dark ground it
+   would be black on black. Same swap the footer's copy makes. */
+@media (prefers-color-scheme: dark) { .built .mark { filter: invert(1); } }
 
 /* ---------- the workspace still ---------- */
 
@@ -701,7 +719,7 @@ footer.foot a:hover { color: var(--text-2); }
         <a href="#computer" data-t="nav.sandbox">Your computer</a>
         <a href="#run" data-t="nav.run">Get started</a>
       </nav>
-      <a class="btn btn-ghost btn-sm" href="https://github.com/HuChundong/DshCloud">
+      <a class="btn btn-ghost btn-sm" href="https://github.com/HuChundong/HamsterHQ">
         <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0a8 8 0 0 0-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.4 7.4 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48l-.01 2.19c0 .21.15.46.55.38A8 8 0 0 0 8 0Z"/></svg>
         <span class="gh-label">GitHub</span>
       </a>
@@ -719,8 +737,19 @@ footer.foot a:hover { color: var(--text-2); }
   <div class="rail">
 
     <div class="headline">
-      <h1 data-t="hero.h1">Your computer, built for an agent</h1>
-      <p data-t="hero.p">Runs in the cloud, and keeps running. On the DSH you already know.</p>
+      <h1 data-t="hero.h1">Agent in SANDBOX</h1>
+      <!--
+        Attribution, not co-branding. It names the harness this runs on, links
+        to it, and is set small enough that nobody could read it as a joint
+        product: DeepSeek's guidelines allow describing the relationship
+        truthfully and ask projects not to present their materials as their
+        own, and the difference between those two is entirely one of size and
+        placement.
+      -->
+      <a class="built" href="https://github.com/deepseek-ai/deepseek-harness">
+        <img class="mark" src="mark.svg" alt="" width="17" height="17" onerror="this.onerror=null;this.src='../../gateway/assets/mark.svg'">
+        <span data-t="hero.built">Built on DeepSeek Harness</span>
+      </a>
     </div>
 
     <div class="app">
@@ -751,7 +780,7 @@ footer.foot a:hover { color: var(--text-2); }
           </div>
           <div class="app-user">
             <img class="face" src="avatar.webp" alt="" width="26" height="26">
-            <span class="who"><b data-t="app.name">梁圣</b><span data-t="app.plan">Free plan</span></span>
+            <span class="who"><b data-t="app.name">hammy</b><span data-t="app.plan">Free plan</span></span>
           </div>
         </div>
       </aside>
@@ -789,7 +818,7 @@ footer.foot a:hover { color: var(--text-2); }
     <div class="under">
       <div class="cta">
         <a class="btn btn-primary" href="/login" data-t="hero.cta1">Get started for free</a>
-        <a class="btn btn-ghost" href="https://github.com/HuChundong/DshCloud" data-t="hero.cta2">Read the source</a>
+        <a class="btn btn-ghost" href="https://github.com/HuChundong/HamsterHQ" data-t="hero.cta2">Read the source</a>
       </div>
     </div>
 
@@ -927,7 +956,7 @@ footer.foot a:hover { color: var(--text-2); }
             </div>
             <div class="term-body">
               <pre id="t-docker" class="on"><span class="c" data-t="term.c1"># containers on one host — for a trial run</span>
-<span class="p">$</span> git clone https://github.com/HuChundong/DshCloud
+<span class="p">$</span> git clone https://github.com/HuChundong/HamsterHQ
 <span class="p">$</span> docker compose --profile build build
 <span class="p">$</span> docker compose up -d</pre>
               <pre id="t-cube"><span class="c" data-t="term.c2"># a microVM per person — what production runs</span>
@@ -947,7 +976,7 @@ footer.foot a:hover { color: var(--text-2); }
     <h2 data-t="close.h2">Ready to run DSH in the cloud?</h2>
     <div class="cta">
       <a class="btn btn-primary" href="/login" data-t="close.cta1">Get started for free</a>
-      <a class="btn btn-ghost" href="https://github.com/HuChundong/DshCloud" data-t="close.cta2">Star on GitHub</a>
+      <a class="btn btn-ghost" href="https://github.com/HuChundong/HamsterHQ" data-t="close.cta2">Star on GitHub</a>
     </div>
   </div>
 </section>
@@ -961,7 +990,7 @@ footer.foot a:hover { color: var(--text-2); }
 <footer class="foot">
   <div class="rail">
     <span class="lic">MIT</span>
-    <a href="https://github.com/HuChundong/DshCloud">
+    <a href="https://github.com/HuChundong/HamsterHQ">
       <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0a8 8 0 0 0-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.4 7.4 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48l-.01 2.19c0 .21.15.46.55.38A8 8 0 0 0 8 0Z"/></svg>
       GitHub
     </a>
@@ -1004,9 +1033,8 @@ const T = {
   'nav.run':      { en: 'Get started',         zh: '开始' },
   'nav.cta':      { en: 'Get started for free', zh: '免费开始' },
 
-  'hero.h1':      { en: 'Your computer, built for an agent', zh: '你的电脑，为 agent 而生' },
-  'hero.p':       { en: 'Runs in the cloud, and keeps running. On the DSH you already know.',
-                    zh: '持续在云端运行，跑着你熟悉的 DSH。' },
+  'hero.h1':      { en: 'Agent in SANDBOX',     zh: '让 agent 住进沙箱' },
+  'hero.built':   { en: 'Built on DeepSeek Harness', zh: '基于 DeepSeek Harness' },
   'hero.cta1':    { en: 'Get started for free', zh: '免费开始' },
   'hero.cta2':    { en: 'Read the source',     zh: '查看源码' },
 
@@ -1017,7 +1045,7 @@ const T = {
   'app.running':  { en: 'Running',             zh: '运行中' },
   'app.mem':      { en: 'MEM',                 zh: '内存' },
   'app.disk':     { en: 'DISK',                zh: '磁盘' },
-  'app.name':     { en: '梁圣',                zh: '梁圣' },
+  'app.name':     { en: 'hammy',               zh: 'hammy' },
   'app.plan':     { en: 'Free plan',           zh: 'Free 套餐' },
   'app.greet':    { en: 'What are we building today?', zh: '今天想构建点什么？' },
   'app.free':     { en: 'Free',                zh: '免费' },
@@ -1098,7 +1126,7 @@ const T = {
   'copy.idle':    { en: 'Copy',                zh: '复制' },
   'copy.done':    { en: 'Copied',              zh: '已复制' },
 
-  'doc.title':    { en: 'HamsterHQ — your computer, built for an agent', zh: 'HamsterHQ — 你的电脑，为 agent 而生' },
+  'doc.title':    { en: 'HamsterHQ — Agent in SANDBOX', zh: 'HamsterHQ — 让 agent 住进沙箱' },
 }
 
 /*

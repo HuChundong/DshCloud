@@ -4,7 +4,7 @@
 
 English | [中文](README.zh.md)
 
-Project page: **<https://huchundong.github.io/DshCloud/>** — what it is, in one page.
+Project page: **<https://huchundong.github.io/HamsterHQ/>** — what it is, in one page.
 
 Project introduction: [Read the WeChat Official Account article](https://mp.weixin.qq.com/s/lDd3rK6syoCB7TANxwCRsQ)
 
