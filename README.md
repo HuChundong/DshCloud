@@ -1,4 +1,4 @@
-![HamsterHQ — Multi-Tenant Cloud for DSH](docs/assets/dshcloud-banner.png)
+![HamsterHQ — Multi-Tenant Cloud for DSH](docs/assets/dshcloud-banner.webp)
 
 # HamsterHQ
 
@@ -28,31 +28,31 @@ project adds to it, it adds as cordis plugins.
 
 ### Invite-only sign-up
 
-![Invite-only sign-up](docs/assets/screenshot-sign-up.png)
+![Invite-only sign-up](docs/assets/screenshot-sign-up.webp)
 
 ### Per-tenant DSH workspace
 
 The sidebar's foot carries what belongs to the person rather than to the
 session: their sandbox's state and load, and themselves.
 
-![Per-tenant DSH workspace](docs/assets/screenshot-workspace.png)
+![Per-tenant DSH workspace](docs/assets/screenshot-workspace.webp)
 
 ### The machine is theirs to see and to configure
 
 Its identity, its state, what it is using against what it was given, and the
 environment variables the next one will start with.
 
-![A tenant's own sandbox](docs/assets/screenshot-sandbox.png)
+![A tenant's own sandbox](docs/assets/screenshot-sandbox.webp)
 
 ### A name and a face
 
 Chosen on the way in, and shown in the sidebar afterwards.
 
-![A tenant's profile](docs/assets/screenshot-profile.png)
+![A tenant's profile](docs/assets/screenshot-profile.webp)
 
 ### Administration
 
-![Administration](docs/assets/screenshot-admin.png)
+![Administration](docs/assets/screenshot-admin.webp)
 
 ## Architecture
 

@@ -210,6 +210,27 @@ if (!nginx.includes('immutable')) {
   problems.push('web/site.inc: hashed assets are not served immutable, which is the point of hashing them')
 }
 
+// ---- every raster image is webp ----
+
+// A hard rule rather than a preference: these are photographs and screenshots
+// on the page a stranger loads first, and jpg or png costs several times what
+// the same picture costs as webp — the README's own set went from 2.2 MB to
+// 300 KB. Checked rather than remembered, because the next person to add a
+// screenshot will export whatever their tool offered.
+for (const directory of ['web/landing', 'docs/assets']) {
+  const root_ = join(root, directory)
+  if (!existsSync(root_)) continue
+  const walk = (at) => readdirSync(at, { withFileTypes: true }).flatMap((entry) => {
+    const here = join(at, entry.name)
+    return entry.isDirectory() ? walk(here) : [here]
+  })
+  for (const file of walk(root_)) {
+    if (/\.(jpe?g|png|bmp|tiff?)$/i.test(file)) {
+      problems.push(`${file.slice(root.length + 1)}: raster images must be webp`)
+    }
+  }
+}
+
 // ---- report ----
 
 if (problems.length > 0) {

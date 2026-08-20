@@ -1,4 +1,4 @@
-![HamsterHQ — Multi-Tenant Cloud for DSH](docs/assets/dshcloud-banner.png)
+![HamsterHQ — Multi-Tenant Cloud for DSH](docs/assets/dshcloud-banner.webp)
 
 # HamsterHQ
 
@@ -24,29 +24,29 @@ DSH 本身是依赖，从 npm 安装，从不打补丁。本项目要加给它�
 
 ### 邀请码注册
 
-![邀请码注册](docs/assets/screenshot-sign-up.png)
+![邀请码注册](docs/assets/screenshot-sign-up.webp)
 
 ### 每租户独立的 DSH 工作区
 
 侧边栏底部放的是属于人、而不属于某次会话的东西：他的沙箱状态与负载，以及他自己。
 
-![每租户独立的 DSH 工作区](docs/assets/screenshot-workspace.png)
+![每租户独立的 DSH 工作区](docs/assets/screenshot-workspace.webp)
 
 ### 那台机器归他自己看、自己配
 
 标识、状态、用掉多少对上分到多少，以及下一台启动时会带上的环境变量。
 
-![租户自己的沙箱](docs/assets/screenshot-sandbox.png)
+![租户自己的沙箱](docs/assets/screenshot-sandbox.webp)
 
 ### 一个名字和一张脸
 
 进门时选定，之后显示在侧边栏。
 
-![租户的个人资料](docs/assets/screenshot-profile.png)
+![租户的个人资料](docs/assets/screenshot-profile.webp)
 
 ### 管理后台
 
-![管理后台](docs/assets/screenshot-admin.png)
+![管理后台](docs/assets/screenshot-admin.webp)
 
 ## 架构
 
