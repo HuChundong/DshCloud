@@ -424,12 +424,24 @@ RUN npm install --omit=dev --no-audit --no-fund --install-links \
 # and no `python` at all. Anything installed outside the default directories
 # has to be reachable through this file or it does not exist to the backend.
 #
+# WHICH LAYOUT THIS IMAGE WAS BUILT FOR.
+#
+# The volume records the layout it was last brought to; the entrypoint compares
+# the two and does nothing when they agree, which is every boot but the first
+# after an upgrade. Raise this by one whenever the shape of what is stored
+# changes, and add the matching step in `migrate-storage-paths.mjs` — the two
+# are read together and neither is useful alone.
+#
+#   1  volume at /persist, workspace reached through a symlink
+#   2  volume at /mnt, workspace and DSH_HOME as real directories under it
+ENV SANDBOX_LAYOUT_VERSION=2
+
 # The tenant's harness state, on the mount beside their files. Set HERE, after
 # everything that composes a profile has run against the image's own home and
 # before this file records what the backend will start with.
 ENV DSH_HOME=/mnt/dsh
 
-RUN for name in PATH DSH_BIN DSH_HOME IMAGE_DSH_HOME MOUNT WORKSPACE HOME DSH_PERMISSION_MODE NODE_ENV \
+RUN for name in PATH DSH_BIN DSH_HOME IMAGE_DSH_HOME MOUNT WORKSPACE SANDBOX_LAYOUT_VERSION HOME DSH_PERMISSION_MODE NODE_ENV \
                 NODE_EXTRA_CA_CERTS TZ VIRTUAL_ENV MPLBACKEND MPLCONFIGDIR \
                 OFFICECLI_SKIP_UPDATE DSH_BUNDLED_SKILL_DIR; do \
       printf 'export %s=%s\n' "$name" "$(printenv "$name")"; \

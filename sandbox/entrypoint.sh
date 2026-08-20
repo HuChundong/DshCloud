@@ -57,16 +57,36 @@ ln -sfn "$IMAGE_DSH_HOME/profiles" "$DSH_HOME/profiles"
 # rather than left to disagree.
 sed -i "s|^export DSH_HOME=.*|export DSH_HOME=$DSH_HOME|" /app/sandbox/env.sh
 
-# Carry the workspace registry across a change of mount point.
+# Bring the tenant's data up to the layout this image understands.
 #
-# Grouping is by recorded absolute path, so a registration made when the volume
-# was mounted somewhere else points at a directory that no longer exists — and
-# its sessions, still present and still listed, show up ungrouped. Run before
-# the backend so it never reads the stale registry. Idempotent, and a failure
-# here is not worth refusing to start over: the worst it costs is the grouping
-# this repairs.
-node /app/sandbox/migrate-storage-paths.mjs "$DSH_HOME" "$WORKSPACE" || \
-  echo "sandbox: workspace registry migration failed; grouping may be stale"
+# The image knows which layout it was built for; the volume records which one
+# it was last brought to. Equal is the ordinary case and costs one read of a
+# small file — no node process, nothing parsed. Start-up is on the path of
+# every request that finds no sandbox, so the common case has to be free.
+#
+# A volume ahead of the image is refused rather than opened. That happens when
+# a deployment rolls back, and the old code would read a layout it does not
+# know by rules that no longer hold — losing data quietly where stopping is
+# merely loud.
+LAYOUT_STAMP="$MOUNT/.dsh-layout"
+LAYOUT_AT=$(cat "$LAYOUT_STAMP" 2>/dev/null || echo 0)
+case "$LAYOUT_AT" in ''|*[!0-9]*) LAYOUT_AT=0 ;; esac
+
+if [ "$LAYOUT_AT" -gt "$SANDBOX_LAYOUT_VERSION" ]; then
+  echo "sandbox: this volume is at layout $LAYOUT_AT and the image understands $SANDBOX_LAYOUT_VERSION;" >&2
+  echo "sandbox: refusing to start rather than read newer data by older rules" >&2
+  exit 1
+fi
+
+if [ "$LAYOUT_AT" -lt "$SANDBOX_LAYOUT_VERSION" ]; then
+  if node /app/sandbox/migrate-storage-paths.mjs "$DSH_HOME" "$WORKSPACE" "$LAYOUT_AT" "$SANDBOX_LAYOUT_VERSION"; then
+    printf '%s\n' "$SANDBOX_LAYOUT_VERSION" > "$LAYOUT_STAMP"
+  else
+    # Not fatal: what a failed step costs is the thing it repairs, and the
+    # stamp is left behind so the next boot tries again.
+    echo "sandbox: layout migration failed; the volume stays at $LAYOUT_AT" >&2
+  fi
+fi
 
 # The harness as the registry publishes it. DSH is a dependency of this
 # deployment rather than part of it, so a tenant runs the same `lib/bin.js` the
