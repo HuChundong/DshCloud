@@ -1,0 +1,33 @@
+#!/bin/sh
+# The gates that are fast enough to run before every commit.
+#
+# It exists because of one mistake made five times: prose written into a
+# template literal with a backtick in it, which ends the string and breaks the
+# file. Every time, something here would have said so in under a second — and
+# twice it was committed and pushed anyway, because the output scrolled past.
+#
+# So it is not read any more, it is enforced. Enable with:
+#   git config core.hooksPath .githooks
+#
+# Deliberately only the checks that need no network and no containers. The
+# slower ones — shellcheck, the image builds, the acceptance suite — stay in CI,
+# where waiting is free.
+set -e
+
+root=$(git rev-parse --show-toplevel)
+cd "$root"
+
+# The panel's browser half is derived, and `check-plugin-load` reads the
+# derived file. Building first means the check sees what was just written
+# rather than what was written last time.
+npm --prefix packages/dsh-artifact-panel run build --silent >/dev/null
+
+npx --yes oxlint@1.42.0
+node scripts/check-plugin-load.mjs >/dev/null
+node scripts/check-plugins.mjs >/dev/null
+node scripts/check-pages.mjs >/dev/null
+node scripts/check-landing.mjs >/dev/null
+node scripts/check-assets.mjs >/dev/null
+node scripts/check-docs.mjs >/dev/null
+
+echo "pre-commit: parses, loads, and says both languages"

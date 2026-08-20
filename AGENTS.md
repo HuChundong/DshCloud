@@ -182,6 +182,14 @@ docker inspect <container> --format '{{.Image}}'   # must equal
 docker images -q --no-trunc <image>:latest
 ```
 
+**Run the gates before committing, not after.** `git config core.hooksPath
+.githooks` enables a pre-commit hook that runs everything fast enough to run
+every time: the lint, the plugin load, and the language and asset checks. It is
+there for one mistake made five times — prose written into a template literal
+with a backtick in it, which ends the string and breaks the file. Every time,
+one of those checks would have said so in under a second, and twice it was
+committed and pushed anyway because the output had scrolled past.
+
 **Building `web` does not move the sandbox tag.** The `shell` stage is
 `FROM sandbox`, so building `web` builds the sandbox stage and the browser
 halves of the plugins reach nginx — while `hamsterhq-sandbox:latest` keeps

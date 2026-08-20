@@ -143,6 +143,11 @@ docker inspect <container> --format '{{.Image}}'   # 必须等于
 docker images -q --no-trunc <image>:latest
 ```
 
+**门禁要在提交之前跑,不是之后。** `git config core.hooksPath .githooks` 会启用一个
+pre-commit 钩子,把所有「快到可以每次都跑」的检查跑一遍:lint、插件加载、语言与资源检查。
+它的由来是同一个错误犯了五次——把带反引号的散文写进模板字符串,反引号终止了字符串、文件就坏了。
+每一次,这些检查里都有一条能在一秒内指出来;而其中两次仍然被提交并推送了,因为输出已经滚过去了。
+
 **构建 `web` 不会移动 sandbox 的标签。** `shell` 阶段是 `FROM sandbox`,所以构建 `web`
 会连带构建 sandbox 阶段,插件的浏览器端也会进到 nginx——但 `hamsterhq-sandbox:latest`
 仍然指着原来那个镜像,而 CubeSandbox 的模板指着更旧的一个标签。于是同一个插件同时存在于
