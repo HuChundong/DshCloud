@@ -109,10 +109,19 @@ window.__ModuleLoader__.load({
      * exactly the difference that was still visible: the application read as
      * white where the front door reads as off-white.
      *
-     * So the lightest step takes the window's colour and the module surface
-     * takes the sidebar's, which is what makes the two grounds the same
-     * ground. The darkest is the brand's ink, which is also what the front
-     * door sets its text in.
+     * So the lightest step takes the window's colour, and step 50 takes the
+     * sidebar's — 50 because that is what `--dsw-specific-sidebar-fill`
+     * resolves to, which is the only way to know: the sidebar is drawn by its
+     * own plugin, and the token it paints with is neither of the two the shell
+     * itself uses. Guessing at `bg-module-platform` by its name left the
+     * sidebar a shade off the window instead of a shade under it.
+     *
+     * That step is also the dark mode's text colour, and it wants the same
+     * value for a different reason: `#f4f4f2` is the warm white
+     * `docs/brand.md` sets the mark in on dark surfaces.
+     *
+     * The darkest step is the brand's ink, which is what the front door sets
+     * its text in.
      *
      * The ramp is what is overridden, not the seventy-eight aliases built on
      * it: those are `var()` references, so they follow. The accent and the
@@ -125,8 +134,8 @@ window.__ModuleLoader__.load({
     const PALETTE_CSS = `
       html body {
         --dsw-static-neutral-bluish-00: #fbfbfa;
-        --dsw-static-neutral-bluish-50: #fcfaf8;
-        --dsw-static-neutral-bluish-60: #f4f4f2;
+        --dsw-static-neutral-bluish-50: #f4f4f2;
+        --dsw-static-neutral-bluish-60: #f8f6f4;
         --dsw-static-neutral-bluish-75: #f5f3f1;
         --dsw-static-neutral-bluish-100: #f0eeec;
         --dsw-static-neutral-bluish-150: #eeecea;

@@ -93,8 +93,12 @@ the shell paints its base and all three layers from the lightest step, so in
 light mode it has no layers and they are all pure white. Converting that step by
 luminance kept it white, which is the difference that remained visible: the
 application read as white where the front door reads as off-white. The lightest
-step therefore takes the window's colour and the module surface takes the
-sidebar's. The darkest is the brand's ink `#101113`, which is what the front
+step therefore takes the window's colour, and step 50 takes the sidebar's — 50
+because that is what `--dsw-specific-sidebar-fill` resolves to, which is the
+only way to know it: the sidebar is drawn by its own plugin and paints with a
+token neither of the two the shell itself uses. That step is also the dark
+mode's text colour, and it wants the same value for a second reason: `#f4f4f2`
+is the warm white this document sets the mark in on dark surfaces. The darkest is the brand's ink `#101113`, which is what the front
 door sets its text in.
 
 The ramp is overridden, not the seventy-eight aliases built on it: those are
