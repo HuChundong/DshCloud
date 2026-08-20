@@ -432,12 +432,24 @@ window.__ModuleLoader__.load({
       .${P}-ring:hover .${P}-ring-label { opacity: 0; }
       .${P}-ring:hover .${P}-ring-value { opacity: 1; }
 
-      /* The arc moves to a new reading rather than cutting to it. Samples
-         arrive seconds apart, so an untweened arc jumps — which reads as the
-         number being unstable rather than as the sampling being coarse. The
-         stroke is tweened too, so crossing a threshold is a shift rather than
-         a flash of a different colour. */
-      .${P}-ring-arc { transition: stroke-dashoffset 600ms ease, stroke 300ms ease; }
+      /* The arc travels to each new reading over exactly the interval between
+         readings, at a constant rate. Both halves of that matter.
+
+         Linear, because ease-in-out starts and stops — and something that
+         starts and stops every five seconds is a twitch, not an animation.
+
+         A full SAMPLE_MS, because anything shorter leaves the arc parked for
+         the remainder: 600ms of movement and 4.4s of stillness was the first
+         attempt, and it read as jerkier than no animation at all. Matching the
+         interval means the arc is always moving and arrives just as the next
+         reading lands. The cost is that the ring lags the true figure by up to
+         one sample, which is the right trade for a gauge whose whole job is to
+         be glanceable — and the number on hover is not tweened, so anyone who
+         wants the current figure gets it exactly.
+
+         The stroke keeps a short tween of its own: a colour crossfading over
+         five seconds spends most of that time being neither colour. */
+      .${P}-ring-arc { transition: stroke-dashoffset ${String(SAMPLE_MS)}ms linear, stroke 300ms ease; }
       @media (prefers-reduced-motion: reduce) {
         .${P}-ring-label, .${P}-ring-value, .${P}-ring-arc { transition: none; }
       }
@@ -827,6 +839,15 @@ window.__ModuleLoader__.load({
 
     /** How often the footer asks the sandbox how it is doing. */
 
+    /**
+     * How often a reading arrives, which is what the arc's tween is paced to.
+     *
+     * The sampler's own period, and it has to stay that: this is `SAMPLE_MS` in
+     * `gateway/src/envd.js`, where the in-sandbox reader sits. Too short and the
+     * arc parks between readings; too long and it never catches up with one.
+     */
+    const SAMPLE_MS = 5000
+
     /** Ring geometry, matching the 3px stroke the sidebar's own chrome uses. */
     const RING = { size: 34, r: 13, width: 3 }
     const CIRCUMFERENCE = 2 * Math.PI * RING.r
@@ -862,10 +883,18 @@ window.__ModuleLoader__.load({
             cx: RING.size / 2, cy: RING.size / 2, r: RING.r, fill: 'none',
             stroke: 'var(--dsw-alias-border-l1, rgb(0 0 0 / 4%))', strokeWidth: RING.width,
           }),
-          known && React.createElement('circle', {
+          // Always in the tree, even before there is anything to show. An arc
+          // that appears when the first reading does appears already drawn —
+          // mounting is not a change, so there is nothing for the transition to
+          // run on. Present from the start at zero length, it grows into the
+          // first reading, which is what a gauge coming to life should look
+          // like. Hidden rather than absent while unknown, because a
+          // zero-length dash under a round cap still paints a dot.
+          React.createElement('circle', {
             className: `${P}-ring-arc`,
             cx: RING.size / 2, cy: RING.size / 2, r: RING.r, fill: 'none',
             stroke, strokeWidth: RING.width, strokeLinecap: 'round',
+            strokeOpacity: known ? 1 : 0,
             strokeDasharray: CIRCUMFERENCE,
             strokeDashoffset: CIRCUMFERENCE * (1 - shown),
             transform: `rotate(-90 ${String(RING.size / 2)} ${String(RING.size / 2)})`,
