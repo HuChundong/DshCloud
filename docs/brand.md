@@ -86,9 +86,16 @@ products, so `packages/dsh-brand/client.js` replaces the ramp with a warm one.
 
 What changes is temperature and nothing else. Each step keeps the luminance it
 had, computed rather than judged, so every contrast ratio in the interface is
-the one upstream chose — sampled pairs move by less than a hundredth. Two steps
-are pinned instead of converted: the lightest is white, and the darkest is the
-brand's ink `#101113`, which is what the front door sets its text in.
+the one upstream chose — sampled pairs move by less than a hundredth. Three steps are pinned instead of converted, and they are the ones the eye
+lands on. The front door's mock-up of this window is layered — the window is
+`#fbfbfa`, its sidebar `#f4f4f2`, and only the composer is paper white — while
+the shell paints its base and all three layers from the lightest step, so in
+light mode it has no layers and they are all pure white. Converting that step by
+luminance kept it white, which is the difference that remained visible: the
+application read as white where the front door reads as off-white. The lightest
+step therefore takes the window's colour and the module surface takes the
+sidebar's. The darkest is the brand's ink `#101113`, which is what the front
+door sets its text in.
 
 The ramp is overridden, not the seventy-eight aliases built on it: those are
 `var()` references and follow by themselves. The accent and the state colours

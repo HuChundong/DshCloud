@@ -100,9 +100,19 @@ window.__ModuleLoader__.load({
      * What is changed is TEMPERATURE and nothing else. Each step keeps the
      * luminance it had — computed, not eyeballed — so every contrast ratio in
      * the interface is the one upstream chose, and only the cast is different.
-     * Two are pinned rather than converted: the lightest is the page's own
-     * white, and the darkest is the brand's ink, which is also the colour the
-     * front door sets its text in.
+     * Three are pinned rather than converted, and they are the ones the eye
+     * actually lands on. The front door's mock-up of this window is layered —
+     * the window is `#fbfbfa`, its sidebar `#f4f4f2`, and only the composer is
+     * paper white — while the shell paints its base and all three layers from
+     * the lightest step, so in light mode it has no layers and they are all
+     * pure white. Converting that step by luminance kept it white, which is
+     * exactly the difference that was still visible: the application read as
+     * white where the front door reads as off-white.
+     *
+     * So the lightest step takes the window's colour and the module surface
+     * takes the sidebar's, which is what makes the two grounds the same
+     * ground. The darkest is the brand's ink, which is also what the front
+     * door sets its text in.
      *
      * The ramp is what is overridden, not the seventy-eight aliases built on
      * it: those are `var()` references, so they follow. The accent and the
@@ -114,9 +124,9 @@ window.__ModuleLoader__.load({
      */
     const PALETTE_CSS = `
       html body {
-        --dsw-static-neutral-bluish-00: #ffffff;
+        --dsw-static-neutral-bluish-00: #fbfbfa;
         --dsw-static-neutral-bluish-50: #fcfaf8;
-        --dsw-static-neutral-bluish-60: #f8f6f4;
+        --dsw-static-neutral-bluish-60: #f4f4f2;
         --dsw-static-neutral-bluish-75: #f5f3f1;
         --dsw-static-neutral-bluish-100: #f0eeec;
         --dsw-static-neutral-bluish-150: #eeecea;
