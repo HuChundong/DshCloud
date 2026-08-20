@@ -505,7 +505,15 @@ window.__ModuleLoader__.load({
       // held here rather than in a row because only one of each exists at a
       // time and because both are drawn at the panel's level, where they are
       // not clipped by the column the row lives in.
-      let state = Object.freeze({ dirs: {}, open: {}, filter: '', menu: undefined, ask: undefined })
+      let state = Object.freeze({
+        dirs: {}, open: {}, filter: '', menu: undefined, ask: undefined,
+        // The directory the tree was last taken TO, as opposed to the file
+        // that is open in the pane. Clicking a breadcrumb is a move, and a
+        // move with nothing to show for it is a control that looks broken:
+        // the directory it names is usually already expanded, so opening it
+        // again changes nothing anyone can see.
+        at: undefined,
+      })
       const listeners = new Set()
       const emit = () => { for (const listener of listeners) listener() }
       const put = (patch) => { state = Object.freeze({ ...state, ...patch }); emit() }
@@ -567,7 +575,12 @@ window.__ModuleLoader__.load({
             const ancestor = `/${segments.slice(0, i).join('/')}`
             if (open[ancestor] !== true) { open[ancestor] = true; changed = true }
           }
-          if (changed) put({ open })
+          // `at` is written whether or not anything opened, and it is written
+          // as a NEW object each time so that asking twice for the same
+          // directory still moves the tree to it. Without that, a second click
+          // on the same crumb is a click that does nothing.
+          if (self) put({ open, at: { path } })
+          else if (changed) put({ open })
         },
         setFilter: (filter) => put({ filter }),
         openMenu: (menu) => put({ menu }),
@@ -2120,7 +2133,19 @@ window.__ModuleLoader__.load({
      * @param {object} props - the directory, how deep it sits, and what to do with a file.
      * @returns {object|null} the rows.
      */
-    function Branch({ path, depth, onOpen, activePath }) {
+    /**
+     * Scroll a row into view once the tree has been taken to it.
+     *
+     * A callback ref rather than an effect, because the row does not exist
+     * until the branch holding it has expanded — which happens in the same
+     * render that asks for it. `block: 'nearest'` so a row already on screen
+     * does not jump.
+     *
+     * @param {Element|null} node - the row, or null as it unmounts.
+     */
+    const taken = (node) => { node?.scrollIntoView({ block: 'nearest' }) }
+
+    function Branch({ path, depth, onOpen, activePath, at }) {
       const t = useT()
       const tree = useTree()
       const node = tree.dirs[path]
@@ -2180,9 +2205,13 @@ window.__ModuleLoader__.load({
             className: `${NS}-row`,
             role: 'treeitem',
             tabIndex: 0,
+            // Brought into view when the tree is taken here — see `TakenTo`.
+            ref: entry.path === at?.path ? taken : undefined,
             'aria-expanded': entry.directory ? expanded : undefined,
             style: { paddingLeft: `${String(depth * 14 + 8)}px` },
-            'aria-current': entry.path === activePath ? 'true' : undefined,
+            // The open file, or the directory a breadcrumb just named. Both are
+            // "where you are", and the tree is the one place that can say so.
+            'aria-current': entry.path === activePath || entry.path === at?.path ? 'true' : undefined,
             title: entry.path,
             onClick: () => {
               if (entry.directory) treeStore.toggle(entry.path)
@@ -2213,7 +2242,7 @@ window.__ModuleLoader__.load({
           h('span', { className: `${NS}-row-icon` }, icon(entry.directory ? ICON_FILES : ICON_FILE, 14)),
           h('span', { className: `${NS}-row-name` }, entry.name),
           h(RowMenu, { entry })),
-          expanded ? h(Branch, { path: entry.path, depth: depth + 1, onOpen, activePath }) : null)
+          expanded ? h(Branch, { path: entry.path, depth: depth + 1, onOpen, activePath, at }) : null)
       }))
     }
 
@@ -2235,6 +2264,8 @@ window.__ModuleLoader__.load({
     function FileTree({ onOpen, activePath }) {
       const t = useT()
       const tree = useTree()
+      // Where the tree was last taken, which is a breadcrumb's whole effect.
+      const at = tree.at
       return h(React.Fragment, null,
         h('div', { className: `${NS}-filter` }, h('input', {
           type: 'search',
@@ -2256,7 +2287,7 @@ window.__ModuleLoader__.load({
           },
         },
           h('div', { className: `${NS}-tree` },
-            h(Branch, { path: ROOT, depth: 0, onOpen, activePath }))),
+            h(Branch, { path: ROOT, depth: 0, onOpen, activePath, at }))),
       )
     }
 
