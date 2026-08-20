@@ -294,7 +294,10 @@ location /plugins/ {
 # Anonymous by necessity as much as by choice: a browser fetches the manifest
 # with no credentials unless the tag opts in, and this index.html does not.
 location /assets/ {
-  expires 1y;
+  # One header rather than `expires`, which emits a Cache-Control of its own —
+  # and `immutable` besides, so a reload does not spend a conditional request
+  # asking about a file whose name already answers the question.
+  add_header Cache-Control "public, max-age=31536000, immutable";
   add_header Cache-Control "public, immutable";
 }
 
@@ -313,7 +316,17 @@ location = /manifest.webmanifest {
 # below for why that matters.
 location /brand/ {
   alias /usr/share/nginx/brand/;
-  expires 1h;
+  # Revalidated, not cached for a period. The name here has to stay fixed —
+  # `packages/dsh-brand/client.js` writes it as a constant, and that file is
+  # served to the browser as it was written rather than rewritten by a build,
+  # so nothing can put a hash in it. A fixed name and a period of caching is
+  # the arrangement where replacing the mark leaves the old one on screen for
+  # up to that period, which is what it did.
+  #
+  # So: names that carry a hash are immutable, and names that do not are
+  # revalidated. The cost is a conditional request per load, answered 304 with
+  # no body. `scripts/check-assets.mjs` holds both halves of that rule.
+  add_header Cache-Control "no-cache";
 }
 
 # ---- the landing page ----

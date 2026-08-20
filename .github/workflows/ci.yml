@@ -81,6 +81,13 @@ jobs:
       # half can pass every other gate and still throw the moment the shell
       # imports it — which is how a constant declared below the stylesheet that
       # interpolates it reached production.
+      # One rule, both directions: a name carrying a content hash may be cached
+      # forever, and a name that does not must be revalidated. Anything in
+      # between is a bug with a delay on it — and it looks correct to whoever
+      # deployed it, because their own browser fetched it fresh.
+      - name: Asset caching
+        run: node scripts/check-assets.mjs
+
       - name: Plugins load
         run: |
           npm --prefix packages/dsh-artifact-panel ci --no-audit --no-fund

@@ -8,6 +8,7 @@
     "lint": "oxlint",
     "check:docs": "node scripts/check-docs.mjs",
     "check:images": "scripts/check-images.sh",
+    "check:assets": "node scripts/check-assets.mjs",
     "check:pages": "node scripts/check-pages.mjs",
     "check:plugins": "node scripts/check-plugins.mjs",
     "check:plugin-load": "node scripts/check-plugin-load.mjs",

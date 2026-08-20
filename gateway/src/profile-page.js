@@ -34,6 +34,7 @@ import {
   toastEntry,
 } from './page-chrome.js'
 
+import { asset } from './page-assets.js'
 /** The cropping viewport, and the square that comes out of it. Both in CSS pixels. */
 const VIEW_PX = 240
 const OUTPUT_PX = 256
@@ -164,7 +165,7 @@ export function profilePage(state) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${first === true ? '完善资料' : '个人资料'} · HamsterHQ</title>
 <meta name="color-scheme" content="light dark">
-<link rel="icon" href="/login-assets/favicon.svg">
+<link rel="icon" href="${asset('favicon.svg')}">
 ${FONT_PRELOAD}
 <style>
 ${PALETTE_CSS}
@@ -419,7 +420,7 @@ ${GROUND_HTML}
 <div class="glow" aria-hidden="true"></div>
 <main>
   <div class="brand">
-    <img src="/login-assets/hamster.svg" alt="">
+    <img src="${asset('hamster.svg')}" alt="">
     <span class="word">HamsterHQ</span>
   </div>
 

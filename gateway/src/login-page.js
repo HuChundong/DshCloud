@@ -47,6 +47,7 @@ import {
   toast,
 } from './page-chrome.js'
 
+import { asset } from './page-assets.js'
 /**
  * Render the login page.
  *
@@ -205,7 +206,7 @@ export function loginPage(state = {}) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>HamsterHQ</title>
 <meta name="color-scheme" content="light dark">
-<link rel="icon" href="/login-assets/favicon.svg">
+<link rel="icon" href="${asset('favicon.svg')}">
 ${FONT_PRELOAD}
 <style>
 ${PALETTE_CSS}
@@ -452,7 +453,7 @@ ${GROUND_HTML}
 <div class="glow" aria-hidden="true"></div>
 <main>
   <a class="brand" href="/">
-    <img src="/login-assets/hamster.svg" alt="">
+    <img src="${asset('hamster.svg')}" alt="">
     <span class="word">HamsterHQ</span>
   </a>
 
@@ -466,7 +467,7 @@ ${GROUND_HTML}
     </form>
 
     <aside>
-      <img src="/login-assets/wechat-qr.webp" width="168" height="168" alt="">
+      <img src="${asset('wechat-qr.webp')}" width="168" height="168" alt="">
       <span data-t="wechat">微信扫码关注公众号</span>
     </aside>
   </div>

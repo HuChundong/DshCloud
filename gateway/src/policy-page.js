@@ -43,6 +43,7 @@ import {
   langToggle,
 } from './page-chrome.js'
 
+import { asset } from './page-assets.js'
 /**
  * Which version of these documents a tenant is agreeing to.
  *
@@ -759,7 +760,7 @@ export function policyPage(slug, state = {}) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${document.title} · HamsterHQ</title>
 <meta name="color-scheme" content="light dark">
-<link rel="icon" href="/login-assets/favicon.svg">
+<link rel="icon" href="${asset('favicon.svg')}">
 ${FONT_PRELOAD}
 <style>
 ${PALETTE_CSS}
@@ -833,7 +834,7 @@ ${langToggle(table)}
 ${GROUND_HTML}
 <main>
   <a class="brand" href="/">
-    <img src="/login-assets/hamster.svg" alt="">
+    <img src="${asset('hamster.svg')}" alt="">
     <span class="word">HamsterHQ</span>
   </a>
 

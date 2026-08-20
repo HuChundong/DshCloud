@@ -37,6 +37,7 @@ import { connect } from './db.js'
 import { canSendEmail } from './email.js'
 import { Invites } from './invites.js'
 import { loginPage } from './login-page.js'
+import { ASSET_PREFIX, assetFor } from './page-assets.js'
 import { POLICY_SLUGS, policyPage } from './policy-page.js'
 import { handlePanel } from './panel.js'
 import { TERMINAL_PATH, serveTerminal } from './terminal.js'
@@ -132,31 +133,6 @@ const verification = new Verification(db)
  * per request also means a missing asset fails the boot instead of leaving a
  * broken image on the only page an unauthenticated visitor can reach.
  */
-const LOGIN_ASSETS = {
-  // This deployment's own mark, which is what these pages are signed with.
-  'hamster.svg': {
-    type: 'image/svg+xml',
-    body: readFileSync(fileURLToPath(new URL('../assets/hamster.svg', import.meta.url))),
-  },
-  // The same animal, squared, for the tab.
-  'favicon.svg': {
-    type: 'image/svg+xml',
-    body: readFileSync(fileURLToPath(new URL('../assets/favicon.svg', import.meta.url))),
-  },
-  // Upstream's whale, kept for the one thing it is still right for: naming DSH
-  // where these pages refer to DSH. Nothing here wears it as its own.
-  'mark.svg': {
-    type: 'image/svg+xml',
-    body: readFileSync(fileURLToPath(new URL('../assets/mark.svg', import.meta.url))),
-  },
-  // The deployment's WeChat account, in the sign-in page's panel. An image
-  // rather than a link because a QR code is how someone follows an account
-  // from a laptop, which is where they are when they read this page.
-  'wechat-qr.webp': {
-    type: 'image/webp',
-    body: readFileSync(fileURLToPath(new URL('../assets/wechat-qr.webp', import.meta.url))),
-  },
-}
 const sandboxes = new SandboxManager({
   db,
   gatewayTunnelUrl: GATEWAY_TUNNEL_URL,
@@ -369,15 +345,19 @@ async function handleRequest(req, res) {
   // container, for the same reason the page is: sign-in has to work before any
   // sandbox exists and without the frontend bundle. Anonymous by necessity —
   // they are what an unauthenticated visitor is looking at.
-  if (path.startsWith('/login-assets/')) {
-    const asset = LOGIN_ASSETS[path.slice('/login-assets/'.length)]
-    if (asset === undefined) {
+  if (path.startsWith(ASSET_PREFIX)) {
+    const file = assetFor(path)
+    if (file === undefined) {
       res.writeHead(404, { 'Content-Type': 'text/plain' })
       res.end('not found')
       return
     }
-    res.writeHead(200, { 'Content-Type': asset.type, 'Cache-Control': 'public, max-age=3600' })
-    res.end(asset.body)
+    // Forever, because the name carries the bytes' hash: a different file is a
+    // different URL, so this one can never go stale. It was an hour under a
+    // fixed name, which is the arrangement where replacing the mark reached
+    // the front door at once and this page whenever the hour happened to be up.
+    res.writeHead(200, { 'Content-Type': file.type, 'Cache-Control': 'public, max-age=31536000, immutable' })
+    res.end(file.body)
     return
   }
 

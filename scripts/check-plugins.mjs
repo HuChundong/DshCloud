@@ -67,7 +67,7 @@ function dictionary(text) {
 
 const problems = []
 
-for (const { name, relative, text } of sources()) {
+for (const { relative, text } of sources()) {
   const found = dictionary(text)
   const dict = found?.entries
   const chinese = CJK.test(text.replaceAll(/^\s*(?:\/\/|\*|\/\*).*$/gm, ''))

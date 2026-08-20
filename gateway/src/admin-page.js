@@ -20,6 +20,7 @@
  */
 
 import { FONT_PRELOAD, PALETTE_CSS, THEME_TOGGLE, TOAST_CSS, escapeHtml, langToggle, toast, toastEntry } from './page-chrome.js'
+import { asset } from './page-assets.js'
 import { describeKey } from './settings.js'
 
 /**
@@ -109,7 +110,7 @@ export function adminPage(state) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>用户管理 · HamsterHQ</title>
 <meta name="color-scheme" content="light dark">
-<link rel="icon" href="/login-assets/favicon.svg">
+<link rel="icon" href="${asset('favicon.svg')}">
 ${FONT_PRELOAD}
 <style>
 ${PALETTE_CSS}
@@ -300,7 +301,7 @@ ${THEME_TOGGLE}
 ${langToggle(table)}
 <main>
   <div class="brand">
-    <img src="/login-assets/hamster.svg" alt="">
+    <img src="${asset('hamster.svg')}" alt="">
     <span class="word">HamsterHQ</span>
     <span class="here">${escapeHtml(viewer)} · <a href="/" data-t="back">返回应用</a></span>
   </div>
