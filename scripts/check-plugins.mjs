@@ -154,13 +154,21 @@ for (const { relative, text } of sources()) {
     .map((line, index) => (/^ {4}(?:const|let|function|class)\s/.test(line) ? index : -1))
     .filter((index) => index !== -1)
   const defs = lines
-    .map((line, index) => [index, /^ {4}(?:const\s+([A-Z][\w$]*)\s*=\s*(?:\(|function|React\.memo)|function\s+([A-Z][\w$]*)\s*\()/.exec(line)])
+    .map((line, index) => [index, /^ {4}(?:const\s+([A-Z][\w$]*)\s*=\s*(?:\(|function|React\.memo)|function\s+([A-Z][\w$]*)\s*\(|class\s+([A-Z][\w$]*)\s)/.exec(line)])
     .filter(([, match]) => match !== null)
-    .map(([index, match]) => [index, match[1] ?? match[2]])
-  for (const [index, component] of defs) {
+    .map(([index, match]) => [index, match[1] ?? match[2] ?? match[3], match[3] !== undefined])
+  for (const [index, component, isClass] of defs) {
     const next = bounds.find((at) => at > index) ?? lines.length
     const body = lines.slice(index, next).join('\n')
     if (!/\bt\(\s*'/.test(body)) continue
+    // A class component cannot hold a hook at all, so `useT` is not the fix
+    // there — it has to ask imperatively. The one that got this wrong was the
+    // error boundary, which is the component that runs when everything else
+    // has already thrown: it threw too, and took the panel with it.
+    if (isClass) {
+      problems.push(`${relative}: ${component} is a class and calls t() — a class cannot hold a hook; use say()('key')`)
+      continue
+    }
     if (!/const t = useT\(\)/.test(body)) {
       problems.push(`${relative}: ${component} calls t() and never binds it — it will throw on its first render`)
     }

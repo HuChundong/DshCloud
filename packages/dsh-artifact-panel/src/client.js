@@ -792,7 +792,11 @@ window.__ModuleLoader__.load({
         gap: 2px;
         flex: none;
         position: relative;
-        height: var(${HEADER_HEIGHT_VAR}, 49px);
+        /* Floored, and the floor is the point. This row holds the only controls
+           that close or widen the panel, so it may never be shorter than they
+           are — whatever the header it is matching happens to measure. Matching
+           is a nicety; being reachable is not. */
+        height: max(var(${HEADER_HEIGHT_VAR}, 49px), 40px);
         /* 12px on the right — the same inset the session header gives the very
            same button when the panel is closed, and the same the filter box
            below gets. This control moves between two containers as the panel
@@ -3122,7 +3126,18 @@ window.__ModuleLoader__.load({
         let observer
         if (header !== null && header !== undefined) {
           const publish = () => {
-            root.style.setProperty(HEADER_HEIGHT_VAR, `${Math.round(header.getBoundingClientRect().height)}px`)
+            const height = Math.round(header.getBoundingClientRect().height)
+            // Zero is not a height, it is an absence: the app has switched to a
+            // view that does not draw this header, and the element is still
+            // there measuring nothing. Publishing it collapsed the panel's tab
+            // bar to no height at all — the panel stayed open and kept showing
+            // the file, while every control in that bar went off the screen,
+            // including the only one that could close it.
+            //
+            // The last real height stands instead. A stale one is off by a few
+            // pixels; a zero is a panel with no way out.
+            if (height <= 0) return
+            root.style.setProperty(HEADER_HEIGHT_VAR, `${height}px`)
           }
           publish()
           observer = new ResizeObserver(publish)
@@ -3188,7 +3203,10 @@ window.__ModuleLoader__.load({
       render() {
         if (this.state.message === undefined) return this.props.children
         return h('div', { className: `${NS}-crash` },
-          h('strong', null, t('crashed')),
+          // `say()`, not the hook: this is a class component, where hooks are
+          // not allowed — and it is the component that runs when everything
+          // else has already thrown, so it must not be the thing that throws.
+          h('strong', null, say()('crashed')),
           h('span', null, this.state.message))
       }
     }
