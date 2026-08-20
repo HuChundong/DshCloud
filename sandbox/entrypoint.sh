@@ -57,6 +57,17 @@ ln -sfn "$IMAGE_DSH_HOME/profiles" "$DSH_HOME/profiles"
 # rather than left to disagree.
 sed -i "s|^export DSH_HOME=.*|export DSH_HOME=$DSH_HOME|" /app/sandbox/env.sh
 
+# Carry the workspace registry across a change of mount point.
+#
+# Grouping is by recorded absolute path, so a registration made when the volume
+# was mounted somewhere else points at a directory that no longer exists — and
+# its sessions, still present and still listed, show up ungrouped. Run before
+# the backend so it never reads the stale registry. Idempotent, and a failure
+# here is not worth refusing to start over: the worst it costs is the grouping
+# this repairs.
+node /app/sandbox/migrate-storage-paths.mjs "$DSH_HOME" "$WORKSPACE" || \
+  echo "sandbox: workspace registry migration failed; grouping may be stale"
+
 # The harness as the registry publishes it. DSH is a dependency of this
 # deployment rather than part of it, so a tenant runs the same `lib/bin.js` the
 # npm package ships as `dsh`, at the version the image was built with.
