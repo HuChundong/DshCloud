@@ -165,12 +165,11 @@ in are in `web/landing/fonts/`, latin subsets, 72 KB together; they are
 [SIL Open Font Licence](https://openfontlicense.org) and redistributing them
 beside this MIT source is what that licence is for.
 
-`web/landing/avatar.webp` is the one asset in the tree that is derived rather
-than authored. It is the head of `gateway/assets/ad.webp` — the project's
-mascot — cropped to the box `(0.28, 0.12)`–`(0.72, 0.56)` of the original,
-resampled to 128px and re-encoded: 5 KB instead of 701 KB, and without the
-strapline the source carries across its lower third. Regenerate it from the
-source rather than editing it in place.
+`web/landing/avatar.webp` is a 128px WebP derived from the project's own
+[`gateway/assets/hamster.svg`](gateway/assets/hamster.svg). It uses a tight
+head-and-shoulder crop, an off-white field, and the site's green accent ring so
+the mascot remains identifiable in the application's 26px account circle.
+Regenerate it from the SVG rather than editing the raster in place.
 
 The same file is the project page on GitHub Pages, published by
 [`.github/workflows/pages.yml`](.github/workflows/pages.yml). Serving from two

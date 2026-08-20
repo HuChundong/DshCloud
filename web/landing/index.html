@@ -383,10 +383,9 @@ h1 { font-size: clamp(34px, 4vw, 52px); line-height: 1.14; letter-spacing: -.04e
 .gauge::before { content: ""; position: absolute; inset: 2px; border-radius: 50%; background: var(--bg-sunken); }
 .gauge span { position: relative; font-size: 8px; letter-spacing: .02em; color: var(--text-4); }
 .app-user { display: flex; align-items: center; gap: 9px; }
-/* The project's mascot, cropped to the head. `web/landing/avatar.webp` is
-   derived from `gateway/assets/ad.webp`, which is 512px square, weighs 701 KB
-   and carries a strapline across its lower third — none of which suits a 26px
-   circle. See the README for how it was cut. */
+/* The project's own hamster mark, tightly cropped from
+   `gateway/assets/hamster.svg` so its ear, eye, muzzle and white belly remain
+   legible in this 26px circle. See the README for the source relationship. */
 .app-user .face { width: 26px; height: 26px; border-radius: 50%; object-fit: cover; background: #fff; flex: none; }
 .app-user .who { display: grid; gap: 0; line-height: 1.35; }
 .app-user .who b { font-weight: 500; font-size: 13px; }
@@ -494,18 +493,18 @@ a.work:hover { border-color: var(--border-strong); background: var(--surface-2);
 .work-preview {
   position: relative; height: clamp(190px, 28vw, 230px);
   overflow: hidden; pointer-events: none;
-  background: #090b0c; border-bottom: 1px solid var(--border-soft);
+  background: #f4f4f2; border-bottom: 1px solid var(--border-soft);
 }
 .work-preview::after {
   content: ""; position: absolute; inset: 0;
-  background: linear-gradient(180deg, transparent 68%, rgba(0, 0, 0, .16));
+  background: linear-gradient(180deg, transparent 76%, rgba(16, 17, 19, .05));
 }
 .work-preview img {
   width: 100%; height: 100%; object-fit: cover; object-position: var(--focal, 50% 50%);
-  filter: saturate(.92) contrast(1.02); transform: scale(1.01);
+  filter: saturate(.96) contrast(1.01); transform: scale(1.01);
   transition: transform .5s cubic-bezier(.2, .7, .2, 1), filter .5s ease;
 }
-a.work:hover .work-preview img { transform: scale(1.035); filter: saturate(1) contrast(1.04); }
+a.work:hover .work-preview img { transform: scale(1.035); filter: saturate(1) contrast(1.02); }
 @media (min-width: 1120px) {
   .works .work:nth-child(-n+2) .work-preview { height: 240px; }
   .works .work:nth-child(n+3) .work-preview  { height: 190px; }

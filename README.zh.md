@@ -140,10 +140,10 @@ open http://localhost:8080
 [SIL 开放字体许可](https://openfontlicense.org)，随这份 MIT 源码一起分发正是该许可
 的用途。
 
-`web/landing/avatar.webp` 是树里唯一一个「派生而非原创」的素材：取
-`gateway/assets/ad.webp`（项目吉祥物）的头部，按原图 `(0.28, 0.12)`–`(0.72, 0.56)`
-裁切、重采样到 128px 后重新编码——5 KB 而不是 701 KB，也不带原图下三分之一那行标语。
-要改就从源图重新生成，别直接改它。
+`web/landing/avatar.webp` 是从项目自己的
+[`gateway/assets/hamster.svg`](gateway/assets/hamster.svg) 派生出的 128px WebP。
+它采用紧凑的头肩裁切、暖白底和页面的绿色强调环，让仓鼠在应用内 26px 的账户圆形头像中
+仍能被认出来。要改就从 SVG 重新生成，别直接改位图。
 
 同一个文件也是 GitHub Pages 上的项目主页，由
 [`.github/workflows/pages.yml`](.github/workflows/pages.yml) 发布。正因为要从两个

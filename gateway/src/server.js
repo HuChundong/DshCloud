@@ -152,10 +152,6 @@ const LOGIN_ASSETS = {
   // The deployment's WeChat account, in the sign-in page's panel. An image
   // rather than a link because a QR code is how someone follows an account
   // from a laptop, which is where they are when they read this page.
-  //
-  // `ad.webp` was here and is not: the panel it filled now carries this. The
-  // file stays in the tree because the landing page's avatar is cut from it and
-  // the READMEs say so — it is a source, not a served asset.
   'wechat-qr.webp': {
     type: 'image/webp',
     body: readFileSync(fileURLToPath(new URL('../assets/wechat-qr.webp', import.meta.url))),
