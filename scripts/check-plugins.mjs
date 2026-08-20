@@ -125,6 +125,17 @@ for (const { relative, text } of sources()) {
     problems.push(`${relative}: Chinese outside the dictionary — ${code.trim().slice(0, 50)}`)
   }
 
+  // ---- a key reaches something that translates it ----
+
+  // `navLabel(path, 'account')` takes a KEY, and if the thing it builds renders
+  // its argument as text the settings nav shows the word `account` — in every
+  // language, which is neither of them. Nothing else catches this: the key is
+  // in the dictionary, it is named in the source, and no Chinese is left over,
+  // so every other rule here passes while the nav is wrong.
+  if (/navLabel\([^,]+,\s*'[^']+'\)/.test(text) && !/const NavLabel = /.test(text)) {
+    problems.push(`${relative}: navLabel is handed a key but nothing translates it — the nav will show the key itself`)
+  }
+
   // ---- no handle that is really a translation ----
 
   if (/textContent\?*\.?\s*(?:trim\(\)\s*)?===\s*'[^']*[一-鿿]/.test(text)) {

@@ -390,6 +390,12 @@ window.__ModuleLoader__.load({
 
         memory: '内存',
         disk: '磁盘',
+
+        // Inside the ring, which is 20px across. The full word fits in
+        // Chinese at two characters and does not in English, so the ring
+        // takes the short form and the settings page keeps the word.
+        'ring.memory': '内存',
+        'ring.disk': '磁盘',
         measuring: '正在测量',
         'cpu.measuring': 'CPU：正在测量',
         'cpu.title': 'CPU {percent}%',
@@ -428,6 +434,9 @@ window.__ModuleLoader__.load({
 
         memory: 'Memory',
         disk: 'Disk',
+
+        'ring.memory': 'RAM',
+        'ring.disk': 'Disk',
         measuring: 'measuring',
         'cpu.measuring': 'CPU: measuring',
         'cpu.title': 'CPU {percent}%',
@@ -1230,10 +1239,10 @@ window.__ModuleLoader__.load({
               }),
           }),
           React.createElement(Ring, {
-            label: t('memory'), value: pct(stats?.memory), title: t('memory.title', { value: asText(stats?.memory) }),
+            label: t('ring.memory'), value: pct(stats?.memory), title: t('memory.title', { value: asText(stats?.memory) }),
           }),
           React.createElement(Ring, {
-            label: t('disk'), value: pct(stats?.disk), title: t('disk.title', { value: asText(stats?.disk) }),
+            label: t('ring.disk'), value: pct(stats?.disk), title: t('disk.title', { value: asText(stats?.disk) }),
           }),
         ),
       )

@@ -124,10 +124,19 @@ window.__ModuleLoader__.load({
      * @param {string} text - the section name.
      * @returns {object} the label node.
      */
-    const navLabel = (d, text) => React.createElement(
-      React.Fragment,
-      null,
-      React.createElement(
+    /**
+     * A settings nav row: a glyph, and the section's name in the current
+     * language.
+     *
+     * A component rather than an element, because a registration's `label` is
+     * built once and held for as long as the plugin lives. An element would
+     * carry whichever language was active at registration and keep showing it
+     * — and when it was handed a KEY instead of a word, it showed the key.
+     * That is what put a literal `account` in the settings nav.
+     */
+    const NavLabel = ({ d, section }) => {
+      const t = useT()
+      return React.createElement(
         'span',
         { className: NAV_GLYPH, style: { display: 'inline-flex', alignItems: 'center', gap: '8px' } },
         React.createElement('svg', {
@@ -137,9 +146,12 @@ window.__ModuleLoader__.load({
           d, stroke: 'currentColor', strokeWidth: 1.3,
           strokeLinecap: 'round', strokeLinejoin: 'round',
         })),
-        text,
-      ),
-    )
+        t(section),
+      )
+    }
+
+    /** The registration's `label`: an element, and this one keeps rendering. */
+    const navLabel = (d, section) => React.createElement(NavLabel, { d, section })
 
     /** What the caller is before their own answer has arrived. */
     const NOBODY = { username: '', admin: false, displayName: '', avatar: '' }
