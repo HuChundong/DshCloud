@@ -1,0 +1,20 @@
+{
+  "name": "dsh-brand",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "This deployment's own mark and name, in the slots the shipped brand plugin fills.",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "client": {
+      "inject": [
+        "slots"
+      ],
+      "platform": "web"
+    }
+  }
+}

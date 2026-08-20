@@ -86,7 +86,7 @@ const FROM = 'isLoopback: pageLocation === void 0 || isLoopbackHostname(pageLoca
  * the served asset — in a debugger, in a diff, in a bug report — finds the
  * reason there rather than only in this repository.
  */
-const TO = 'isLoopback: true /* DshCloud: gateway-authenticated; see web/patch-loopback.mjs */,'
+const TO = 'isLoopback: true /* HamsterHQ: gateway-authenticated; see web/patch-loopback.mjs */,'
 
 const shell = process.argv[2]
 if (shell === undefined) {

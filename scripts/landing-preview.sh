@@ -26,6 +26,8 @@ trap 'rm -rf "$out"' EXIT
 ln -s "$root"/web/landing/* "$out/"
 ln -s "$root/docs/assets" "$out/assets"
 ln -s "$root/gateway/assets/mark.svg" "$out/mark.svg"
+ln -s "$root/gateway/assets/hamster.svg" "$out/hamster.svg"
+ln -s "$root/gateway/assets/favicon.svg" "$out/favicon.svg"
 ln -s "$root/gateway/assets/wechat-qr.webp" "$out/wechat-qr.webp"
 
 echo "landing page on http://localhost:${port}/ — ctrl-c to stop"

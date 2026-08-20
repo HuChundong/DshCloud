@@ -1,6 +1,6 @@
-![DshCloud — Multi-Tenant Cloud for DSH](docs/assets/dshcloud-banner.png)
+![HamsterHQ — Multi-Tenant Cloud for DSH](docs/assets/dshcloud-banner.png)
 
-# DshCloud
+# HamsterHQ
 
 [English](README.md) | 中文
 
@@ -9,7 +9,7 @@
 项目介绍：[微信公众号文章](https://mp.weixin.qq.com/s/lDd3rK6syoCB7TANxwCRsQ)
 
 > [!IMPORTANT]
-> **独立项目声明：** DshCloud 是独立开发维护的非官方项目。**DshCloud 与 DSH
+> **独立项目声明：** HamsterHQ 是独立开发维护的非官方项目。**HamsterHQ 与 DSH
 > 不是同一家公司或组织的产品。** 本仓库不隶属于、不代表，也未获得 DeepSeek AI、
 > GitHub 上的 `deepseek-ai` 组织、腾讯云、DSH 或 CubeSandbox 维护方的赞助、背书或
 > 维护。文中相关名称仅用于说明兼容性和上游依赖；本项目不主张对相关名称、标识或商标
@@ -50,7 +50,7 @@ DSH 本身是依赖，从 npm 安装，从不打补丁。本项目要加给它�
 
 ## 架构
 
-![DshCloud 架构图](docs/assets/dshcloud-architecture.svg)
+![HamsterHQ 架构图](docs/assets/dshcloud-architecture.svg)
 
 四个决策撑起整个设计，其余都由它们推导而来。
 
@@ -245,7 +245,7 @@ SANDBOX_RUNTIME=cube COMPOSE_FILE=compose.yml:compose.cube.yml \
 
 ## 上游项目与致谢
 
-DshCloud 依赖以下上游项目，并感谢其维护者与贡献者：
+HamsterHQ 依赖以下上游项目，并感谢其维护者与贡献者：
 
 - [DeepSeek Harness（DSH）](https://github.com/deepseek-ai/deepseek-harness)：本项目作为
   npm 依赖安装的上游 agent harness。DSH 采用 [MIT License](https://github.com/deepseek-ai/deepseek-harness/blob/master/LICENSE)。

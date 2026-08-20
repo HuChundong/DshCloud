@@ -268,6 +268,17 @@ location = /manifest.webmanifest {
   default_type application/manifest+json;
 }
 
+# ---- this deployment's own brand ----
+
+# The mark and the tab icon, for the application shell's brand plugin and for
+# anything else that has to show whose deployment this is. Anonymous, static,
+# and in a root of their own rather than in the shell's — see the landing page
+# below for why that matters.
+location /brand/ {
+  alias /usr/share/nginx/brand/;
+  expires 1h;
+}
+
 # ---- the landing page ----
 
 # Anonymous, and it has to be: it is what someone sees before they have an

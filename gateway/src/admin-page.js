@@ -92,9 +92,9 @@ export function adminPage(state) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>用户管理 · DeepSeek Harness</title>
+<title>用户管理 · HamsterHQ</title>
 <meta name="color-scheme" content="light dark">
-<link rel="icon" href="/favicon.svg">
+<link rel="icon" href="/login-assets/favicon.svg">
 ${FONT_PRELOAD}
 <style>
 ${PALETTE_CSS}
@@ -115,16 +115,7 @@ ${TOAST_CSS}
   main { flex: 1; width: 100%; max-width: 960px; margin: 0 auto; padding: 2.5rem 1.25rem; }
 
   .brand { display: flex; align-items: center; gap: .5rem; margin-bottom: 2rem; }
-  .brand img { width: 28px; height: 28px; display: block; }
-  /* The mark is a single-colour black glyph served as an image, so it cannot
-     inherit --ink the way the wordmark beside it does — and in dark it was
-     black on black. Inverting is exact rather than approximate here: the only
-     colour in the file is #000, so this is the same swap the palette makes. */
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) .brand img { filter: invert(1); }
-  }
-  :root[data-theme="dark"] .brand img { filter: invert(1); }
-  :root[data-theme="light"] .brand img { filter: none; }
+  .brand img { height: 26px; width: auto; display: block; }
   .brand .word { font-family: var(--display); font-size: 1.375rem; font-weight: 600; letter-spacing: -.03em; color: var(--fg); }
   /* Filled, not outlined: the wordmark reads as one lockup — the name and the
      product beside it — and a hairline chip there is a second thing to read
@@ -288,9 +279,8 @@ ${banner}
 ${THEME_TOGGLE}
 <main>
   <div class="brand">
-    <img src="/login-assets/mark.svg" alt="">
-    <span class="word">deepseek</span>
-    <span class="badge">HARNESS</span>
+    <img src="/login-assets/hamster.svg" alt="">
+    <span class="word">HamsterHQ</span>
     <span class="here">${escapeHtml(viewer)} · <a href="/">返回应用</a></span>
   </div>
 
@@ -452,7 +442,7 @@ ${inviteRows}
     }
   })()
 </script>
-<footer>DeepSeek Harness · 自建部署${release}</footer>
+<footer>HamsterHQ · 自建部署${release}</footer>
 </body>
 </html>
 `

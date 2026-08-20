@@ -100,9 +100,9 @@ export function profilePage(state) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${first === true ? '完善资料' : '个人资料'} · DeepSeek Harness</title>
+<title>${first === true ? '完善资料' : '个人资料'} · HamsterHQ</title>
 <meta name="color-scheme" content="light dark">
-<link rel="icon" href="/favicon.svg">
+<link rel="icon" href="/login-assets/favicon.svg">
 ${FONT_PRELOAD}
 <style>
 ${PALETTE_CSS}
@@ -130,7 +130,7 @@ ${GROUND_CSS}
   }
 
   .brand { display: flex; align-items: center; gap: .5rem; margin-bottom: 1.75rem; }
-  .brand img { width: 28px; height: 28px; display: block; }
+  .brand img { height: 26px; width: auto; display: block; }
   .brand .word { font-family: var(--display); font-size: 1.5rem; font-weight: 600; letter-spacing: -.03em; color: var(--fg); }
 
   /* The sign-in page's card, holding the one column this page has: the two are
@@ -356,8 +356,8 @@ ${GROUND_HTML}
 <div class="glow" aria-hidden="true"></div>
 <main>
   <div class="brand">
-    <img src="/login-assets/mark.svg" alt="">
-    <span class="word">deepseek</span>
+    <img src="/login-assets/hamster.svg" alt="">
+    <span class="word">HamsterHQ</span>
   </div>
 
   <form method="post" action="/profile" id="form">
@@ -399,7 +399,7 @@ ${GROUND_HTML}
 </main>
 <footer>
   <nav class="docs">${policyLinks({ separator: '' })}</nav>
-  <p>DeepSeek Harness · 自建部署${release}</p>
+  <p>HamsterHQ · 自建部署${release}</p>
 </footer>
 <script>
   (function () {

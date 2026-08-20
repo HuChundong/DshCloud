@@ -149,6 +149,23 @@
     # a new one begins.
     reasoningEffort: max
 
+# This deployment's own mark and name, in the three slots the shipped brand
+# plugin fills. Written because the shipped one fills them with DeepSeek's
+# whale and wordmark, which this deployment has no right to wear: its brand
+# guidelines ask projects not to use the trademark as their own identity, and
+# the package's own README points the other way — alternative presentation
+# belongs in another package occupying the same slots.
+- insert:
+    - id: brand
+      name: dsh-brand
+
+# And the row it replaces. The plugin registers at a lower priority and would
+# take the seat anyway, but a shipped brand that is still mounted is still
+# fetching and still one HMR race away from being seen; the seat is only ever
+# meant to have one occupant here.
+- id: ui-brand-official
+  disabled: true
+
 # The client hot-reload channel. Its SSE endpoint, /plugins/events, is the one
 # frontend path that is not a static artifact — the browser opens it and keeps
 # it open, expecting a live host to push rebuild notices.

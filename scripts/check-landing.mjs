@@ -119,17 +119,30 @@ for (const match of source.matchAll(/\s(?:src|href)="([^"]+)"/g)) {
   }
 }
 
-// The deployed page gets mark.svg during assembly, but people also open the
+// The deployed page gets its marks during assembly, but people also open the
 // source file directly while designing it. Each visible mark and the favicon
 // must fall back to the gateway-owned source without creating a second copy.
-const checkoutMark = '../../gateway/assets/mark.svg'
-const imageFallback = `onerror="this.onerror=null;this.src='${checkoutMark}'"`
-const iconFallback = `onerror="this.onerror=null;this.href='${checkoutMark}'"`
-const imageFallbacks = source.split(imageFallback).length - 1
-if (imageFallbacks !== 4) problems.push(`mark.svg: expected 4 checkout image fallbacks, found ${imageFallbacks}`)
-if (!source.includes(iconFallback)) problems.push('mark.svg: the favicon has no checkout fallback')
-if (!existsSync(resolve(join(root, 'web/landing'), checkoutMark))) {
-  problems.push(`${checkoutMark}: checkout fallback resolves to nothing`)
+//
+// Two marks, and which is which is the point. This deployment's own hamster
+// signs the page — the header and both places inside the product still — and
+// upstream's whale appears exactly once, in the footer, on the link that names
+// DeepSeek Harness. A whale anywhere else is this project wearing someone
+// else's trademark, which is what their brand guidelines ask projects not to
+// do; a count is the cheapest way to keep that true.
+for (const [file, images, icon] of [
+  ['../../gateway/assets/hamster.svg', 3, false],
+  ['../../gateway/assets/favicon.svg', 0, true],
+  ['../../gateway/assets/mark.svg', 1, false],
+]) {
+  const imageFallback = `onerror="this.onerror=null;this.src='${file}'"`
+  const found = source.split(imageFallback).length - 1
+  if (found !== images) problems.push(`${file}: expected ${images} checkout image fallback(s), found ${found}`)
+  if (icon && !source.includes(`onerror="this.onerror=null;this.href='${file}'"`)) {
+    problems.push(`${file}: the favicon has no checkout fallback`)
+  }
+  if (!existsSync(resolve(join(root, 'web/landing'), file))) {
+    problems.push(`${file}: checkout fallback resolves to nothing`)
+  }
 }
 
 // ---- the faces the design is set in are actually in the tree ----
@@ -168,6 +181,8 @@ for (const line of [
   'COPY web/landing /usr/share/nginx/landing',
   'COPY docs/assets /usr/share/nginx/landing/assets',
   'COPY gateway/assets/mark.svg /usr/share/nginx/landing/mark.svg',
+  'COPY gateway/assets/hamster.svg /usr/share/nginx/landing/hamster.svg',
+  'COPY gateway/assets/favicon.svg /usr/share/nginx/landing/favicon.svg',
   'COPY gateway/assets/wechat-qr.webp /usr/share/nginx/landing/wechat-qr.webp',
 ]) {
   if (!dockerfile.includes(line)) problems.push(`Dockerfile: missing \`${line}\``)

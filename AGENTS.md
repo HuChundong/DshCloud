@@ -100,7 +100,7 @@ The rules that are not obvious from the listing:
   talks only to the platform it integrates with, so it can move to its own
   repository without a line changing. `cube-volume-juicefs` is a CubeSandbox
   VolumePlugin: it knows about CubeSandbox and JuiceFS, and nothing about
-  DshCloud. If something in `integrations/` needs to reach into this project,
+  HamsterHQ. If something in `integrations/` needs to reach into this project,
   it is not an integration and belongs elsewhere.
 - **`packages/` holds packages, named for themselves.** The directory name is
   the package name, because `cordis.patch.yml` refers to the package and a

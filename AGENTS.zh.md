@@ -76,7 +76,7 @@ listing 里看不出来的那几条规则：
 
 - **`integrations/` 不 import 本仓库的任何东西。** 放在那里的东西只跟它所对接的平台说话，
   因此可以整个搬到自己的仓库而不改一行。`cube-volume-juicefs` 是一个 CubeSandbox
-  VolumePlugin：它知道 CubeSandbox 和 JuiceFS，对 DshCloud 一无所知。如果 `integrations/`
+  VolumePlugin：它知道 CubeSandbox 和 JuiceFS，对 HamsterHQ 一无所知。如果 `integrations/`
   里的东西需要伸手进这个项目，那它就不是 integration，该放到别处去。
 - **`packages/` 装包，且以自己命名。** 目录名就是包名——因为 `cordis.patch.yml` 引用的是包名，
   读的人不该还要在两套名字之间做映射。

@@ -50,10 +50,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>DshCloud — your computer, built for an agent</title>
+<title>HamsterHQ — your computer, built for an agent</title>
 <meta name="description" content="An agent-native computer, one per account, running DSH in the cloud. Models configured. Open source. Free to start.">
 <meta name="color-scheme" content="light dark">
-<link rel="icon" href="mark.svg" onerror="this.onerror=null;this.href='../../gateway/assets/mark.svg'">
+<link rel="icon" href="favicon.svg" onerror="this.onerror=null;this.href='../../gateway/assets/favicon.svg'">
 <link rel="preload" href="fonts/host-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/dm-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/fragment-mono-latin.woff2" as="font" type="font/woff2" crossorigin>
@@ -239,7 +239,10 @@ header.top .rail { display: flex; justify-content: center; }
    inherit a token the way the wordmark beside it does — and on the dark ground
    it was black on black. Inverting is exact rather than approximate: the only
    colour in the file is #000. The login page carries this identically. */
-@media (prefers-color-scheme: dark) { .brand img, footer.foot .mark { filter: invert(1); } }
+/* Only the footer's upstream mark inverts. It is DeepSeek's single-colour
+   black glyph, which would otherwise be black on the dark ground; this
+   deployment's own mark is drawn in three colours and reads on both. */
+@media (prefers-color-scheme: dark) { footer.foot .mark { filter: invert(1); } }
 .chip {
   font-family: var(--mono); font-size: 11px; letter-spacing: .04em;
   color: var(--text-3); padding: 3px 10px; white-space: nowrap;
@@ -352,7 +355,6 @@ h1 { font-size: clamp(34px, 4vw, 52px); line-height: 1.14; letter-spacing: -.04e
 }
 .app-side .top { display: flex; align-items: center; gap: 8px; font-family: var(--display); font-weight: 600; font-size: 15px; letter-spacing: -.02em; }
 .app-side .top img { width: 19px; height: 19px; }
-@media (prefers-color-scheme: dark) { .app-side .top img { filter: invert(1); } }
 .app-new {
   display: flex; align-items: center; justify-content: center; gap: 7px;
   padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--radius-pill);
@@ -402,7 +404,6 @@ h1 { font-size: clamp(34px, 4vw, 52px); line-height: 1.14; letter-spacing: -.04e
 .app-centre { width: 100%; max-width: 620px; text-align: center; }
 .app-greet { display: flex; align-items: center; justify-content: center; gap: 11px; margin-bottom: clamp(18px, 3vw, 30px); }
 .app-greet img { width: 27px; height: 27px; }
-@media (prefers-color-scheme: dark) { .app-greet img { filter: invert(1); } }
 .app-greet .said { font-family: var(--display); font-weight: 600; font-size: clamp(19px, 2.2vw, 25px); letter-spacing: -.03em; }
 .app-greet .plan {
   font-size: 11px; padding: 3px 9px; border-radius: var(--radius-pill);
@@ -693,7 +694,7 @@ footer.foot a:hover { color: var(--text-2); }
 <header class="top">
   <div class="rail">
     <div class="capsule">
-      <a class="brand" href="./"><img src="mark.svg" alt="" width="24" height="24" onerror="this.onerror=null;this.src='../../gateway/assets/mark.svg'">DshCloud</a>
+      <a class="brand" href="./"><img src="hamster.svg" alt="" width="33" height="22" onerror="this.onerror=null;this.src='../../gateway/assets/hamster.svg'">HamsterHQ</a>
       <span class="chip" data-t="nav.chip">Open source · MIT</span>
       <span class="spacer"></span>
       <nav>
@@ -725,7 +726,7 @@ footer.foot a:hover { color: var(--text-2); }
 
     <div class="app">
       <aside class="app-side" aria-hidden="true">
-        <div class="top"><img src="mark.svg" alt="" width="19" height="19" onerror="this.onerror=null;this.src='../../gateway/assets/mark.svg'">DshCloud</div>
+        <div class="top"><img src="hamster.svg" alt="" width="27" height="18" onerror="this.onerror=null;this.src='../../gateway/assets/hamster.svg'">HamsterHQ</div>
         <div class="app-new">
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" width="14" height="14"><circle cx="8" cy="8" r="6"/><path d="M8 5.5v5M5.5 8h5"/></svg>
           <span data-t="app.new">New session</span>
@@ -759,7 +760,7 @@ footer.foot a:hover { color: var(--text-2); }
       <div class="app-main">
         <div class="app-centre">
           <div class="app-greet">
-            <img src="mark.svg" alt="" width="27" height="27" onerror="this.onerror=null;this.src='../../gateway/assets/mark.svg'">
+            <img src="hamster.svg" alt="" width="36" height="24" onerror="this.onerror=null;this.src='../../gateway/assets/hamster.svg'">
             <span class="said" data-t="app.greet">What are we building today?</span>
             <span class="plan" data-t="app.free">Free</span>
           </div>
@@ -954,7 +955,7 @@ footer.foot a:hover { color: var(--text-2); }
 
 <aside class="notice">
   <div class="rail">
-    <p data-th="notice.body"><strong>DshCloud is an independently developed, unofficial project. DshCloud and DSH are not products of the same company or organization.</strong> This project is not affiliated with, sponsored by, endorsed by, or maintained by DeepSeek AI, the <code>deepseek-ai</code> organization, Tencent Cloud, or the maintainers of DSH or CubeSandbox. Their names and marks are used only to identify interoperability and upstream dependencies; this project claims no ownership of them.</p>
+    <p data-th="notice.body"><strong>HamsterHQ is an independently developed, unofficial project. HamsterHQ and DSH are not products of the same company or organization.</strong> This project is not affiliated with, sponsored by, endorsed by, or maintained by DeepSeek AI, the <code>deepseek-ai</code> organization, Tencent Cloud, or the maintainers of DSH or CubeSandbox. Their names and marks are used only to identify interoperability and upstream dependencies; this project claims no ownership of them.</p>
   </div>
 </aside>
 
@@ -967,7 +968,7 @@ footer.foot a:hover { color: var(--text-2); }
     </a>
     <a href="https://github.com/deepseek-ai/deepseek-harness">
       <img class="mark" src="mark.svg" alt="" width="15" height="15" onerror="this.onerror=null;this.src='../../gateway/assets/mark.svg'">
-      <span data-t="foot.dsh">deepseek Harness</span>
+      <span data-t="foot.dsh">DeepSeek Harness</span>
     </a>
     <a href="https://github.com/TencentCloud/CubeSandbox">
       <img class="cube" src="cubesandbox.svg" alt="" width="13" height="16">
@@ -1082,10 +1083,10 @@ const T = {
   'close.cta1':   { en: 'Get started for free', zh: '免费开始' },
   'close.cta2':   { en: 'Star on GitHub',      zh: '去 GitHub 点个 Star' },
 
-  'notice.body':  { en: '<strong>DshCloud is an independently developed, unofficial project. DshCloud and DSH are not products of the same company or organization.</strong> This project is not affiliated with, sponsored by, endorsed by, or maintained by DeepSeek AI, the <code>deepseek-ai</code> organization, Tencent Cloud, or the maintainers of DSH or CubeSandbox. Their names and marks are used only to identify interoperability and upstream dependencies; this project claims no ownership of them.',
-                    zh: '<strong>DshCloud 是独立开发维护的非官方项目。DshCloud 与 DSH 不是同一家公司或组织的产品。</strong>本项目不隶属于、不代表，也未获得 DeepSeek AI、GitHub 上的 <code>deepseek-ai</code> 组织、腾讯云、DSH 或 CubeSandbox 维护方的赞助、背书或维护。文中相关名称与标识仅用于说明兼容性和上游依赖；本项目不主张对其享有任何权利。' },
+  'notice.body':  { en: '<strong>HamsterHQ is an independently developed, unofficial project. HamsterHQ and DSH are not products of the same company or organization.</strong> This project is not affiliated with, sponsored by, endorsed by, or maintained by DeepSeek AI, the <code>deepseek-ai</code> organization, Tencent Cloud, or the maintainers of DSH or CubeSandbox. Their names and marks are used only to identify interoperability and upstream dependencies; this project claims no ownership of them.',
+                    zh: '<strong>HamsterHQ 是独立开发维护的非官方项目。HamsterHQ 与 DSH 不是同一家公司或组织的产品。</strong>本项目不隶属于、不代表，也未获得 DeepSeek AI、GitHub 上的 <code>deepseek-ai</code> 组织、腾讯云、DSH 或 CubeSandbox 维护方的赞助、背书或维护。文中相关名称与标识仅用于说明兼容性和上游依赖；本项目不主张对其享有任何权利。' },
 
-  'foot.dsh':     { en: 'deepseek Harness',    zh: 'deepseek Harness' },
+  'foot.dsh':     { en: 'DeepSeek Harness',    zh: 'DeepSeek Harness' },
   // Served by the deployment rather than by this file: on GitHub Pages, where
   // this page is also published, they are the same kind of link as the sign-in
   // button beside them.
@@ -1098,7 +1099,7 @@ const T = {
   'copy.idle':    { en: 'Copy',                zh: '复制' },
   'copy.done':    { en: 'Copied',              zh: '已复制' },
 
-  'doc.title':    { en: 'DshCloud — your computer, built for an agent', zh: 'DshCloud — 你的电脑，为 agent 而生' },
+  'doc.title':    { en: 'HamsterHQ — your computer, built for an agent', zh: 'HamsterHQ — 你的电脑，为 agent 而生' },
 }
 
 /*

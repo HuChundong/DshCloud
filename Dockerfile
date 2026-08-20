@@ -412,6 +412,7 @@ RUN npm install --omit=dev --no-audit --no-fund --install-links \
       /src/packages/dsh-sandbox-host \
       /src/packages/dsh-tenant-account \
       /src/packages/dsh-artifact-panel \
+      /src/packages/dsh-brand \
   && rm -rf /root/.npm /src
 
 # Project the environment above into a file the entrypoint sources.
@@ -534,6 +535,17 @@ COPY docs/assets /usr/share/nginx/landing/assets
 # file the gateway serves rather than duplicated into `web/`, so a replacement
 # lands on the front door and the sign-in page at the same time.
 COPY gateway/assets/mark.svg /usr/share/nginx/landing/mark.svg
+# This deployment's own mark and tab icon, beside the landing page that wears
+# them.
+COPY gateway/assets/hamster.svg /usr/share/nginx/landing/hamster.svg
+COPY gateway/assets/favicon.svg /usr/share/nginx/landing/favicon.svg
+# And the same file again for the application shell, whose brand plugin points
+# at it. Its own root rather than the shell's, for the reason the landing page
+# has one: the shell's root is upstream's published build, and a file added
+# beside it is one release away from colliding with a name that build starts
+# using.
+COPY gateway/assets/hamster.svg /usr/share/nginx/brand/hamster.svg
+COPY gateway/assets/favicon.svg /usr/share/nginx/brand/favicon.svg
 # The deployment's WeChat code, for the same reason and from the same place: the
 # sign-in page's footer and the landing page's footer show one account, and one
 # file is how they cannot come to show two.

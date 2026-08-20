@@ -2,7 +2,7 @@
   "schema_version": 1,
   "diagram_type": "architecture",
   "meta": {
-    "title": "DshCloud Architecture",
+    "title": "HamsterHQ Architecture",
     "subtitle": "Authenticated multi-tenant DSH with outbound sandbox tunnels",
     "output": "dshcloud-architecture.html",
     "animation": "none",
@@ -80,7 +80,7 @@
   "boundaries": [
     {
       "kind": "region",
-      "label": "DshCloud control plane",
+      "label": "HamsterHQ control plane",
       "wraps": ["web", "gateway", "postgres"]
     },
     {

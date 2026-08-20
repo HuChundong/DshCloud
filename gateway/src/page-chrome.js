@@ -170,16 +170,6 @@ export const PALETTE_CSS = `${FONT_CSS}
 
   ::selection { background: var(--accent); color: var(--on-accent); }
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-
-  /* The mark is a single-colour black glyph served as an image, so it cannot
-     inherit --ink the way the wordmark beside it does — and in dark it was
-     black on black. Inverting is exact rather than approximate here: the only
-     colour in the file is #000, so this is the same swap the palette makes. */
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) .brand img { filter: invert(1); }
-  }
-  :root[data-theme="dark"] .brand img { filter: invert(1); }
-  :root[data-theme="light"] .brand img { filter: none; }
 `
 
 /**

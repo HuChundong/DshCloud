@@ -146,9 +146,9 @@ export function loginPage(state = {}) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>DeepSeek Harness</title>
+<title>HamsterHQ</title>
 <meta name="color-scheme" content="light dark">
-<link rel="icon" href="/favicon.svg">
+<link rel="icon" href="/login-assets/favicon.svg">
 ${FONT_PRELOAD}
 <style>
 ${PALETTE_CSS}
@@ -187,7 +187,9 @@ ${GROUND_CSS}
     text-decoration: none;
     color: inherit;
   }
-  .brand img { width: 28px; height: 28px; display: block; }
+  /* Height, not width: the mark is a hamster standing rather than a disc,
+     so it is wider than it is tall and a square box would letterbox it. */
+  .brand img { height: 26px; width: auto; display: block; }
   .brand .word { font-family: var(--display); font-size: 1.5rem; font-weight: 600; letter-spacing: -.03em; color: var(--fg); }
   /* Filled, not outlined: the wordmark reads as one lockup — the name and the
      product beside it — and a hairline chip there is a second thing to read
@@ -392,9 +394,8 @@ ${GROUND_HTML}
 <div class="glow" aria-hidden="true"></div>
 <main>
   <a class="brand" href="/welcome/">
-    <img src="/login-assets/mark.svg" alt="">
-    <span class="word">deepseek</span>
-    <span class="badge">HARNESS</span>
+    <img src="/login-assets/hamster.svg" alt="">
+    <span class="word">HamsterHQ</span>
   </a>
 
   <div class="card">
@@ -414,7 +415,7 @@ ${GROUND_HTML}
 </main>
 <footer>
   <nav class="docs">${policyLinks({ separator: '' })}</nav>
-  <p>DeepSeek Harness · 自建部署${release}</p>
+  <p>HamsterHQ · 自建部署${release}</p>
 </footer>
 ${GROUND_SCRIPT}
 </body>

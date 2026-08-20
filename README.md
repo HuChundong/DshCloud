@@ -1,6 +1,6 @@
-![DshCloud — Multi-Tenant Cloud for DSH](docs/assets/dshcloud-banner.png)
+![HamsterHQ — Multi-Tenant Cloud for DSH](docs/assets/dshcloud-banner.png)
 
-# DshCloud
+# HamsterHQ
 
 English | [中文](README.zh.md)
 
@@ -9,8 +9,8 @@ Project page: **<https://huchundong.github.io/DshCloud/>** — what it is, in on
 Project introduction: [Read the WeChat Official Account article](https://mp.weixin.qq.com/s/lDd3rK6syoCB7TANxwCRsQ)
 
 > [!IMPORTANT]
-> **Independent project notice:** DshCloud is an independently developed,
-> unofficial project. **DshCloud and DSH are not products of the same company
+> **Independent project notice:** HamsterHQ is an independently developed,
+> unofficial project. **HamsterHQ and DSH are not products of the same company
 > or organization.** This repository is not affiliated with, sponsored by,
 > endorsed by, or maintained by DeepSeek AI, the `deepseek-ai` organization,
 > Tencent Cloud, or the maintainers of DSH or CubeSandbox. Their names are used
@@ -56,7 +56,7 @@ Chosen on the way in, and shown in the sidebar afterwards.
 
 ## Architecture
 
-![DshCloud architecture](docs/assets/dshcloud-architecture.svg)
+![HamsterHQ architecture](docs/assets/dshcloud-architecture.svg)
 
 Four decisions carry the design; the rest follows from them.
 
@@ -305,7 +305,7 @@ covers what each suite exists to catch.
 
 ## Upstream projects and acknowledgments
 
-DshCloud relies on and is grateful to the maintainers and contributors of:
+HamsterHQ relies on and is grateful to the maintainers and contributors of:
 
 - [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness),
   the upstream agent harness installed by this project as an npm dependency.

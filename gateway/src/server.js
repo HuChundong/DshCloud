@@ -133,6 +133,18 @@ const verification = new Verification(db)
  * broken image on the only page an unauthenticated visitor can reach.
  */
 const LOGIN_ASSETS = {
+  // This deployment's own mark, which is what these pages are signed with.
+  'hamster.svg': {
+    type: 'image/svg+xml',
+    body: readFileSync(fileURLToPath(new URL('../assets/hamster.svg', import.meta.url))),
+  },
+  // The same animal, squared, for the tab.
+  'favicon.svg': {
+    type: 'image/svg+xml',
+    body: readFileSync(fileURLToPath(new URL('../assets/favicon.svg', import.meta.url))),
+  },
+  // Upstream's whale, kept for the one thing it is still right for: naming DSH
+  // where these pages refer to DSH. Nothing here wears it as its own.
   'mark.svg': {
     type: 'image/svg+xml',
     body: readFileSync(fileURLToPath(new URL('../assets/mark.svg', import.meta.url))),

@@ -66,7 +66,7 @@ const DOCUMENTS = {
       {
         h: '一、本服务是什么',
         blocks: [
-          { p: '本站是开源项目 DshCloud 的一个自建部署，把 DSH（DeepSeek Harness）跑在云端，由本部署的运营者提供。它是独立开发的非官方项目，与 DeepSeek、腾讯云或 DSH、CubeSandbox 的维护者没有从属、赞助或背书关系。' },
+          { p: '本站是开源项目 HamsterHQ 的一个自建部署，把 DSH（DeepSeek Harness）跑在云端，由本部署的运营者提供。它是独立开发的非官方项目，与 DeepSeek、腾讯云或 DSH、CubeSandbox 的维护者没有从属、赞助或背书关系。' },
           { p: '本服务免费提供，不含任何付费承诺，也不构成任何形式的服务等级协议。' },
         ],
       },
@@ -374,9 +374,9 @@ export function policyPage(slug, state = {}) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${document.title} · DeepSeek Harness</title>
+<title>${document.title} · HamsterHQ</title>
 <meta name="color-scheme" content="light dark">
-<link rel="icon" href="/favicon.svg">
+<link rel="icon" href="/login-assets/favicon.svg">
 ${FONT_PRELOAD}
 <style>
 ${PALETTE_CSS}
@@ -399,7 +399,7 @@ ${GROUND_CSS}
      document, and this one is a wordmark: it drew a rule across the mark and
      out past the end of the word. */
   .brand { display: flex; align-items: center; gap: .5rem; margin-bottom: 2.5rem; text-decoration: none; color: inherit; border-bottom: 0; }
-  .brand img { width: 24px; height: 24px; display: block; }
+  .brand img { height: 22px; width: auto; display: block; }
   .brand .word { font-family: var(--display); font-size: 1.25rem; font-weight: 600; letter-spacing: -.03em; color: var(--fg); }
 
   /* The paper the document sits on, on the same recipe as the sign-in card:
@@ -449,8 +449,8 @@ ${THEME_TOGGLE}
 ${GROUND_HTML}
 <main>
   <a class="brand" href="/welcome/">
-    <img src="/login-assets/mark.svg" alt="">
-    <span class="word">deepseek</span>
+    <img src="/login-assets/hamster.svg" alt="">
+    <span class="word">HamsterHQ</span>
   </a>
 
   <article>
@@ -465,7 +465,7 @@ ${GROUND_HTML}
     <div class="also">${siblings}<a href="/login">返回登录</a></div>
   </article>
 </main>
-<footer>DeepSeek Harness · 自建部署${release}</footer>
+<footer>HamsterHQ · 自建部署${release}</footer>
 ${GROUND_SCRIPT}
 </body>
 </html>
