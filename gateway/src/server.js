@@ -58,7 +58,7 @@ import { destroyVolume } from './volumes.js'
  * the requests a person makes by arriving, where being sent somewhere first is
  * a redirect rather than a broken asset.
  */
-const SHELL_DOCUMENTS = new Set(['/', '/index.html'])
+const SHELL_DOCUMENTS = new Set(['/app'])
 
 const PORT = Number(process.env.PORT ?? 8080)
 const GATEWAY_TUNNEL_URL = process.env.GATEWAY_TUNNEL_URL ?? `ws://gateway:${PORT}/_tunnel`

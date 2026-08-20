@@ -198,7 +198,20 @@ location @login { return 303 /login; }
 # Only `/` and the shell document redirect here. A 401 on `/api` stays a 401:
 # an application that lost its session needs a status its client can act on,
 # not a page it will try to parse as JSON.
-location @landing { return 303 /welcome/; }
+# Serving, not redirecting: this is what `/` gives a stranger, and it has to
+# arrive at `/` for the address to mean anything.
+#
+# `root` rather than `alias`, because a named location cannot carry an alias —
+# nginx refuses the configuration outright.
+location @front_door {
+  root /usr/share/nginx/landing;
+  try_files /index.html =404;
+  add_header Cache-Control "no-cache";
+}
+
+# And the way back to it, for an address that needs a session and did not find
+# one.
+location @home { return 303 /; }
 
 # Signed in, but not finished signing up. The gate answers 403 for that, and
 # only for the shell document, so an account that has never chosen a name meets
@@ -217,33 +230,57 @@ location @profile { return 303 /profile; }
 # auth_request that filled it ran.
 
 
-# ---- the application shell ----
+# ---- the front door and the application ----
 
-# index.html and the client bundles are the application, so they need a
-# session: an unauthenticated visitor who loaded the shell would watch it
-# retry a 401 forever, because the frontend has no notion of this login page.
+# The address people type. Which of the two things it serves depends on whether
+# they have a session, and that question is asked of the gateway rather than
+# guessed from a cookie's presence — an expired token has to be renewed or
+# refused, which only it can do.
+#
+# A stranger gets the landing page AT THIS ADDRESS rather than a redirect to
+# one. The front door is what `/` means to someone who has not been here, and a
+# hop through /welcome/ only told them the address they typed was not the real
+# one.
 location = / {
+  auth_request /_auth;
+  error_page 401 = @front_door;
+  error_page 403 = @profile;
+  # Signed in and finished signing up: this address is not where the
+  # application lives, so say where it does.
+  #
+  # Reached through try_files rather than a plain `return`, and that is not
+  # style. `return` runs in the rewrite phase, which is BEFORE access — so a
+  # return here answers every visitor and auth_request never runs at all. The
+  # named file is never meant to exist; missing it is how this arrives at the
+  # redirect, in the content phase, after the check.
+  try_files /does-not-exist @to_app;
+}
+
+location @to_app { return 303 /app; }
+
+# The application. Its own address, so that "am I signed in" is answered by
+# which page you are on rather than by what the same URL happened to serve.
+#
+# The document is upstream's build and names its own assets absolutely — from
+# /assets and /plugins — so serving the document from here changes nothing
+# about where those come from.
+location = /app {
   auth_request /_auth;
   auth_request_set $renew_access $upstream_http_x_renew_access;
   auth_request_set $renew_refresh $upstream_http_x_renew_refresh;
-  error_page 401 = @landing;
+  # A stranger who typed /app meets the front door, at the address that is the
+  # front door.
+  error_page 401 = @home;
   error_page 403 = @profile;
+  root /usr/share/nginx/html;
   try_files /index.html =404;
   add_header Set-Cookie $renew_access;
   add_header Set-Cookie $renew_refresh;
   add_header Cache-Control "no-store";
 }
 
-location = /index.html {
-  auth_request /_auth;
-  auth_request_set $renew_access $upstream_http_x_renew_access;
-  auth_request_set $renew_refresh $upstream_http_x_renew_refresh;
-  error_page 401 = @landing;
-  error_page 403 = @profile;
-  add_header Set-Cookie $renew_access;
-  add_header Set-Cookie $renew_refresh;
-  add_header Cache-Control "no-store";
-}
+# The shell document under its own name, for anything that still asks for it.
+location = /index.html { return 303 /app; }
 
 location /plugins/ {
   auth_request /_auth;
@@ -292,52 +329,30 @@ location /brand/ {
 # resolve those against `/` and ask the shell's root for them; the exact-match
 # redirect below is what stops that, and it is why `@landing` names the slashed
 # form directly rather than relying on nginx to add it.
-location = /welcome { return 303 /welcome/; }
+# The address the front door used to have. Kept so a link someone saved still
+# arrives, and permanent because it is not coming back.
+location = /welcome  { return 301 /; }
+location /welcome/   { return 301 /; }
 
-# `try_files` with a literal path rather than `alias` pointed straight at the
-# document. Aliasing the file looks tidier and does not work: this location's
-# URI ends in a slash, so the index module runs first and asks for
-# `…/index.htmlindex.html`, which nginx reports as a 500 and an alert about a
-# path that is not a directory.
-location = /welcome/ {
-  alias /usr/share/nginx/landing/;
-  try_files /index.html =404;
-  # One document, edited in place and never hashed, so a cached copy is a stale
-  # copy. It revalidates rather than refetching: the page is small, and the 304
-  # costs less than the redirect that brought the visitor here.
-  add_header Cache-Control "no-cache";
-}
-
-# Everything the document names, under a name that carries its content hash —
-# `screenshot-workspace.e2a8251a20.png`. The build renames them and rewrites the
+# Everything the front door names, under a name carrying its content hash —
+# `work-build.f3e8763c8a.jpg`. The build renames them and rewrites the
 # references; see `scripts/hash-landing.mjs`.
 #
 # Cached forever, and that is the whole reason for the hashing. These were
 # served for an hour under fixed names, which is the arrangement where replacing
 # a picture changes nothing a visitor sees until the hour is up — and where the
-# only way to find out whether a deployment took your new screenshots is to wait.
+# only way to learn whether a deployment took your new screenshots is to wait.
 # A different picture is now a different URL, so it arrives on the first load
 # and the old one is never asked about again.
-# Quoted, because nginx reads an unquoted `{` as the start of a block and
-# reports the rest of the pattern as an unknown directive.
+#
 # The path is CAPTURED and the alias names it. A regex location whose alias has
-# no capture drops the rest of the URI and answers 404 for every file — the
-# second nginx trap in this block, after the unquoted brace.
-location ~ "^/welcome/(?<hashed>.+\.[0-9a-f]{10}\.[a-z0-9]+)$" {
+# no capture drops the rest of the URI and answers 404 for every file. The
+# pattern is quoted because nginx reads an unquoted `{` as the start of a block.
+location ~ "^/(?<hashed>(?:images/|fonts/)?[^/]+\.[0-9a-f]{10}\.[a-z0-9]+)$" {
   alias /usr/share/nginx/landing/$hashed;
-  # One header, not two. `expires` emits its own Cache-Control, so pairing it
-  # with add_header sends the field twice and leaves which one wins to the
-  # client.
+  # One header, not two: `expires` emits its own Cache-Control, so pairing the
+  # two sends the field twice and leaves which one wins to the client.
   add_header Cache-Control "public, max-age=31536000, immutable";
-}
-
-# Anything under the front door the build did not hash. Nothing should reach
-# here — the hashing step fails the build when a reference is left un-rewritten
-# — so this is the fallback for a file nobody references, and it revalidates
-# rather than being trusted for an hour.
-location /welcome/ {
-  alias /usr/share/nginx/landing/;
-  add_header Cache-Control "no-cache";
 }
 
 location / {

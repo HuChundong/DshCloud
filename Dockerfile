@@ -498,7 +498,6 @@ ENTRYPOINT ["/usr/local/bin/cube-entrypoint.sh"]
 FROM node:24-alpine AS landing
 WORKDIR /landing
 COPY web/landing ./src
-COPY docs/assets ./src/assets
 # From the one file the gateway serves rather than duplicated into `web/`, so a
 # replacement lands on the front door and the sign-in page at the same time.
 COPY gateway/assets/mark.svg gateway/assets/hamster.svg gateway/assets/favicon.svg ./src/

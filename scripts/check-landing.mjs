@@ -169,11 +169,21 @@ if (existsSync(join(root, 'web/landing/assets'))) {
 // ---- the deployment actually serves what the page assumes ----
 
 const nginx = readFileSync(join(root, 'web/site.inc'), 'utf8')
-if (!nginx.includes('location = /welcome/')) {
-  problems.push('web/site.inc: no exact-match location for /welcome/, so the page is not served')
+// The address the front door used to have. A saved link should still arrive.
+if (!nginx.includes('location /welcome/   { return 301 /; }')) {
+  problems.push('web/site.inc: /welcome/ no longer leads anywhere, so a saved link 404s')
 }
-if (!nginx.includes('return 303 /welcome/;')) {
-  problems.push('web/site.inc: nothing redirects to /welcome/ with its trailing slash, which the relative asset paths need')
+// The front door is served AT the root rather than redirected to, and the
+// application has an address of its own. Either half missing turns one into
+// the other's page.
+if (!nginx.includes('error_page 401 = @front_door;')) {
+  problems.push('web/site.inc: / does not serve the landing page to a visitor without a session')
+}
+if (!nginx.includes('return 303 /app;')) {
+  problems.push('web/site.inc: / does not send a signed-in visitor to the application')
+}
+if (!nginx.includes('location = /app {')) {
+  problems.push('web/site.inc: the application has no address of its own')
 }
 
 // The page is assembled in its own build stage from three places, hashed
@@ -182,7 +192,6 @@ if (!nginx.includes('return 303 /welcome/;')) {
 const dockerfile = readFileSync(join(root, 'Dockerfile'), 'utf8')
 for (const line of [
   'COPY web/landing ./src',
-  'COPY docs/assets ./src/assets',
   'COPY gateway/assets/mark.svg gateway/assets/hamster.svg gateway/assets/favicon.svg ./src/',
   'COPY gateway/assets/wechat-qr.webp ./src/',
   'RUN node hash-landing.mjs ./src /out',
