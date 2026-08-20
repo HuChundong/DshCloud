@@ -182,6 +182,25 @@ docker inspect <container> --format '{{.Image}}'   # must equal
 docker images -q --no-trunc <image>:latest
 ```
 
+**Building `web` does not move the sandbox tag.** The `shell` stage is
+`FROM sandbox`, so building `web` builds the sandbox stage and the browser
+halves of the plugins reach nginx — while `hamsterhq-sandbox:latest` keeps
+pointing at whatever it pointed at before, and the CubeSandbox template keeps
+pointing at an older tag still. A plugin therefore lives in two places at once,
+and building only `web` updates one of them. That is fine for a change to a
+`client.js`, which the browser fetches from nginx; it silently does nothing for
+a change to a plugin's node half, which runs inside the sandbox. Check rather
+than assume:
+
+```sh
+docker inspect hamsterhq-sandbox:latest --format '{{.Created}}'   # against
+docker inspect hamsterhq-web:latest --format '{{.Created}}'
+```
+
+To align them: `--profile build build`, tag and push the sandbox image, create a
+NEW template from it (never update the old one — a template is a snapshot taken
+at creation), point `CUBE_TEMPLATE_ID` at the new alias, and `up -d`.
+
 **`down -v` reaches further than this deployment.** The postgres volume holds
 accounts, and on a host where JuiceFS was installed against the same database
 server it holds the volume filesystem's metadata too — which is not a copy of

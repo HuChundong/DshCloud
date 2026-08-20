@@ -143,6 +143,20 @@ docker inspect <container> --format '{{.Image}}'   # 必须等于
 docker images -q --no-trunc <image>:latest
 ```
 
+**构建 `web` 不会移动 sandbox 的标签。** `shell` 阶段是 `FROM sandbox`,所以构建 `web`
+会连带构建 sandbox 阶段,插件的浏览器端也会进到 nginx——但 `hamsterhq-sandbox:latest`
+仍然指着原来那个镜像,而 CubeSandbox 的模板指着更旧的一个标签。于是同一个插件同时存在于
+两处,只构建 `web` 只更新了其中一处。改 `client.js` 时这没问题(浏览器是从 nginx 取的);
+改插件的 node 端时,它会**悄无声息地什么都没做**,因为那一半跑在沙箱里。要查,不要假设:
+
+```sh
+docker inspect hamsterhq-sandbox:latest --format '{{.Created}}'   # 对比
+docker inspect hamsterhq-web:latest --format '{{.Created}}'
+```
+
+对齐的做法:`--profile build build`,给 sandbox 镜像打标签并推送,用它**新建**一个模板
+(绝不要更新旧模板——模板是创建时拍下的快照),把 `CUBE_TEMPLATE_ID` 指向新别名,再 `up -d`。
+
 **`down -v`的影响超出这套部署。** postgres 的卷里放着账号；而在把 JuiceFS 装在同一个
 数据库服务上的宿主机上，它还放着卷文件系统的元数据——那不是租户文件的副本，而是「文件在哪」
 的唯一记录。删掉它，对象存储里就只剩没有任何东西能命名的数据块，共享挂载卡死，之后每一次
