@@ -51,6 +51,13 @@ services:
       # — with no warning to click through — a certificate that does not name
       # the address in the URL bar.
       TLS_SAN: ${TLS_SAN:-DNS:localhost,IP:127.0.0.1}
+      # The HTTPS port visitors type, which is the published one and not the
+      # 443 nginx listens on inside the container. Setting it makes the plain
+      # port redirect there; leaving it unset keeps the plain port serving the
+      # site, which is what a localhost deployment wants — `crypto.randomUUID`
+      # is available over plain HTTP to localhost, so there is nothing to
+      # redirect for, and a self-signed certificate would only add a warning.
+      HTTPS_PORT: ${PUBLIC_HTTPS_PORT:-}
     volumes:
       # Keeps the generated certificate across a recreate, so returning
       # browsers do not meet a new one every time. Mount a real certificate

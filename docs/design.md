@@ -114,8 +114,18 @@ entry the npm package ships as `dsh`.
 The client plugins call `crypto.randomUUID`, which is undefined on a page served
 over plain HTTP to anything but `localhost`. A deployment reached at a LAN or
 public address therefore has to be HTTPS or it fails on load, and nginx listens
-on both 80 and 443 — neither redirecting to the other, since nginx knows the
-port it listens on rather than the one the container publishes.
+on both 80 and 443.
+
+Plain HTTP redirects to the TLS site, but only once `PUBLIC_HTTPS_PORT` says
+where that is. nginx sees the port it listens on inside the container and not
+the one the container publishes, so it cannot derive the address: a bare
+`https://$host$request_uri` would send every visitor to 443, where this
+deployment is not. Until it is told, the plain port serves the site rather than
+redirecting somewhere that will not answer — which is also what a `localhost`
+deployment wants, since `crypto.randomUUID` is available there over plain HTTP
+and there is nothing to redirect for. The host comes from the request rather
+than from configuration, so a deployment reached by several names keeps
+whichever one the visitor used.
 
 By default the web container generates a self-signed certificate for `TLS_SAN`
 on first start, which makes the page a secure context at the cost of a browser
