@@ -124,15 +124,25 @@ FROM envd-${TARGETARCH} AS envd
 # binary with no dependencies: 1.5MB resident, and it starts in the time it
 # takes to open a socket.
 #
-# Built for TARGETPLATFORM like every other stage, so there is no
-# cross-compilation to arrange: buildx runs this stage for the architecture the
-# image is being built for. No dependencies means no registry to point at a
-# mirror, and `--offline` says so rather than discovering it.
+# Built natively, on the architecture it will run on. Each platform builds its
+# own — the deployment is amd64 and builds there — so there is no
+# cross-compilation to arrange and nothing to download: the native target's
+# standard library is already in the image, the crate has no dependencies, and
+# `--offline` states both rather than discovering them.
+#
+# Cross-compiling was tried and is worse for this. `rustup target add` fetches a
+# standard library for the other target, which is a network round trip that
+# takes longer than everything else here put together and is the one thing that
+# can fail on a slow link.
+#
+# The binary is NOT run here. That check belongs in the `sandbox` stage, which
+# is the image it will actually run in: a binary that cannot execute there is a
+# build failure rather than a sandbox that quietly reports nothing.
 FROM rust:1.89-bookworm AS agent-build
 WORKDIR /agent
 COPY sandbox/agent/Cargo.toml ./
 COPY sandbox/agent/src ./src
-RUN cargo build --release --offline && ./target/release/dsh-agent 2>&1 | grep -q "unknown command"
+RUN cargo build --release --offline && install -Dm755 target/release/dsh-agent /out/dsh-agent
 
 # ---------------------------------------------------------- panel-build ----
 # The right-hand panel's browser half, bundled.
@@ -162,7 +172,12 @@ FROM node:24-slim AS sandbox
 
 # The resident tools, before anything that might want them. See `agent-build`
 # for why they are a compiled binary rather than a script.
-COPY --from=agent-build /agent/target/release/dsh-agent /usr/local/bin/dsh-agent
+#
+# Run once, here, because here is the target architecture: a binary built for
+# the other one answers `exec format error`, and this is the last moment that
+# is a build failure rather than a sandbox that quietly reports nothing.
+COPY --from=agent-build /out/dsh-agent /usr/local/bin/dsh-agent
+RUN dsh-agent 2>&1 | grep -q 'unknown command'
 
 ARG APT_MIRROR=
 RUN if [ -n "$APT_MIRROR" ]; then \
