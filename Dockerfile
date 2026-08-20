@@ -482,6 +482,33 @@ WORKDIR /mnt/workspace
 EXPOSE 49983
 ENTRYPOINT ["/usr/local/bin/cube-entrypoint.sh"]
 
+# ---------------------------------------------------------------- landing ----
+# Assemble the front door, then give every asset a name that changes with its
+# bytes.
+#
+# Assembled here rather than copied straight into nginx because the page is made
+# of files from three places — its own directory, the README's images, and the
+# marks the gateway serves — and hashing has to see all of them at once to
+# rewrite the references.
+#
+# The names matter for one reason: an asset whose URL changes with its content
+# can be cached forever, and one whose URL does not cannot be cached at all
+# without going stale. Replacing a screenshot used to leave the old one on
+# screen for an hour; now it is a different URL and arrives on the first load.
+FROM node:24-alpine AS landing
+WORKDIR /landing
+COPY web/landing ./src
+COPY docs/assets ./src/assets
+# From the one file the gateway serves rather than duplicated into `web/`, so a
+# replacement lands on the front door and the sign-in page at the same time.
+COPY gateway/assets/mark.svg gateway/assets/hamster.svg gateway/assets/favicon.svg ./src/
+# The deployment's WeChat code, for the same reason and from the same place: the
+# sign-in page's footer and the landing page's footer show one account, and one
+# file is how they cannot come to show two.
+COPY gateway/assets/wechat-qr.webp ./src/
+COPY scripts/hash-landing.mjs ./
+RUN node hash-landing.mjs ./src /out
+
 # ------------------------------------------------------------------ shell ----
 # Boot the composition once and save what it serves: index.html carrying the
 # boot manifest, and every client bundle that manifest names.
@@ -529,16 +556,9 @@ COPY --from=shell /shell /usr/share/nginx/html
 # same bytes work at the site root on GitHub Pages, and the images themselves
 # are `docs/assets` — the README's, not a second set that could fall out of
 # date with it.
-COPY web/landing /usr/share/nginx/landing
-COPY docs/assets /usr/share/nginx/landing/assets
-# The mark the login, profile and admin pages already wear. Copied from the one
-# file the gateway serves rather than duplicated into `web/`, so a replacement
-# lands on the front door and the sign-in page at the same time.
-COPY gateway/assets/mark.svg /usr/share/nginx/landing/mark.svg
-# This deployment's own mark and tab icon, beside the landing page that wears
-# them.
-COPY gateway/assets/hamster.svg /usr/share/nginx/landing/hamster.svg
-COPY gateway/assets/favicon.svg /usr/share/nginx/landing/favicon.svg
+COPY --from=landing /out /usr/share/nginx/landing
+# This deployment's own mark and tab icon for the application shell, whose brand
+# plugin points at it.
 # And the same file again for the application shell, whose brand plugin points
 # at it. Its own root rather than the shell's, for the reason the landing page
 # has one: the shell's root is upstream's published build, and a file added
@@ -549,7 +569,6 @@ COPY gateway/assets/favicon.svg /usr/share/nginx/brand/favicon.svg
 # The deployment's WeChat code, for the same reason and from the same place: the
 # sign-in page's footer and the landing page's footer show one account, and one
 # file is how they cannot come to show two.
-COPY gateway/assets/wechat-qr.webp /usr/share/nginx/landing/wechat-qr.webp
 COPY web/nginx.conf /etc/nginx/conf.d/default.conf
 # Not under conf.d: everything matching conf.d/*.conf is included at the http
 # level, and this is a fragment of a server block.

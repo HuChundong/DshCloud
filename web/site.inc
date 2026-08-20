@@ -308,12 +308,36 @@ location = /welcome/ {
   add_header Cache-Control "no-cache";
 }
 
-# The images. A short expiry rather than the shell's `1y, immutable`: these
-# filenames are `screenshot-workspace.png`, not a content hash, so the same
-# name means something different after every redesign.
+# Everything the document names, under a name that carries its content hash —
+# `screenshot-workspace.e2a8251a20.png`. The build renames them and rewrites the
+# references; see `scripts/hash-landing.mjs`.
+#
+# Cached forever, and that is the whole reason for the hashing. These were
+# served for an hour under fixed names, which is the arrangement where replacing
+# a picture changes nothing a visitor sees until the hour is up — and where the
+# only way to find out whether a deployment took your new screenshots is to wait.
+# A different picture is now a different URL, so it arrives on the first load
+# and the old one is never asked about again.
+# Quoted, because nginx reads an unquoted `{` as the start of a block and
+# reports the rest of the pattern as an unknown directive.
+# The path is CAPTURED and the alias names it. A regex location whose alias has
+# no capture drops the rest of the URI and answers 404 for every file — the
+# second nginx trap in this block, after the unquoted brace.
+location ~ "^/welcome/(?<hashed>.+\.[0-9a-f]{10}\.[a-z0-9]+)$" {
+  alias /usr/share/nginx/landing/$hashed;
+  # One header, not two. `expires` emits its own Cache-Control, so pairing it
+  # with add_header sends the field twice and leaves which one wins to the
+  # client.
+  add_header Cache-Control "public, max-age=31536000, immutable";
+}
+
+# Anything under the front door the build did not hash. Nothing should reach
+# here — the hashing step fails the build when a reference is left un-rewritten
+# — so this is the fallback for a file nobody references, and it revalidates
+# rather than being trusted for an hour.
 location /welcome/ {
   alias /usr/share/nginx/landing/;
-  expires 1h;
+  add_header Cache-Control "no-cache";
 }
 
 location / {

@@ -176,16 +176,29 @@ if (!nginx.includes('return 303 /welcome/;')) {
   problems.push('web/site.inc: nothing redirects to /welcome/ with its trailing slash, which the relative asset paths need')
 }
 
+// The page is assembled in its own build stage from three places, hashed
+// there, and copied into nginx as one directory. Each source has to reach that
+// stage, and nginx has to be served the hashed output rather than the tree.
 const dockerfile = readFileSync(join(root, 'Dockerfile'), 'utf8')
 for (const line of [
-  'COPY web/landing /usr/share/nginx/landing',
-  'COPY docs/assets /usr/share/nginx/landing/assets',
-  'COPY gateway/assets/mark.svg /usr/share/nginx/landing/mark.svg',
-  'COPY gateway/assets/hamster.svg /usr/share/nginx/landing/hamster.svg',
-  'COPY gateway/assets/favicon.svg /usr/share/nginx/landing/favicon.svg',
-  'COPY gateway/assets/wechat-qr.webp /usr/share/nginx/landing/wechat-qr.webp',
+  'COPY web/landing ./src',
+  'COPY docs/assets ./src/assets',
+  'COPY gateway/assets/mark.svg gateway/assets/hamster.svg gateway/assets/favicon.svg ./src/',
+  'COPY gateway/assets/wechat-qr.webp ./src/',
+  'RUN node hash-landing.mjs ./src /out',
+  'COPY --from=landing /out /usr/share/nginx/landing',
 ]) {
   if (!dockerfile.includes(line)) problems.push(`Dockerfile: missing \`${line}\``)
+}
+
+// Hashed names are cached for a year, so the one rule that must hold is that
+// the document is not. Serving index.html as immutable would strand every
+// visitor on whichever copy they happened to fetch.
+if (!nginx.includes('add_header Cache-Control "no-cache"')) {
+  problems.push('web/site.inc: the landing document is not served no-cache')
+}
+if (!nginx.includes('immutable')) {
+  problems.push('web/site.inc: hashed assets are not served immutable, which is the point of hashing them')
 }
 
 // ---- report ----
