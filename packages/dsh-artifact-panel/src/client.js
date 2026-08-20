@@ -2511,6 +2511,7 @@ window.__ModuleLoader__.load({
      * @returns {object} the element.
      */
     function FoldButton({ kind, title }) {
+      const t = useT()
       const { folded } = useStore()
       const closed = folded[kind] === true
       return h('button', {

@@ -1,6 +1,32 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "categories": { "correctness": "error" },
-  "ignorePatterns": ["node_modules/**", "**/node_modules/**"],
-  "env": { "node": true, "es2024": true }
+  "categories": {
+    "correctness": "error"
+  },
+  "ignorePatterns": [
+    "node_modules/**",
+    "**/node_modules/**"
+  ],
+  "env": {
+    "node": true,
+    "es2024": true
+  },
+  "rules": {
+    "no-undef": "error"
+  },
+  "overrides": [
+    {
+      "files": [
+        "packages/*/client.js",
+        "packages/*/src/client.js",
+        "web/landing/main.js",
+        "verify/verify-browser.mjs",
+        "verify/verify-dialog.mjs"
+      ],
+      "env": {
+        "browser": true,
+        "es2024": true
+      }
+    }
+  ]
 }
