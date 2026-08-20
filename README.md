@@ -157,13 +157,21 @@ dsh to boot, so it is noticeably slower than the ones after it.
 ## The landing page
 
 `http://localhost:8080/` answers a signed-in tenant with the application and
-everyone else with [`web/landing/index.html`](web/landing/index.html), at
-`/welcome/`. It is one document that reaches no other host — no CDN, no
-framework, no analytics — because a deployment on a private network is a place
-where an external request is not slow but unanswered. The three faces it is set
-in are in `web/landing/fonts/`, latin subsets, 72 KB together; they are
+everyone else with [`web/landing/`](web/landing/), served at that address
+rather than redirected to one. It reaches no other host — no CDN, no framework,
+no analytics — because a deployment on a private network is a place where an
+external request is not slow but unanswered. The three faces it is set in are
+in `web/landing/fonts/`, latin subsets, 72 KB together; they are
 [SIL Open Font Licence](https://openfontlicense.org) and redistributing them
 beside this MIT source is what that licence is for.
+
+It is built by [Vite](https://vite.dev): `index.html`, `styles.css` and
+`main.js`, with every asset emitted under a name carrying its own content hash
+and every reference to it rewritten from the parsed document. That is what lets
+the assets be cached for a year while the document is not — replace a
+screenshot and it is a different URL, so it arrives on the first load instead
+of whenever the old one expires. One build definition, three consumers: the
+Dockerfile's `landing` stage, the Pages workflow, and the dev server below.
 
 `web/landing/avatar.webp` is a 128px WebP derived from the project's own
 [`gateway/assets/hamster.svg`](gateway/assets/hamster.svg). It uses a tight
@@ -171,19 +179,19 @@ head-and-shoulder crop, an off-white field, and the site's green accent ring so
 the mascot remains identifiable in the application's 26px account circle.
 Regenerate it from the SVG rather than editing the raster in place.
 
-The same file is the project page on GitHub Pages, published by
+The same source is the project page on GitHub Pages, published by
 [`.github/workflows/pages.yml`](.github/workflows/pages.yml). Serving from two
-roots is why its images are referenced relatively and its application links
-absolutely; `scripts/check-landing.mjs` asserts that, along with both languages
-being present for every string it shows.
+roots is why `base` is `./` and why its application links are absolute;
+`scripts/check-landing.mjs` asserts that, along with both languages being
+present for every string it shows.
 
 ```sh
-scripts/landing-preview.sh        # assembles it the way both deployments do
+scripts/landing-preview.sh        # the dev server, reloading as you edit
 ```
 
-The page cannot be opened straight from the tree: it references `assets/…`, and
-those are `docs/assets` — the README's own screenshots, so that the two cannot
-show different pictures.
+The marks on the page are the gateway's, named at their real path
+(`../../gateway/assets/…`) rather than copied in beside it, so replacing one
+reaches the front door and the sign-in page together.
 
 ## Running on CubeSandbox
 

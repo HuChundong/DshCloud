@@ -133,29 +133,33 @@ open http://localhost:8080
 ## 落地页
 
 `http://localhost:8080/` 对已登录的租户回应应用本身，对其他所有人回应
-[`web/landing/index.html`](web/landing/index.html)，位置在 `/welcome/`。它是
-一份不去碰任何其他主机的文档——没有 CDN、没有框架、没有统计——因为部署在私有网络里的
-一套系统，对外的请求不是慢，而是根本没人回应。它所用的三款字体放在
-`web/landing/fonts/`，只取 latin 子集，三个加起来 72 KB；它们是
-[SIL 开放字体许可](https://openfontlicense.org)，随这份 MIT 源码一起分发正是该许可
-的用途。
+[`web/landing/`](web/landing/)——就在这个地址上提供，而不是跳转到别处。它不去碰任何
+其他主机——没有 CDN、没有框架、没有统计——因为部署在私有网络里的一套系统，对外的请求
+不是慢，而是根本没人回应。它所用的三款字体放在 `web/landing/fonts/`，只取 latin 子集，
+三个加起来 72 KB；它们是 [SIL 开放字体许可](https://openfontlicense.org)，随这份 MIT
+源码一起分发正是该许可的用途。
+
+它由 [Vite](https://vite.dev) 构建：`index.html`、`styles.css` 和 `main.js`，每个资源
+都以带内容哈希的文件名产出，每一处引用都从解析后的文档里改写。这正是资源可以缓存一年、
+而文档不缓存的前提——换一张截图就是换一个 URL，它在第一次加载时就到，而不是等旧的过期。
+一份构建定义，三处使用：Dockerfile 的 `landing` 阶段、Pages 工作流，以及下面那个开发服务器。
 
 `web/landing/avatar.webp` 是从项目自己的
 [`gateway/assets/hamster.svg`](gateway/assets/hamster.svg) 派生出的 128px WebP。
 它采用紧凑的头肩裁切、暖白底和页面的绿色强调环，让仓鼠在应用内 26px 的账户圆形头像中
 仍能被认出来。要改就从 SVG 重新生成，别直接改位图。
 
-同一个文件也是 GitHub Pages 上的项目主页，由
+同一份源码也是 GitHub Pages 上的项目主页，由
 [`.github/workflows/pages.yml`](.github/workflows/pages.yml) 发布。正因为要从两个
-根目录提供，它的图片引用是相对路径、通向应用的链接是绝对路径；
+根目录提供，`base` 才是 `./`、通向应用的链接才是绝对路径；
 `scripts/check-landing.mjs` 会把这一点，连同它展示的每一条文案两种语言都在，断言下来。
 
 ```sh
-scripts/landing-preview.sh        # 按两处部署各自的方式把它拼装起来
+scripts/landing-preview.sh        # 开发服务器，边改边刷新
 ```
 
-这个页面没法直接从工作树里打开：它引用的是 `assets/…`，而那些是 `docs/assets`——
-README 自己的那批截图，这样两边不会展示成不同的画面。
+页面上的两枚标识属于网关，按真实路径引用（`../../gateway/assets/…`），而不是复制一份
+放在页面旁边——这样换掉一枚，落地页和登录页会同时换掉。
 
 ## 在 CubeSandbox 上运行
 

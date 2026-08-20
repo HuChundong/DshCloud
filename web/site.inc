@@ -204,7 +204,7 @@ location @login { return 303 /login; }
 # `root` rather than `alias`, because a named location cannot carry an alias —
 # nginx refuses the configuration outright.
 location @front_door {
-  root /usr/share/nginx/landing;
+  root /usr/share/nginx/front-door;
   try_files /index.html =404;
   add_header Cache-Control "no-cache";
 }
@@ -323,20 +323,21 @@ location /brand/ {
 # shell's root is upstream's published build and a file added beside it is one
 # release away from colliding with a name that build starts using.
 #
-# The trailing slash is load-bearing. The page references its images relatively
-# — `assets/…`, no leading slash — so that the same bytes serve from the site
-# root on GitHub Pages and from here. Reached at `/welcome`, the browser would
-# resolve those against `/` and ask the shell's root for them; the exact-match
-# redirect below is what stops that, and it is why `@landing` names the slashed
-# form directly rather than relying on nginx to add it.
+# Its references are relative — `./landing/…` — so that the same bytes serve
+# from the site root on GitHub Pages and from `/` here. That is `base: './'` in
+# `web/landing/vite.config.js`, and it is why the asset prefix below is its own
+# name rather than the shell's `/assets/`: two roots, one document, and no path
+# that is only correct in one of them.
 # The address the front door used to have. Kept so a link someone saved still
 # arrives, and permanent because it is not coming back.
 location = /welcome  { return 301 /; }
 location /welcome/   { return 301 /; }
 
-# Everything the front door names, under a name carrying its content hash —
-# `work-build.f3e8763c8a.jpg`. The build renames them and rewrites the
-# references; see `scripts/hash-landing.mjs`.
+# Everything the front door names — its stylesheet, its script, its fonts and
+# every picture on it — each under a name carrying its own content hash.
+# `vite build` writes them into this one directory and rewrites every reference
+# to them from the document it parsed, so a reference cannot be left behind
+# pointing at a name nothing serves.
 #
 # Cached forever, and that is the whole reason for the hashing. These were
 # served for an hour under fixed names, which is the arrangement where replacing
@@ -345,11 +346,12 @@ location /welcome/   { return 301 /; }
 # A different picture is now a different URL, so it arrives on the first load
 # and the old one is never asked about again.
 #
-# The path is CAPTURED and the alias names it. A regex location whose alias has
-# no capture drops the rest of the URI and answers 404 for every file. The
-# pattern is quoted because nginx reads an unquoted `{` as the start of a block.
-location ~ "^/(?<hashed>(?:images/|fonts/)?[^/]+\.[0-9a-f]{10}\.[a-z0-9]+)$" {
-  alias /usr/share/nginx/landing/$hashed;
+# `root` rather than `alias`, and a prefix rather than a regex: the URI already
+# begins with the directory the files sit in, so nginx appends the whole of it
+# and there is no capture to leave out — which is the mistake that answers 404
+# for every file. `^~` settles it here without any regex location being tried.
+location ^~ /landing/ {
+  root /usr/share/nginx/front-door;
   # One header, not two: `expires` emits its own Cache-Control, so pairing the
   # two sends the field twice and leaves which one wins to the client.
   add_header Cache-Control "public, max-age=31536000, immutable";

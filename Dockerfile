@@ -483,30 +483,34 @@ EXPOSE 49983
 ENTRYPOINT ["/usr/local/bin/cube-entrypoint.sh"]
 
 # ---------------------------------------------------------------- landing ----
-# Assemble the front door, then give every asset a name that changes with its
-# bytes.
+# Build the front door.
 #
-# Assembled here rather than copied straight into nginx because the page is made
-# of files from three places — its own directory, the README's images, and the
-# marks the gateway serves — and hashing has to see all of them at once to
-# rewrite the references.
+# `vite build`, which is the whole of it. There used to be a script here that
+# copied the tree, hashed each asset and rewrote the references by string
+# substitution; a bundler does that from the document it parsed, so it cannot
+# leave a reference behind pointing at a name nothing serves.
 #
 # The names matter for one reason: an asset whose URL changes with its content
 # can be cached forever, and one whose URL does not cannot be cached at all
 # without going stale. Replacing a screenshot used to leave the old one on
 # screen for an hour; now it is a different URL and arrives on the first load.
 FROM node:24-alpine AS landing
-WORKDIR /landing
-COPY web/landing ./src
-# From the one file the gateway serves rather than duplicated into `web/`, so a
-# replacement lands on the front door and the sign-in page at the same time.
-COPY gateway/assets/mark.svg gateway/assets/hamster.svg gateway/assets/favicon.svg ./src/
-# The deployment's WeChat code, for the same reason and from the same place: the
-# sign-in page's footer and the landing page's footer show one account, and one
-# file is how they cannot come to show two.
-COPY gateway/assets/wechat-qr.webp ./src/
-COPY scripts/hash-landing.mjs ./
-RUN node hash-landing.mjs ./src /out
+# The repository's own shape, because the page names the gateway's marks by
+# their real path — `../../gateway/assets/hamster.svg`. One file per mark in the
+# tree, so a replacement reaches the front door and the sign-in page together,
+# rather than a copy beside each page that shows one.
+WORKDIR /src/web/landing
+# The same mirror the other stages take, for the same reason: a build behind a
+# slow or unreachable public registry should fail in one place or none.
+ARG NPM_REGISTRY=
+RUN if [ -n "$NPM_REGISTRY" ]; then npm config set registry "$NPM_REGISTRY"; fi
+# Manifest first: the dependency install is then cached against it and does not
+# re-run because a screenshot changed.
+COPY web/landing/package.json web/landing/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY gateway/assets /src/gateway/assets
+COPY web/landing ./
+RUN npm run build
 
 # ------------------------------------------------------------------ shell ----
 # Boot the composition once and save what it serves: index.html carrying the
@@ -551,11 +555,10 @@ COPY --from=shell /shell /usr/share/nginx/html
 # upstream's published build and anything added to it is one npm release away
 # from colliding with a name that build starts using.
 #
-# Two copies, not one: the page references its images relatively so that the
-# same bytes work at the site root on GitHub Pages, and the images themselves
-# are `docs/assets` — the README's, not a second set that could fall out of
-# date with it.
-COPY --from=landing /out /usr/share/nginx/landing
+# Named for what it is rather than for the URL its assets sit under: those are
+# served from `/landing/`, and a directory of that name here would have to be
+# reached at `landing/landing`.
+COPY --from=landing /src/web/landing/dist /usr/share/nginx/front-door
 # This deployment's own mark and tab icon for the application shell, whose brand
 # plugin points at it.
 # And the same file again for the application shell, whose brand plugin points

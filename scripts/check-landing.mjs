@@ -1,37 +1,43 @@
 /**
  * What the landing page has to hold true, checked without a browser.
  *
- * The page claims two things about itself, and both are the kind of claim that
- * quietly stops being true:
+ * Less than there was. The page used to be one file that a script copied,
+ * hashed and rewrote by string substitution, and most of what was asserted here
+ * were the things that arrangement could get silently wrong: a reference the
+ * substitution did not recognise, an asset staged into one of the three
+ * assemblies and not the others, a mark opened from the checkout resolving to
+ * nothing. `vite build` writes those references from the document it parsed, so
+ * they are no longer claims to check.
  *
- * - It is served from two roots — the site root on GitHub Pages, and
- *   `/welcome/` inside the web image — so every asset reference has to be
- *   relative and every application link absolute. One `/assets/…` is enough to
- *   make the container serve the shell's bundles instead of a screenshot, and
- *   the page still renders, just without the picture.
- * - Its two languages cannot drift, because they sit on one line per string
+ * What is left is what a bundler has no opinion about:
+ *
+ * - The two languages cannot drift, because they sit on one line per string
  *   rather than in two files. That holds only while every key really does carry
  *   both, and while every string with markup in it goes through the attribute
  *   that renders markup — `data-t` sets textContent, so a `<code>` on that side
  *   reaches the reader as four visible characters.
+ * - Links into the application are absolute and assets are not. Vite makes the
+ *   asset URLs relative; nothing stops someone writing `/login` as `login`,
+ *   which would be resolved against whichever root the page was served from.
+ * - The deployment serves what the build produces, at the paths it produces
+ *   them at, with the caching each deserves.
  *
  * Run: node scripts/check-landing.mjs
  */
 
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import process from 'node:process'
 
 const root = resolve(import.meta.dirname, '..')
-const page = join(root, 'web/landing/index.html')
-const source = readFileSync(page, 'utf8')
+const landing = join(root, 'web/landing')
 
-/**
- * Where a relative reference is resolved from, mirroring how the page is
- * assembled: its own directory, `docs/assets` mounted at `assets/`, and the
- * gateway's mark dropped in beside the document.
- */
-const ROOTS = [join(root, 'web/landing'), join(root, 'docs'), join(root, 'gateway/assets')]
+/** The page's three source files, read once. */
+const page = {
+  html: readFileSync(join(landing, 'index.html'), 'utf8'),
+  css: readFileSync(join(landing, 'styles.css'), 'utf8'),
+  js: readFileSync(join(landing, 'main.js'), 'utf8'),
+}
 
 /** Keys the page never marks up, because JavaScript writes them at runtime. */
 const RUNTIME_KEYS = new Set(['copy.idle', 'copy.done', 'doc.title'])
@@ -39,17 +45,17 @@ const RUNTIME_KEYS = new Set(['copy.idle', 'copy.done', 'doc.title'])
 const problems = []
 
 /**
- * The `T` table, read from the page rather than duplicated here.
+ * The `T` table, read from the page's script rather than duplicated here.
  * @returns {Record<string, {en: string, zh: string}>} the table.
  */
 function table() {
-  const start = source.indexOf('const T = {')
-  if (start === -1) throw new Error('the T table is gone from web/landing/index.html')
+  const start = page.js.indexOf('const T = {')
+  if (start === -1) throw new Error('the T table is gone from web/landing/main.js')
   // The table's closing brace is the first `}` at the start of a line after it,
   // which holds because everything nested inside it is indented.
-  const end = source.indexOf('\n}\n', start)
+  const end = page.js.indexOf('\n}\n', start)
   if (end === -1) throw new Error('the T table has no closing brace at column 0')
-  const literal = source.slice(start + 'const T = '.length, end + 2)
+  const literal = page.js.slice(start + 'const T = '.length, end + 2)
   return new Function(`return ${literal}`)()
 }
 
@@ -70,7 +76,7 @@ for (const [key, entry] of Object.entries(T)) {
 // `data-t` is textContent, `data-th` is innerHTML, `data-tp` is a placeholder
 // and `data-ta` an aria-label. Only the second may carry markup.
 const used = new Map()
-for (const match of source.matchAll(/data-(t|th|tp|ta)="([^"]+)"/g)) {
+for (const match of page.html.matchAll(/data-(t|th|tp|ta)="([^"]+)"/g)) {
   used.set(match[2], match[1] === 'th' ? 'html' : 'text')
 }
 
@@ -99,8 +105,22 @@ for (const key of Object.keys(T)) {
 
 // ---- references resolve, and point at the right kind of thing ----
 
-for (const match of source.matchAll(/\s(?:src|href)="([^"]+)"/g)) {
-  const target = match[1]
+/**
+ * Everything the page names, from the markup and from the stylesheet both.
+ * @returns {Array<{from: string, target: string}>} each reference and its file.
+ */
+function references() {
+  const found = []
+  for (const match of page.html.matchAll(/\s(?:src|href)="([^"]+)"/g)) {
+    found.push({ from: 'index.html', target: match[1] })
+  }
+  for (const match of page.css.matchAll(/url\(["']?([^"')]+)["']?\)/g)) {
+    found.push({ from: 'styles.css', target: match[1] })
+  }
+  return found
+}
+
+for (const { from, target } of references()) {
   if (/^(https?:|mailto:|data:|#)/.test(target)) continue
 
   if (target.startsWith('/')) {
@@ -108,67 +128,103 @@ for (const match of source.matchAll(/\s(?:src|href)="([^"]+)"/g)) {
     // these are the paths the container answers and Pages does not, so the
     // page may only use them for links a visitor follows out of the page.
     if (!/^\/(login|logout|profile|admin|policy)(\/|$)/.test(target)) {
-      problems.push(`${target}: absolute, but not one of the application's own paths`)
+      problems.push(`${from}: ${target} is absolute, but not one of the application's own paths`)
     }
     continue
   }
 
   if (target === './') continue
-  if (!ROOTS.some((base) => existsSync(join(base, target)))) {
-    problems.push(`${target}: relative, and resolves to nothing under web/landing or docs`)
+  // Relative to the file that names it, which is how the bundler resolves it
+  // too. Both source files sit in web/landing, so a `../../gateway/assets/…`
+  // reaches the one copy of a mark rather than a second one staged beside the
+  // page.
+  if (!existsSync(resolve(join(landing, dirname(from === 'index.html' ? 'index.html' : 'styles.css')), target))) {
+    problems.push(`${from}: ${target} resolves to nothing`)
   }
 }
 
-// The deployed page gets its marks during assembly, but people also open the
-// source file directly while designing it. Each visible mark and the favicon
-// must fall back to the gateway-owned source without creating a second copy.
-//
+// The document has to name the stylesheet and the script, or the build has an
+// entry point that pulls in neither and produces a page with no styling and no
+// second language — which renders, and looks like a CSS bug.
+if (!page.html.includes('href="./styles.css"')) {
+  problems.push('index.html: does not name ./styles.css, so the build would emit an unstyled page')
+}
+if (!page.html.includes('src="./main.js"')) {
+  problems.push('index.html: does not name ./main.js, so the build would emit a page stuck in one language')
+}
+if (!page.html.includes('type="module"')) {
+  problems.push('index.html: the script is not a module, so Vite treats it as an opaque asset and does not bundle it')
+}
+
+// ---- the marks are the gateway's, and there is one of each ----
+
 // Two marks, and which is which is the point. This deployment's own hamster
 // signs the page — the header and both places inside the product still — and
 // upstream's whale appears exactly once, in the footer, on the link that names
 // DeepSeek Harness. A whale anywhere else is this project wearing someone
 // else's trademark, which is what their brand guidelines ask projects not to
 // do; a count is the cheapest way to keep that true.
-for (const [file, images, icon] of [
-  ['../../gateway/assets/hamster.svg', 3, false],
-  ['../../gateway/assets/favicon.svg', 0, true],
-  ['../../gateway/assets/mark.svg', 2, false],
+for (const [file, expected] of [
+  ['../../gateway/assets/hamster.svg', 3],
+  ['../../gateway/assets/mark.svg', 2],
+  ['../../gateway/assets/favicon.svg', 1],
+  ['../../gateway/assets/wechat-qr.webp', 1],
 ]) {
-  const imageFallback = `onerror="this.onerror=null;this.src='${file}'"`
-  const found = source.split(imageFallback).length - 1
-  if (found !== images) problems.push(`${file}: expected ${images} checkout image fallback(s), found ${found}`)
-  if (icon && !source.includes(`onerror="this.onerror=null;this.href='${file}'"`)) {
-    problems.push(`${file}: the favicon has no checkout fallback`)
-  }
-  if (!existsSync(resolve(join(root, 'web/landing'), file))) {
-    problems.push(`${file}: checkout fallback resolves to nothing`)
+  const found = page.html.split(`"${file}"`).length - 1
+  if (found !== expected) problems.push(`${file}: expected ${expected} reference(s), found ${found}`)
+}
+
+// A copy of a gateway-owned file staged into the page's own directory would
+// render identically and then drift, which is the failure this naming exists to
+// prevent.
+for (const name of ['mark.svg', 'hamster.svg', 'favicon.svg', 'wechat-qr.webp']) {
+  if (existsSync(join(landing, name))) {
+    problems.push(`web/landing/${name}: a second copy of a gateway-owned file. The page names it at its real path; delete this one.`)
   }
 }
 
 // ---- the faces the design is set in are actually in the tree ----
 
-// A missing woff2 does not fail anything at build time and does not error in a
-// browser: `font-display: swap` simply keeps the fallback, and the page renders
-// in the system sans looking almost right. Almost right is the hard kind of
-// wrong to notice, so the files are asserted here.
+// A missing woff2 does not fail the build and does not error in a browser:
+// `font-display` simply keeps the fallback, and the page renders in the system
+// sans looking almost right. Almost right is the hard kind of wrong to notice,
+// so the files are asserted here.
 for (const face of ['dm-sans-latin', 'host-grotesk-latin', 'fragment-mono-latin']) {
-  const file = join(root, 'web/landing/fonts', `${face}.woff2`)
-  if (!existsSync(file)) problems.push(`web/landing/fonts/${face}.woff2: declared by an @font-face and not in the tree`)
-  else if (!source.includes(`fonts/${face}.woff2`)) problems.push(`web/landing/fonts/${face}.woff2: in the tree and named by nothing`)
+  const file = join(landing, 'fonts', `${face}.woff2`)
+  if (!existsSync(file)) {
+    problems.push(`web/landing/fonts/${face}.woff2: declared by an @font-face and not in the tree`)
+  } else if (!page.css.includes(`fonts/${face}.woff2`)) {
+    problems.push(`web/landing/fonts/${face}.woff2: in the tree and named by no @font-face`)
+  } else if (!page.html.includes(`fonts/${face}.woff2`)) {
+    // Preloaded as well as declared. `font-display: optional` gives a face one
+    // brief chance to arrive before the page commits to the fallback for good,
+    // and a face discovered only when the stylesheet is parsed does not get it.
+    problems.push(`web/landing/fonts/${face}.woff2: declared but not preloaded, so it will lose its race on a cold load`)
+  }
 }
 
-// ---- the assets the page shows are the README's, not a second copy ----
+// ---- the build and the deployment agree on where the assets go ----
 
-if (existsSync(join(root, 'web/landing/assets'))) {
-  problems.push(
-    'web/landing/assets exists: the images are copied in from docs/assets at build time so that ' +
-    'the README and the page cannot show different screenshots. Delete it.',
-  )
+const vite = readFileSync(join(landing, 'vite.config.js'), 'utf8')
+const nginx = readFileSync(join(root, 'web/site.inc'), 'utf8')
+
+// Not `assets/`, which the shell already owns: the web image serves the
+// application's bundles from there, and a landing asset of the same name would
+// be answered with a JavaScript bundle.
+if (!vite.includes("assetsDir: 'landing'")) {
+  problems.push("web/landing/vite.config.js: assetsDir is not 'landing', which is the prefix web/site.inc serves")
+}
+if (!nginx.includes('location ^~ /landing/ {')) {
+  problems.push('web/site.inc: nothing serves /landing/, so every hashed asset the build emits 404s')
+}
+// Relative, because the same document is served from the site root on GitHub
+// Pages and from `/` in the web image.
+if (!vite.includes("base: './'")) {
+  problems.push("web/landing/vite.config.js: base is not './', so the URLs are only right under one of the page's two roots")
 }
 
 // ---- the deployment actually serves what the page assumes ----
 
-const nginx = readFileSync(join(root, 'web/site.inc'), 'utf8')
 // The address the front door used to have. A saved link should still arrive.
 if (!nginx.includes('location /welcome/   { return 301 /; }')) {
   problems.push('web/site.inc: /welcome/ no longer leads anywhere, so a saved link 404s')
@@ -186,16 +242,15 @@ if (!nginx.includes('location = /app {')) {
   problems.push('web/site.inc: the application has no address of its own')
 }
 
-// The page is assembled in its own build stage from three places, hashed
-// there, and copied into nginx as one directory. Each source has to reach that
-// stage, and nginx has to be served the hashed output rather than the tree.
+// The build's output has to reach nginx, and nginx has to be served the build
+// rather than the tree.
 const dockerfile = readFileSync(join(root, 'Dockerfile'), 'utf8')
 for (const line of [
-  'COPY web/landing ./src',
-  'COPY gateway/assets/mark.svg gateway/assets/hamster.svg gateway/assets/favicon.svg ./src/',
-  'COPY gateway/assets/wechat-qr.webp ./src/',
-  'RUN node hash-landing.mjs ./src /out',
-  'COPY --from=landing /out /usr/share/nginx/landing',
+  'COPY web/landing/package.json web/landing/package-lock.json ./',
+  'RUN npm ci --no-audit --no-fund',
+  'COPY gateway/assets /src/gateway/assets',
+  'RUN npm run build',
+  'COPY --from=landing /src/web/landing/dist /usr/share/nginx/front-door',
 ]) {
   if (!dockerfile.includes(line)) problems.push(`Dockerfile: missing \`${line}\``)
 }
@@ -210,6 +265,15 @@ if (!nginx.includes('immutable')) {
   problems.push('web/site.inc: hashed assets are not served immutable, which is the point of hashing them')
 }
 
+// ---- the lockfile is in the tree ----
+
+// `npm ci` is what both the image and the published page build with, and it
+// fails outright without one. Better here, where the message says why, than in
+// a build log.
+if (!existsSync(join(landing, 'package-lock.json'))) {
+  problems.push('web/landing/package-lock.json: absent, and `npm ci` cannot run without it')
+}
+
 // ---- every raster image is webp ----
 
 // A hard rule rather than a preference: these are photographs and screenshots
@@ -218,13 +282,16 @@ if (!nginx.includes('immutable')) {
 // 300 KB. Checked rather than remembered, because the next person to add a
 // screenshot will export whatever their tool offered.
 for (const directory of ['web/landing', 'docs/assets']) {
-  const root_ = join(root, directory)
-  if (!existsSync(root_)) continue
-  const walk = (at) => readdirSync(at, { withFileTypes: true }).flatMap((entry) => {
-    const here = join(at, entry.name)
+  const at = join(root, directory)
+  if (!existsSync(at)) continue
+  const walk = (from) => readdirSync(from, { withFileTypes: true }).flatMap((entry) => {
+    // Neither is the page's source: one is the build's output and the other is
+    // what it was built from.
+    if (entry.name === 'node_modules' || entry.name === 'dist') return []
+    const here = join(from, entry.name)
     return entry.isDirectory() ? walk(here) : [here]
   })
-  for (const file of walk(root_)) {
+  for (const file of walk(at)) {
     if (/\.(jpe?g|png|bmp|tiff?)$/i.test(file)) {
       problems.push(`${file.slice(root.length + 1)}: raster images must be webp`)
     }
@@ -239,5 +306,4 @@ if (problems.length > 0) {
   process.exit(1)
 }
 
-const shown = readdirSync(join(root, 'docs/assets')).length
-console.log(`landing page: ${Object.keys(T).length} strings in two languages, ${shown} assets available`)
+console.log(`landing page: ${Object.keys(T).length} strings in two languages, built by vite`)

@@ -1,9 +1,10 @@
 name: Pages
 
-# The project page, from the same file the web image serves at `/welcome/`.
-# Nothing is built: the page is one document that fetches nothing, so publishing
-# it is a copy — the same two copies `scripts/landing-preview.sh` and the
-# `web` stage of the Dockerfile make, for the same reason.
+# The project page, from the same source the web image serves at `/`, built the
+# same way: `vite build` in `web/landing`. One build definition and three
+# consumers — this workflow, the Dockerfile's `landing` stage, and `npm run dev`
+# for whoever is editing the page — so what is published cannot be assembled
+# differently from what is deployed.
 
 on:
   push:
@@ -12,7 +13,7 @@ on:
     # published page exactly as it was, so republishing it says nothing.
     paths:
       - 'web/landing/**'
-      - 'docs/assets/**'
+      - 'gateway/assets/**'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
@@ -46,15 +47,14 @@ jobs:
       - name: Landing page
         run: node scripts/check-landing.mjs
 
-      - name: Assemble
+      - name: Build
+        # `npm ci` rather than `npm install`, so the published page is built
+        # against the versions the lockfile names and not whatever resolved
+        # today.
         run: |
-          # Everything under web/landing — the page and its fonts — plus the
-          # README's screenshots, which live in docs/assets so that the two
-          # cannot show different pictures.
-          mkdir -p _site/assets
-          cp -R web/landing/. _site/
-          cp docs/assets/* _site/assets/
-          cp gateway/assets/mark.svg _site/
+          npm ci --no-audit --no-fund --prefix web/landing
+          npm run build --prefix web/landing
+          mv web/landing/dist _site
           # Pages runs Jekyll over an artifact unless told not to, and Jekyll
           # drops files and directories whose names begin with an underscore.
           # Nothing here starts with one today; this keeps that from becoming a
