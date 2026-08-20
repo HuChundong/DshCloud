@@ -29,7 +29,9 @@ import {
   THEME_TOGGLE,
   TOAST_CSS,
   escapeHtml,
+  langToggle,
   toast,
+  toastEntry,
 } from './page-chrome.js'
 
 /** The cropping viewport, and the square that comes out of it. Both in CSS pixels. */
@@ -80,18 +82,78 @@ export function profilePage(state) {
   // A separate form posting to its own path, with the address typed out. The
   // dialog below asks first when there is JavaScript; this field is what the
   // server actually requires, so the page still works without it.
+  // Everything this page says, in both languages; the markup carries the
+  // Chinese. Two of these are asked for by the page's own script rather than
+  // rendered — a hint written on an event, and the sentence the confirm dialog
+  // puts up — which is what `window.dshText` is for.
+  const table = {
+    h: first === true
+      ? { zh: '先介绍一下你自己', en: 'Tell us who you are' }
+      : { zh: '个人资料', en: 'Profile' },
+    lede: first === true
+      ? { zh: '昵称和头像会显示在侧边栏，之后随时可以改。', en: 'Your name and picture appear in the sidebar. You can change them at any time.' }
+      : { zh: '昵称和头像会显示在侧边栏。', en: 'Your name and picture appear in the sidebar.' },
+    'doc.title': first === true
+      ? { zh: '完善资料 · HamsterHQ', en: 'Set up your profile · HamsterHQ' }
+      : { zh: '个人资料 · HamsterHQ', en: 'Profile · HamsterHQ' },
+    submit: first === true
+      ? { zh: '开始使用', en: 'Get started' }
+      : { zh: '保存', en: 'Save' },
+
+    name:   { zh: '昵称', en: 'Name' },
+    email:  { zh: '邮箱', en: 'Email' },
+    zoom:   { zh: '缩放', en: 'Zoom' },
+    choose: { zh: '选择图片', en: 'Choose a picture' },
+    remove: { zh: '移除', en: 'Remove' },
+    cancel: { zh: '取消', en: 'Cancel' },
+    footer: { zh: 'HamsterHQ · 自建部署', en: 'HamsterHQ · self-hosted' },
+
+    'avatar.unreadable': { zh: '这个文件无法作为图片打开，请换一张。', en: 'That file cannot be opened as an image. Choose another.' },
+    'avatar.stubborn':   { zh: '这张图片压不到限制以内，请换一张。', en: 'That picture will not compress under the limit. Choose another.' },
+
+    docs: {
+      zh: policyLinks({ separator: '', lang: 'zh' }),
+      en: policyLinks({ separator: '', lang: 'en' }),
+    },
+
+    // The confirm dialog is in the markup whichever state this is — its script
+    // simply finds no form to guard on the first-run page — so its strings are
+    // here whichever state this is too.
+    'close.h': { zh: '注销账号', en: 'Close account' },
+    'close.go': { zh: '确认注销', en: 'Close it' },
+    'close.confirm': {
+      zh: '真的要注销吗？账号、沙箱和工作区文件会被立即删除，且无法恢复。',
+      en: 'Close this account? The account, its sandbox and its workspace files are deleted immediately, and cannot be recovered.',
+    },
+
+    ...toastEntry(error, undefined),
+  }
+
+  if (first !== true) {
+    table.back = { zh: '返回', en: 'Back' }
+    table['close.what'] = {
+      zh: '注销会立即删除你的账号、登录会话、沙箱和工作区文件。本部署不做备份，因此这个操作<b>无法撤销</b>，删除的内容也无法找回。详见 <a href="/policy/privacy" target="_blank" rel="noopener">《数据处理说明》</a>。',
+      en: 'Closing your account immediately deletes the account, its sessions, its sandbox and its workspace files. This deployment keeps no backups, so this <b>cannot be undone</b> and nothing deleted can be recovered. See the <a href="/policy/privacy" target="_blank" rel="noopener">Data Processing Notice</a>.',
+    }
+    table['close.field'] = {
+      zh: `输入 ${escapeHtml(email)} 以确认`,
+      en: `Type ${escapeHtml(email)} to confirm`,
+    }
+    table['close.submit'] = { zh: '注销账号', en: 'Close account' }
+  }
+
   const closing = first === true ? '' : `<section class="closing">
-    <h2>注销账号</h2>
-    <p>
+    <h2 data-t="close.h">注销账号</h2>
+    <p data-th="close.what">
       注销会立即删除你的账号、登录会话、沙箱和工作区文件。本部署不做备份，因此这个操作
       <b>无法撤销</b>，删除的内容也无法找回。详见 <a href="/policy/privacy" target="_blank" rel="noopener">《数据处理说明》</a>。
     </p>
-    <form method="post" action="/profile/delete" id="close-form" data-confirm="真的要注销吗？账号、沙箱和工作区文件会被立即删除，且无法恢复。">
+    <form method="post" action="/profile/delete" id="close-form">
       <div class="field">
-        <input name="confirm" aria-label="输入你的邮箱以确认" placeholder="输入 ${escapeHtml(email)} 以确认"
+        <input name="confirm" data-tp="close.field" aria-label="输入你的邮箱以确认" placeholder="输入 ${escapeHtml(email)} 以确认"
                autocomplete="off" spellcheck="false" required>
       </div>
-      <button type="submit" class="danger">注销账号</button>
+      <button type="submit" class="danger" data-t="close.submit">注销账号</button>
     </form>
   </section>`
 
@@ -352,6 +414,7 @@ ${TOAST_CSS}
 <body>
 ${toast(error, undefined)}
 ${THEME_TOGGLE}
+${langToggle(table)}
 ${GROUND_HTML}
 <div class="glow" aria-hidden="true"></div>
 <main>
@@ -361,8 +424,8 @@ ${GROUND_HTML}
   </div>
 
   <form method="post" action="/profile" id="form">
-    <h1>${first === true ? '先介绍一下你自己' : '个人资料'}</h1>
-    <p class="lede">${first === true ? '昵称和头像会显示在侧边栏，之后随时可以改。' : '昵称和头像会显示在侧边栏。'}</p>
+    <h1 data-t="h">${first === true ? '先介绍一下你自己' : '个人资料'}</h1>
+    <p class="lede" data-t="lede">${first === true ? '昵称和头像会显示在侧边栏，之后随时可以改。' : '昵称和头像会显示在侧边栏。'}</p>
 
     <div class="stage" id="stage" data-mode="${mode}">
       <span class="letter">${escapeHtml(fallback)}</span>
@@ -370,36 +433,36 @@ ${GROUND_HTML}
       <canvas id="canvas" width="${VIEW_PX}" height="${VIEW_PX}"></canvas>
     </div>
 
-    <div class="zoom"><input type="range" id="zoom" min="1" max="4" step="0.01" value="1" aria-label="缩放"></div>
+    <div class="zoom"><input type="range" id="zoom" min="1" max="4" step="0.01" value="1" data-ta="zoom" aria-label="缩放"></div>
 
     <div class="pick">
-      <button type="button" id="choose">选择图片</button>
-      <button type="button" id="remove" data-danger="true">移除</button>
+      <button type="button" id="choose" data-t="choose">选择图片</button>
+      <button type="button" id="remove" data-danger="true" data-t="remove">移除</button>
       <input type="file" id="file" accept="image/png,image/jpeg,image/webp,image/gif">
     </div>
 
     <p class="hint" id="hint"></p>
 
     <div class="field">
-      <input name="name" id="name" aria-label="昵称" placeholder="昵称" value="${escapeHtml(name ?? '')}"
+      <input name="name" id="name" data-tp="name" aria-label="昵称" placeholder="昵称" value="${escapeHtml(name ?? '')}"
              maxlength="${nameLimit}" autocomplete="nickname" autofocus required>
     </div>
     <div class="field readonly">
-      <input value="${escapeHtml(email)}" aria-label="邮箱" readonly tabindex="-1">
+      <input value="${escapeHtml(email)}" data-ta="email" aria-label="邮箱" readonly tabindex="-1">
     </div>
 
     <input type="hidden" name="avatar" id="avatar" value="">
     <input type="hidden" name="avatar_clear" id="avatar_clear" value="">
 
-    <button type="submit">${first === true ? '开始使用' : '保存'}</button>
-    ${first === true ? '' : '<div class="alt"><a href="/">返回</a></div>'}
+    <button type="submit" data-t="submit">${first === true ? '开始使用' : '保存'}</button>
+    ${first === true ? '' : '<div class="alt"><a href="/" data-t="back">返回</a></div>'}
   </form>
 
   ${closing}
 </main>
 <footer>
-  <nav class="docs">${policyLinks({ separator: '' })}</nav>
-  <p>HamsterHQ · 自建部署${release}</p>
+  <nav class="docs" data-th="docs">${policyLinks({ separator: '' })}</nav>
+  <p><span data-t="footer">HamsterHQ · 自建部署</span>${release}</p>
 </footer>
 <script>
   (function () {
@@ -484,7 +547,7 @@ ${GROUND_HTML}
       }
       loaded.onerror = function () {
         URL.revokeObjectURL(url)
-        hint.textContent = '这个文件无法作为图片打开，请换一张。'
+        hint.textContent = window.dshText('avatar.unreadable')
       }
       loaded.src = url
     })
@@ -562,7 +625,7 @@ ${GROUND_HTML}
       var encoded = encode(out)
       if (encoded === null) {
         event.preventDefault()
-        hint.textContent = '这张图片压不到限制以内，请换一张。'
+        hint.textContent = window.dshText('avatar.stubborn')
         return
       }
       avatarField.value = encoded
@@ -571,11 +634,11 @@ ${GROUND_HTML}
 </script>
 
 <dialog id="confirm">
-  <h3>注销账号</h3>
+  <h3 data-t="close.h">注销账号</h3>
   <p id="confirm-text"></p>
   <div class="buttons">
-    <button type="button" value="cancel">取消</button>
-    <button type="button" class="go" value="go">确认注销</button>
+    <button type="button" value="cancel" data-t="cancel">取消</button>
+    <button type="button" class="go" value="go" data-t="close.go">确认注销</button>
   </div>
 </dialog>
 <script>
@@ -595,7 +658,7 @@ ${GROUND_HTML}
       // deletion and then telling them the field was empty is two dialogs for
       // one mistake.
       if (!form.reportValidity()) return
-      text.textContent = form.dataset.confirm
+      text.textContent = window.dshText('close.confirm')
       dialog.showModal()
     })
 

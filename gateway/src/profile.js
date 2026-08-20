@@ -174,7 +174,7 @@ export async function handleProfile(path, req, res, deps) {
   if (path === '/profile/delete') {
     const form = new URLSearchParams((await deps.readBody(req, 4096))?.toString('utf8') ?? '')
     if (normalizeEmail(form.get('confirm') ?? '') !== account.email) {
-      page(400, { error: '请输入你的完整邮箱地址以确认注销。' })
+      page(400, { error: 'delete.confirm' })
       return
     }
     await eraseAccount(deps, account)
@@ -212,8 +212,8 @@ export async function handleProfile(path, req, res, deps) {
   // half: `+`, `/` and `=` each become three characters on the wire.
   const body = await deps.readBody(req, 512 * 1024)
   if (body === undefined) {
-    if (wantsJson) { answer(413, { error: '头像太大了，请换一张。' }); return }
-    page(413, { error: '头像太大了，请换一张。' })
+    if (wantsJson) { answer(413, { error: 'avatar.large' }); return }
+    page(413, { error: 'avatar.large' })
     return
   }
   const form = new URLSearchParams(body.toString('utf8'))
@@ -239,8 +239,8 @@ export async function handleProfile(path, req, res, deps) {
     avatar = undefined
   } else if (submitted !== '') {
     if (!isStorableAvatar(submitted)) {
-      if (wantsJson) { answer(400, { error: '头像格式不受支持，请重新选择图片。' }); return }
-      page(400, { error: '头像格式不受支持，请重新选择图片。', name })
+      if (wantsJson) { answer(400, { error: 'avatar.format' }); return }
+      page(400, { error: 'avatar.format', name })
       return
     }
     avatar = submitted

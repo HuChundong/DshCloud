@@ -310,18 +310,32 @@ window.__ModuleLoader__.load({
           put({ open })
         },
         /**
-         * Open every directory on the way to a path.
+         * Open every directory on the way to a path, and the path itself when
+         * the path IS a directory.
+         *
+         * `self` is the caller saying which it passed. A file's path names the
+         * directories above it and nothing to open at the end; a directory —
+         * one clicked in the breadcrumb, one just created — is itself the thing
+         * to open, and stopping short of it is stopping one level short of the
+         * only level the caller cared about.
+         *
+         * That distinction used to be made by putting a slash on the end, and
+         * `filter(Boolean)` dropped the empty segment before anything could
+         * read it. So a breadcrumb click opened only ancestors that the open
+         * file had already opened, left `changed` false, and did nothing
+         * whatsoever — the control looked dead rather than wrong.
          *
          * Written into the shared state rather than applied while rendering,
          * so a directory revealed this way can still be closed by hand — a
          * render-time override would spring back open under the pointer.
          */
-        reveal: (path) => {
+        reveal: (path, self = false) => {
           if (path === undefined) return
           const open = { ...state.open }
           const segments = path.split('/').filter(Boolean)
+          const depth = self ? segments.length : segments.length - 1
           let changed = false
-          for (let i = 1; i < segments.length; i += 1) {
+          for (let i = 1; i <= depth; i += 1) {
             const ancestor = `/${segments.slice(0, i).join('/')}`
             if (open[ancestor] !== true) { open[ancestor] = true; changed = true }
           }
@@ -2394,7 +2408,7 @@ window.__ModuleLoader__.load({
 
       return h('div', { className: `${NS}-file` },
         h('div', { className: `${NS}-crumbs` },
-          h(Crumbs, { path, onReveal: (target) => treeStore.reveal(`${target}/`) }),
+          h(Crumbs, { path, onReveal: (target) => treeStore.reveal(target, true) }),
           markdown ? h('div', { className: `${NS}-segments` },
             h('button', {
               type: 'button', className: `${NS}-segment`, 'aria-pressed': !source,
@@ -2668,7 +2682,7 @@ window.__ModuleLoader__.load({
           // Re-read the directory that changed, and open it, so what was just
           // made is visible rather than merely made.
           treeStore.load(kind === 'delete' || kind === 'rename' ? parent : into)
-          if (kind === 'mkdir' || kind === 'create') treeStore.reveal(`${into}/`)
+          if (kind === 'mkdir' || kind === 'create') treeStore.reveal(into, true)
           treeStore.answered()
         } catch (error) {
           setFailed(error.message)

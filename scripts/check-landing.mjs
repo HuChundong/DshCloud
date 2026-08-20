@@ -203,6 +203,40 @@ for (const face of ['dm-sans-latin', 'host-grotesk-latin', 'fragment-mono-latin'
   }
 }
 
+// ---- the page reads in both themes, in all three states ----
+
+// A visitor has three states, not two: an explicit choice stamps `data-theme`
+// on the root, and the default stamps nothing, where only `prefers-color-scheme`
+// separates light from dark. The dark palette therefore has to be written twice,
+// and CSS gives no way to share one body of declarations between a media query
+// and an attribute selector. So they are compared instead — a token added to one
+// and not the other is a page that is one colour under the toggle and another
+// under the system setting, which is the kind of wrong that only shows up on
+// somebody else's machine.
+const dark = [...page.css.matchAll(/(?:@media \(prefers-color-scheme: dark\) \{\s*:root:not\(\[data-theme="light"\]\)|:root\[data-theme="dark"\]) \{([^}]*)\}/g)]
+  .map((match) => match[1].replaceAll(/\s+/g, ' ').trim())
+if (dark.length !== 2) {
+  problems.push(`web/landing/styles.css: expected two dark palette blocks, found ${String(dark.length)}`)
+} else if (dark[0] !== dark[1]) {
+  problems.push('web/landing/styles.css: the two dark palette blocks have drifted apart; they must declare the same tokens')
+}
+
+// The theme is applied before the stylesheet, or a page someone asked to read
+// dark paints white first and then corrects itself.
+const beforeStyles = page.html.indexOf('dsh-theme') < page.html.indexOf('href="./styles.css"')
+if (!page.html.includes('dsh-theme')) {
+  problems.push('index.html: no pre-paint theme script, so a dark page flashes white on every load')
+} else if (!beforeStyles) {
+  problems.push('index.html: the theme script runs after the stylesheet, which is the flash it exists to prevent')
+}
+// Same key as the gateway's pages, so the choice carries from here to sign-in.
+if (!page.js.includes("localStorage.setItem('dsh-theme'")) {
+  problems.push('main.js: the theme toggle does not store the choice, so it lasts until the next navigation')
+}
+if (!page.html.includes('class="theme"')) {
+  problems.push('index.html: there is no theme control')
+}
+
 // ---- the build and the deployment agree on where the assets go ----
 
 const vite = readFileSync(join(landing, 'vite.config.js'), 'utf8')

@@ -27,7 +27,7 @@
   toggle here would strand the one piece that cannot follow it.
 */
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
 
   --bg:            #ffffff;
   --bg-raised:     #fbfbfa;
@@ -77,8 +77,20 @@
   --gut: clamp(20px, 4vw, 48px);
 }
 
+/* The dark palette, written twice on purpose.
+ *
+ * A visitor has three states, not two: an explicit choice stamps `data-theme`
+ * on the root, and the default — no choice — stamps nothing, where only the
+ * media query separates light from dark. So the tokens are needed once behind
+ * `prefers-color-scheme` (guarded, so an explicit light choice beats a dark
+ * system) and once behind the attribute (so the toggle beats a light system).
+ * CSS has no way to name one body of declarations from two selectors when one
+ * of them is inside a media query, and `scripts/check-landing.mjs` asserts the
+ * two stay identical rather than trusting anyone to remember.
+ */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
     --bg:            #0a0a0a;
     --bg-raised:     #121213;
     --bg-sunken:     #0e0e0f;
@@ -108,6 +120,37 @@
     --lift:       0 30px 90px -30px rgba(0, 0, 0, .8);
   }
 }
+:root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg:            #0a0a0a;
+    --bg-raised:     #121213;
+    --bg-sunken:     #0e0e0f;
+    --surface-1:     hsla(0, 0%, 100%, .055);
+    --surface-2:     hsla(0, 0%, 100%, .035);
+    --surface-3:     hsla(0, 0%, 100%, .02);
+    --border:        hsla(0, 0%, 100%, .10);
+    --border-soft:   hsla(0, 0%, 100%, .07);
+    --border-strong: hsla(0, 0%, 100%, .20);
+
+    --text:   #ffffff;
+    --text-2: hsla(0, 0%, 100%, .78);
+    --text-3: hsla(0, 0%, 100%, .48);
+    --text-4: hsla(0, 0%, 100%, .28);
+
+    --accent:      #40d99b;
+    --on-accent:   #05231a;
+
+    --btn-bg:       #ffffff;
+    --btn-text:     #0a0a0a;
+    --btn-bg-hover: hsla(0, 0%, 100%, .86);
+
+    --grid-line:  hsla(0, 0%, 100%, .06);
+    --grid-dot:   hsla(0, 0%, 100%, .13);
+    --accent-rgb: 64 217 155;
+    --glow:       hsla(157, 68%, 55%, .10);
+    --lift:       0 30px 90px -30px rgba(0, 0, 0, .8);
+}
+:root[data-theme="light"] { color-scheme: light; }
 
 *, *::before, *::after { box-sizing: border-box; }
 html {
@@ -175,14 +218,13 @@ header.top .rail { display: flex; justify-content: center; }
 }
 .brand { display: flex; align-items: center; gap: 9px; font-family: var(--display); font-weight: 600; font-size: 17px; letter-spacing: -.02em; }
 .brand img { width: 24px; height: 24px; }
-/* The mark is a single-colour black glyph served as an image, so it cannot
-   inherit a token the way the wordmark beside it does — and on the dark ground
-   it was black on black. Inverting is exact rather than approximate: the only
-   colour in the file is #000. The login page carries this identically. */
-/* Only the footer's upstream mark inverts. It is DeepSeek's single-colour
-   black glyph, which would otherwise be black on the dark ground; this
-   deployment's own mark is drawn in three colours and reads on both. */
-@media (prefers-color-scheme: dark) { footer.foot .mark { filter: invert(1); } }
+/* The hamster is one monochrome SVG with transparent negative space. Its own
+   media query follows this document's computed color-scheme, so the line work
+   is ink-black in light and warm white in dark without a second asset or an
+   approximate filter. Only the footer's upstream mark still needs inversion. */
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) footer.foot .mark { filter: invert(1); } }
+:root[data-theme="dark"] footer.foot .mark { filter: invert(1); }
+:root[data-theme="light"] footer.foot .mark { filter: none; }
 .chip {
   font-family: var(--mono); font-size: 11px; letter-spacing: .04em;
   color: var(--text-3); padding: 3px 10px; white-space: nowrap;
@@ -208,6 +250,30 @@ header.top .rail { display: flex; justify-content: center; }
   background: none; color: var(--text-4); white-space: nowrap;
 }
 .lang button[aria-pressed="true"] { background: var(--surface-1); color: var(--text); }
+
+/* The theme control, beside the language one because they are the same kind of
+   thing: two settings for how the page is read, neither of them content. It is
+   an icon rather than a pair of words, so it takes the height of the language
+   pill without taking its width. */
+.theme {
+  display: grid; place-items: center; cursor: pointer;
+  width: 34px; height: 34px; padding: 0;
+  border: 0; border-radius: var(--radius-pill);
+  background: var(--surface-2); color: var(--text-3);
+  transition: color .16s, background .16s;
+}
+.theme:hover { color: var(--text); background: var(--surface-1); }
+/* One button, two icons: which one shows is a question about the theme in
+   force, and only CSS knows the answer — the button is never told. */
+.theme .moon { display: none; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .theme .sun { display: none; }
+  :root:not([data-theme="light"]) .theme .moon { display: block; }
+}
+:root[data-theme="dark"] .theme .sun { display: none; }
+:root[data-theme="dark"] .theme .moon { display: block; }
+:root[data-theme="light"] .theme .sun { display: block; }
+:root[data-theme="light"] .theme .moon { display: none; }
 
 /* ---------- buttons ---------- */
 
@@ -299,7 +365,9 @@ h1 { font-size: clamp(34px, 4vw, 52px); line-height: 1.14; letter-spacing: -.04e
   needs, which is why it is stated here rather than shared.
 */
 .built .mark { filter: invert(1); }
-@media (prefers-color-scheme: dark) { .built .mark { filter: none; } }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .built .mark { filter: none; } }
+:root[data-theme="dark"] .built .mark { filter: none; }
+:root[data-theme="light"] .built .mark { filter: invert(1); }
 
 /* ---------- the workspace still ---------- */
 

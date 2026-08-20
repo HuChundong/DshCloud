@@ -8,6 +8,7 @@
     "lint": "oxlint",
     "check:docs": "node scripts/check-docs.mjs",
     "check:images": "scripts/check-images.sh",
+    "check:pages": "node scripts/check-pages.mjs",
     "verify": "verify/verify.sh"
   },
   "devDependencies": {

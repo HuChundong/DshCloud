@@ -19,7 +19,7 @@
  * and its sandbox with it.
  */
 
-import { FONT_PRELOAD, PALETTE_CSS, THEME_TOGGLE, TOAST_CSS, escapeHtml, toast } from './page-chrome.js'
+import { FONT_PRELOAD, PALETTE_CSS, THEME_TOGGLE, TOAST_CSS, escapeHtml, langToggle, toast, toastEntry } from './page-chrome.js'
 import { describeKey } from './settings.js'
 
 /**
@@ -65,26 +65,41 @@ export function adminPage(state) {
   const tenants = accounts.filter((account) => !account.admin)
 
   const adminRows = admins.length === 0
-    ? '<tr><td class="empty">GATEWAY_ADMINS 里的地址还没有登录过。</td></tr>'
+    ? '<tr><td class="empty" data-t="empty.admins">GATEWAY_ADMINS 里的地址还没有登录过。</td></tr>'
     : admins.map((account) => adminRow(account, viewer)).join('\n')
   const rows = tenants.length === 0
-    ? '<tr><td colspan="5" class="empty">还没有人注册。</td></tr>'
-    : tenants.map((account) => row(account, viewer)).join('\n')
+    ? '<tr><td colspan="5" class="empty" data-t="empty.tenants">还没有人注册。</td></tr>'
+    : tenants.map((account) => row(account)).join('\n')
 
   // Which credential is in force is state, not explanation: an operator cannot
   // read it off the form, because the form never shows the key back.
   const credentialHint = credential.source === 'console'
     ? `${describeKey(credential.apiKey)} · ${escapeHtml(credential.updatedBy ?? '')} · ${when(credential.updatedAt)}`
-    : `${describeKey(credential.apiKey)} · 环境变量`
+    : `${describeKey(credential.apiKey)} · <span data-t="env">环境变量</span>`
   // Where the gate came from, for the same reason the credential says so: an
   // operator reading a switch needs to know whether the console owns it or the
   // compose file does, because that decides where a change has to be made.
   const accessHint = access.source === 'console'
     ? `${escapeHtml(access.updatedBy ?? '')} · ${when(access.updatedAt)}`
-    : '环境变量'
-  const ceiling = access.sandboxLimit === 0 ? '不限' : `${live} / ${access.sandboxLimit}`
+    : '<span data-t="env">环境变量</span>'
+  const ceiling = access.sandboxLimit === 0 ? undefined : `${live} / ${access.sandboxLimit}`
+  // The ceiling reads as a fraction or as a word, and the word is a word in
+  // each language — so it goes through the table rather than into the sentence
+  // as text.
+  // Composed here rather than shipped in two pieces: the word is only ever seen
+  // inside this sentence, so the sentence is what the table carries.
+  const unlimited = { zh: '不限', en: 'no limit' }
+  const note = {
+    zh: S['access.note'].zh.replace('{0}', ceiling ?? unlimited.zh),
+    en: S['access.note'].en.replace('{0}', ceiling ?? unlimited.en),
+  }
+
+  // Everything the console says: the static strings the row helpers share, plus
+  // the one sentence that has a number in it and whatever the banner is saying.
+  const table = { ...S, 'access.note': note, 'doc.title': { zh: '用户管理 · HamsterHQ', en: 'Console · HamsterHQ' }, ...toastEntry(undefined, notice) }
+
   const inviteRows = invites.length === 0
-    ? '<tr><td colspan="4" class="empty">还没有邀请码。</td></tr>'
+    ? '<tr><td colspan="4" class="empty" data-t="empty.invites">还没有邀请码。</td></tr>'
     : invites.map(inviteRow).join('\n')
 
   return `<!doctype html>
@@ -282,58 +297,57 @@ ${TOAST_CSS}
 <body>
 ${banner}
 ${THEME_TOGGLE}
+${langToggle(table)}
 <main>
   <div class="brand">
     <img src="/login-assets/hamster.svg" alt="">
     <span class="word">HamsterHQ</span>
-    <span class="here">${escapeHtml(viewer)} · <a href="/">返回应用</a></span>
+    <span class="here">${escapeHtml(viewer)} · <a href="/" data-t="back">返回应用</a></span>
   </div>
 
-  <h1>管理</h1>
+  <h1 data-t="h">管理</h1>
 
   <section class="card">
-    <h2>接入 <span class="hint">${accessHint}</span></h2>
+    <h2><span data-t="access.h">接入</span> <span class="hint">${accessHint}</span></h2>
     <form method="post" action="/admin/access" class="creds">
       <label class="check">
         <input type="checkbox" name="inviteRequired" value="on"${access.inviteRequired ? ' checked' : ''}>
-        注册需要邀请码
+        <span data-t="access.invite">注册需要邀请码</span>
       </label>
       <label class="check">
-        沙箱上限
-        <input type="number" name="sandboxLimit" min="0" max="10000" step="1" value="${access.sandboxLimit}" aria-label="沙箱上限">
+        <span data-t="access.limit">沙箱上限</span>
+        <input type="number" name="sandboxLimit" min="0" max="10000" step="1" value="${access.sandboxLimit}" data-ta="access.limit" aria-label="沙箱上限">
       </label>
-      <button type="submit" class="save">保存</button>
+      <button type="submit" class="save" data-t="save">保存</button>
     </form>
-    <p class="note">
-      在线沙箱 ${escapeHtml(ceiling)}。上限填 0 表示不限；达到上限后，手上没有沙箱的账号既不能注册也不能登录，已在运行的租户不受影响。
-    </p>
+    <p class="note" data-t="access.note">${escapeHtml(note.zh)}</p>
   </section>
 
   <section class="card">
-    <h2>模型密钥 <span class="hint">${credentialHint}</span></h2>
+    <h2><span data-t="model.h">模型密钥</span> <span class="hint">${credentialHint}</span></h2>
     <form method="post" action="/admin/model" class="creds">
-      <input name="baseUrl" value="${escapeHtml(credential.baseUrl)}" placeholder="接口地址" aria-label="接口地址" autocomplete="off" spellcheck="false">
-      <input name="apiKey" type="password" placeholder="新密钥（留空则不改动）" aria-label="新密钥" autocomplete="new-password">
-      <button type="submit" class="save">保存</button>
+      <input name="baseUrl" value="${escapeHtml(credential.baseUrl)}" data-tp="model.url" placeholder="接口地址" aria-label="接口地址" autocomplete="off" spellcheck="false">
+      <input name="apiKey" type="password" data-tp="model.key" placeholder="新密钥（留空则不改动）" aria-label="新密钥" autocomplete="new-password">
+      <button type="submit" class="save" data-t="save">保存</button>
     </form>
   </section>
 
   <section class="card">
-    <h2>管理员</h2>
+    <h2 data-t="admins.h">管理员</h2>
     <table><tbody>
 ${adminRows}
     </tbody></table>
   </section>
 
   <section class="card">
-    <h2>用户</h2>
+    <h2 data-t="users.h">用户</h2>
     <table>
       <thead>
         <tr>
-          <th>邮箱</th>
-          <th class="hide-narrow">注册于</th>
-          <th class="hide-narrow">最近登录</th>
-          <th>沙箱</th>
+          <th data-t="th.email">邮箱</th>
+          <th class="hide-narrow" data-t="th.created">注册于</th>
+          <th class="hide-narrow" data-t="th.seen">最近登录</th>
+          <th data-t="th.sandbox">沙箱</th>
           <th></th>
         </tr>
       </thead>
@@ -344,17 +358,17 @@ ${rows}
   </section>
 
   <section class="card">
-    <h2>邀请码</h2>
+    <h2 data-t="invites.h">邀请码</h2>
     <form method="post" action="/admin/invites" class="mint">
-      <input type="number" name="count" value="5" min="1" max="200" aria-label="生成数量">
-      <button type="submit">生成</button>
+      <input type="number" name="count" value="5" min="1" max="200" data-ta="invites.count" aria-label="生成数量">
+      <button type="submit" data-t="invites.mint">生成</button>
     </form>
     <table>
       <thead>
         <tr>
-          <th>邀请码</th>
-          <th class="hide-narrow">生成于</th>
-          <th>状态</th>
+          <th data-t="th.code">邀请码</th>
+          <th class="hide-narrow" data-t="th.minted">生成于</th>
+          <th data-t="th.status">状态</th>
           <th></th>
         </tr>
       </thead>
@@ -366,11 +380,11 @@ ${inviteRows}
 </main>
 
 <dialog id="confirm">
-  <h3 id="confirm-title">确认</h3>
+  <h3 id="confirm-title" data-t="confirm.title">确认</h3>
   <p id="confirm-text"></p>
   <div class="buttons">
-    <button type="button" value="cancel">取消</button>
-    <button type="button" class="go" value="go">确认删除</button>
+    <button type="button" value="cancel" data-t="cancel">取消</button>
+    <button type="button" class="go" value="go" data-t="confirm.go">确认删除</button>
   </div>
 </dialog>
 <script>
@@ -386,8 +400,13 @@ ${inviteRows}
       var form = event.target
       if (!form.action || form.method.toLowerCase() !== 'post') return
       event.preventDefault()
-      var message = form.dataset && form.dataset.confirm
-      if (!message) { run(form); return }
+      var key = form.dataset && form.dataset.confirm
+      if (!key) { run(form); return }
+      // Looked up now rather than rendered earlier: the dialog opens long after
+      // the page did, and by then the reader may have changed language.
+      var message = window.dshText(key)
+      var args = JSON.parse(form.dataset.confirmArgs || '[]')
+      for (var i = 0; i < args.length; i += 1) message = message.replace('{' + i + '}', args[i])
       text.textContent = message
       dialog.returnValue = 'cancel'
       dialog.showModal()
@@ -447,7 +466,7 @@ ${inviteRows}
     }
   })()
 </script>
-<footer>HamsterHQ · 自建部署${release}</footer>
+<footer><span data-t="footer">HamsterHQ · 自建部署</span>${release}</footer>
 </body>
 </html>
 `
@@ -468,12 +487,12 @@ ${inviteRows}
  */
 function adminRow(account, viewer) {
   const sandbox = account.sandbox === 'running'
-    ? `<span class="tag live">运行中</span> ${action('/admin/release', account.email, '回收沙箱')}`
-    : '<span class="sub">未运行</span>'
+    ? `<span class="tag live" data-t="tag.live">运行中</span> ${action('/admin/release', account.email, 'act.release')}`
+    : '<span class="sub" data-t="tag.idle">未运行</span>'
   return `      <tr>
         <td><div class="email">${escapeHtml(account.email)}</div></td>
-        <td class="hide-narrow sub">最近登录 ${when(account.lastSeenAt)}</td>
-        <td class="actions">${account.email === viewer ? '<span class="sub">当前登录 · </span>' : ''}${sandbox}</td>
+        <td class="hide-narrow sub"><span data-t="seen">最近登录</span> ${when(account.lastSeenAt)}</td>
+        <td class="actions">${account.email === viewer ? '<span class="sub" data-t="self.sep">当前登录 · </span>' : ''}${sandbox}</td>
       </tr>`
 }
 
@@ -486,14 +505,14 @@ function inviteRow(invite) {
   const spent = invite.redeemedAt !== undefined
   const status = spent
     ? `<span class="sub">${escapeHtml(invite.redeemedBy ?? '')} · ${when(invite.redeemedAt)}</span>`
-    : '<span class="tag live">未使用</span>'
+    : '<span class="tag live" data-t="tag.unused">未使用</span>'
   // A redeemed invite is the record of how an account came to exist, so deleting
   // one erases that record rather than revoking anything — hence a confirmation
   // on that side and none on the other, where there is nothing to lose.
   const actions = spent
-    ? action('/admin/invites/discard', invite.code, '删除', 'code',
-        `删除 ${invite.code} 吗？它是 ${invite.redeemedBy ?? ''} 注册来源的记录，删除后无法恢复。`)
-    : action('/admin/invites/discard', invite.code, '删除', 'code')
+    ? action('/admin/invites/discard', invite.code, 'act.delete', 'code',
+        'confirm.invite', [invite.code, invite.redeemedBy ?? ''])
+    : action('/admin/invites/discard', invite.code, 'act.delete', 'code')
   return `      <tr>
         <td><span class="code${spent ? ' spent' : ''}">${escapeHtml(invite.code)}</span></td>
         <td class="hide-narrow sub">${when(invite.createdAt)}</td>
@@ -503,31 +522,31 @@ function inviteRow(invite) {
 }
 
 /**
- * One account's row.
+ * One tenant's row.
+ *
+ * Takes no viewer, because it cannot be one: this renders the accounts that are
+ * NOT administrators, and the only person reading this page is.
+ *
  * @param {import('./accounts.js').Account & {sandbox: string}} account - the account and the state of its sandbox.
- * @param {string} viewer - the administrator's own address.
  * @returns {string} the row markup.
  */
-function row(account, viewer) {
-  const self = account.email === viewer
+function row(account) {
   const email = escapeHtml(account.email)
-  const tags = [
-    account.admin ? '<span class="tag admin">管理员</span>' : '',
-    account.disabled ? '<span class="tag off">已停用</span>' : '',
-  ].filter((tag) => tag !== '').join(' ')
+  // Only the suspension tag. An administrator's tag cannot appear here: this
+  // renders tenants, and `accounts.filter((account) => !account.admin)` is what
+  // decides who is one — the administrators went to `adminRow`.
+  const tags = account.disabled ? '<span class="tag off" data-t="tag.off">已停用</span>' : ''
 
   const sandbox = account.sandbox === 'running'
-    ? '<span class="tag live">运行中</span>'
-    : '<span class="sub">未运行</span>'
+    ? '<span class="tag live" data-t="tag.live">运行中</span>'
+    : '<span class="sub" data-t="tag.idle">未运行</span>'
 
-  // An administrator is not offered their own suspend or delete button. Both
-  // would work, and the second would take away the account that is the only way
-  // back in — the failure mode is a deployment nobody can administer.
-  const actions = self
-    ? '<span class="sub">当前登录</span>'
-    : `${action('/admin/toggle', account.email, account.disabled ? '恢复' : '停用')}
-      ${account.sandbox === 'running' ? action('/admin/release', account.email, '回收沙箱') : ''}
-      ${action('/admin/delete', account.email, '删除', 'email', '删除 ' + account.email + ' 吗？其会话、工作区与沙箱都会一并消失，且无法恢复。')}`
+  // No guard for the viewer's own row here, and none needed: an administrator
+  // looking at this page is not in this table. `adminRow` is where their row is
+  // drawn, and that is where the refusal to offer a self-delete lives.
+  const actions = `${action('/admin/toggle', account.email, account.disabled ? 'act.enable' : 'act.disable')}
+      ${account.sandbox === 'running' ? action('/admin/release', account.email, 'act.release') : ''}
+      ${action('/admin/delete', account.email, 'act.delete', 'email', 'confirm.account', [account.email])}`
 
   return `      <tr>
         <td><div class="email">${email}</div>${tags === '' ? '' : `<div>${tags}</div>`}</td>
@@ -547,15 +566,100 @@ function row(account, viewer) {
  * @param {string} [confirm] - text to confirm with before submitting; omitted for reversible actions.
  * @returns {string} the form markup.
  */
-function action(action, subject, label, field = 'email', confirm) {
+function action(action, subject, label, field = 'email', confirm, args = []) {
   // The message rides on the form rather than in an inline handler, so the
-  // page's one dialog can ask it and no markup carries executable script.
+  // page's one dialog can ask it and no markup carries executable script. It is
+  // a KEY and its subjects, not a sentence: the dialog opens long after the
+  // page was rendered, and by then the reader may have changed language.
   const id = `f${(formSequence += 1)}`
-  const guard = confirm === undefined ? '' : ` data-confirm="${escapeHtml(confirm)}"`
+  const guard = confirm === undefined
+    ? ''
+    : ` data-confirm="${confirm}" data-confirm-args="${escapeHtml(JSON.stringify(args))}"`
   return `<form method="post" action="${action}" id="${id}"${guard}>
         <input type="hidden" name="${field}" value="${escapeHtml(subject)}">
-        <button type="submit"${confirm === undefined ? '' : ' class="danger"'}>${escapeHtml(label)}</button>
+        <button type="submit"${confirm === undefined ? '' : ' class="danger"'} data-t="${label}">${escapeHtml(S[label].zh)}</button>
       </form>`
+}
+
+/**
+ * Everything this console says, in both languages.
+ *
+ * At module scope because the row helpers say most of it, and they are
+ * functions of one account rather than of the page. They render the Chinese
+ * from here and name the key beside it; `adminPage` sends the whole table to
+ * the browser, which is what lets the toggle rewrite a row a helper built.
+ *
+ * `{0}` is substituted at the point of use — the confirm sentences name a
+ * subject, and one entry with a hole in it is a table that does not grow with
+ * the number of rows.
+ */
+const S = {
+  h:      { zh: '管理', en: 'Console' },
+  back:   { zh: '返回应用', en: 'Back to the app' },
+  save:   { zh: '保存', en: 'Save' },
+  cancel: { zh: '取消', en: 'Cancel' },
+  env:    { zh: '环境变量', en: 'environment' },
+
+  // `describeKey` renders these; the credential itself is never shown back.
+  'key.unset': { zh: '未设置', en: 'not set' },
+  'key.set':   { zh: '已设置', en: 'set' },
+  'key.tail':  { zh: '末四位', en: 'last four' },
+  footer: { zh: 'HamsterHQ · 自建部署', en: 'HamsterHQ · self-hosted' },
+
+  'access.h':      { zh: '接入', en: 'Access' },
+  'access.invite': { zh: '注册需要邀请码', en: 'Registration needs an invite code' },
+  'access.limit':  { zh: '沙箱上限', en: 'Sandbox ceiling' },
+  'access.note':   {
+    zh: '在线沙箱 {0}。上限填 0 表示不限；达到上限后，手上没有沙箱的账号既不能注册也不能登录，已在运行的租户不受影响。',
+    en: 'Sandboxes running: {0}. A ceiling of 0 means no limit. Once it is reached, an account without a sandbox can neither register nor sign in; tenants already running are unaffected.',
+  },
+
+  'model.h':   { zh: '模型密钥', en: 'Model credential' },
+  'model.url': { zh: '接口地址', en: 'Endpoint' },
+  'model.key': { zh: '新密钥（留空则不改动）', en: 'New key (leave empty to keep the current one)' },
+
+  'admins.h': { zh: '管理员', en: 'Administrators' },
+  'users.h':  { zh: '用户', en: 'Tenants' },
+
+  'th.email':    { zh: '邮箱', en: 'Email' },
+  'th.created':  { zh: '注册于', en: 'Registered' },
+  'th.seen':     { zh: '最近登录', en: 'Last seen' },
+  'th.sandbox':  { zh: '沙箱', en: 'Sandbox' },
+  'th.code':     { zh: '邀请码', en: 'Code' },
+  'th.minted':   { zh: '生成于', en: 'Created' },
+  'th.status':   { zh: '状态', en: 'Status' },
+
+  'invites.h':     { zh: '邀请码', en: 'Invite codes' },
+  'invites.count': { zh: '生成数量', en: 'How many' },
+  'invites.mint':  { zh: '生成', en: 'Generate' },
+
+  'empty.admins':  { zh: 'GATEWAY_ADMINS 里的地址还没有登录过。', en: 'No address in GATEWAY_ADMINS has signed in yet.' },
+  'empty.tenants': { zh: '还没有人注册。', en: 'Nobody has registered yet.' },
+  'empty.invites': { zh: '还没有邀请码。', en: 'No invite codes yet.' },
+
+  'tag.live':   { zh: '运行中', en: 'running' },
+  'tag.idle':   { zh: '未运行', en: 'not running' },
+  'tag.off':    { zh: '已停用', en: 'disabled' },
+  'tag.unused': { zh: '未使用', en: 'unused' },
+
+  'act.release': { zh: '回收沙箱', en: 'Reclaim sandbox' },
+  'act.delete':  { zh: '删除', en: 'Delete' },
+  'act.enable':  { zh: '恢复', en: 'Enable' },
+  'act.disable': { zh: '停用', en: 'Disable' },
+
+  'self.sep': { zh: '当前登录 · ', en: 'signed in now · ' },
+  seen:      { zh: '最近登录', en: 'Last seen' },
+
+  'confirm.title': { zh: '确认', en: 'Confirm' },
+  'confirm.go':    { zh: '确认删除', en: 'Delete it' },
+  'confirm.account': {
+    zh: '删除 {0} 吗？其会话、工作区与沙箱都会一并消失，且无法恢复。',
+    en: 'Delete {0}? Their sessions, workspace and sandbox go with the account, and cannot be recovered.',
+  },
+  'confirm.invite': {
+    zh: '删除 {0} 吗？它是 {1} 注册来源的记录，删除后无法恢复。',
+    en: 'Delete {0}? It is the record of how {1} came to register, and cannot be recovered.',
+  },
 }
 
 /** Distinguishes the forms on one page, so the dialog can submit the right one. */

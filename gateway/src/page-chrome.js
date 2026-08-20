@@ -227,15 +227,62 @@ export const TOAST_CSS = `
 `
 
 /**
+ * Everything the gateway's pages say back to a person, in both languages.
+ *
+ * Here rather than at the place that decides to say it, because these are page
+ * copy and the pages are translated: a handler that returned a finished
+ * sentence would be a handler that had picked a language, and the language is
+ * not decided until the browser applies its own choice. So handlers name a
+ * message and this holds what it says.
+ *
+ * Only what a PAGE shows. The JSON the panel answers with is read by the
+ * application shell, not by these pages, and is not translated here.
+ */
+export const MESSAGES = {
+  'email.invalid':    { zh: '请填写一个有效的邮箱地址。', en: 'Enter a valid email address.' },
+  'invite.rejected':  { zh: '邀请码无效或已被使用。', en: 'That invite code is not valid, or has already been used.' },
+  'code.unsent':      { zh: '验证码发送失败，请稍后再试。', en: 'The code could not be sent. Try again shortly.' },
+  'code.wrong':       { zh: '验证码不正确。', en: 'That code is not correct.' },
+  'code.expired':     { zh: '验证码已失效，请重新获取。', en: 'That code has expired. Ask for another.' },
+  'capacity.full':    { zh: '当前在线沙箱已达上限，请稍后再试。', en: 'Every sandbox is in use right now. Try again shortly.' },
+  'account.disabled': { zh: '该账号已被停用，请联系管理员。', en: 'This account has been disabled. Contact the operator.' },
+  'delete.confirm':   { zh: '请输入你的完整邮箱地址以确认注销。', en: 'Type your full email address to confirm closing the account.' },
+  'avatar.large':     { zh: '头像太大了，请换一张。', en: 'That picture is too large. Choose a smaller one.' },
+  'avatar.format':    { zh: '头像格式不受支持，请重新选择图片。', en: 'That image format is not supported. Choose another picture.' },
+}
+
+/**
  * One message, or nothing.
+ *
+ * The argument is a key from `MESSAGES`, not a sentence. Anything that is not a
+ * key is shown as itself, so a message added in a hurry still reaches the
+ * reader — in one language, which `scripts/check-pages.mjs` then objects to.
+ *
  * @param {string} [error] - what went wrong; shown in the danger colour and not dismissed on a timer.
  * @param {string} [notice] - what went right; dismisses itself.
  * @returns {string} the markup, empty when there is nothing to say.
  */
 export function toast(error, notice) {
-  if (error !== undefined) return `<div class="toast error" role="alert">${escapeHtml(error)}</div>`
-  if (notice !== undefined) return `<div class="toast" role="status">${escapeHtml(notice)}</div>`
+  const said = (key) => escapeHtml(MESSAGES[key]?.zh ?? key)
+  if (error !== undefined) return `<div class="toast error" role="alert" data-t="msg">${said(error)}</div>`
+  if (notice !== undefined) return `<div class="toast" role="status" data-t="msg">${said(notice)}</div>`
   return ''
+}
+
+/**
+ * The table entry a rendered banner needs, if there is one.
+ *
+ * One key, because one banner: a page shows the error or the notice, never
+ * both, so the message on screen is always `msg`.
+ *
+ * @param {string} [error] - the key passed to `toast`.
+ * @param {string} [notice] - the other key passed to `toast`.
+ * @returns {Record<string, {en: string, zh: string}>} the entry, or nothing.
+ */
+export function toastEntry(error, notice) {
+  const key = error ?? notice
+  if (key === undefined) return {}
+  return { msg: MESSAGES[key] ?? { zh: key, en: key } }
 }
 
 /**
@@ -306,7 +353,7 @@ export const THEME_TOGGLE = `<style>
     }
   })()
 </script>
-<button type="button" class="theme" id="theme" aria-label="切换深色/浅色">
+<button type="button" class="theme" id="theme" data-ta="theme.label" aria-label="切换深色/浅色">
   <svg class="sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
   <svg class="moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
 </button>
@@ -321,6 +368,118 @@ export const THEME_TOGGLE = `<style>
     try { localStorage.setItem('dsh-theme', next) } catch (error) { /* as above */ }
   })
 </script>`
+
+/**
+ * The language control, and the machinery that applies a choice.
+ *
+ * One export carrying style, markup and script together, for the reason
+ * `THEME_TOGGLE` gives above it: a widget whose parts can be imported
+ * separately will eventually be imported separately, and half of one is worse
+ * than none.
+ *
+ * The contract is the landing page's, deliberately — `data-t` writes
+ * textContent, `data-th` writes innerHTML, `data-tp` a placeholder and its
+ * aria-label, `data-ta` an aria-label alone — so there is one way to say this
+ * across the deployment rather than one per surface. `dsh-lang` is the same key
+ * the landing page stores under, so a visitor who chose English there does not
+ * meet a Chinese form one link later.
+ *
+ * These pages are WRITTEN in Chinese, which is the difference from the landing
+ * page: there the markup is English and a choice only rewrites it. So the table
+ * is applied on load whichever language wins, and a string with no key of its
+ * own simply stays as written — which is why `scripts/check-pages.mjs` renders
+ * each page and refuses any Chinese it finds outside this table.
+ *
+ * @param {Record<string, {en: string, zh: string}>} table - every string the page shows, in both languages.
+ * @returns {string} the control and its script.
+ */
+export function langToggle(table) {
+  // `<` escaped, because this JSON is embedded in a script element and a `</`
+  // inside any string would close it early — ending the script in the middle of
+  // a sentence, which browsers do not treat as an error, only as the end.
+  // The chrome's own strings, which belong to the controls rather than to any
+  // page. Merged underneath, so a page that wants to say one of them
+  // differently still can.
+  const withChrome = { 'theme.label': { zh: '切换深色/浅色', en: 'Switch between light and dark' }, ...table }
+  const json = JSON.stringify(withChrome).replaceAll('<', '\\u003c')
+  return `<style>
+  /* Beside the theme control, because they are the same kind of thing: two
+     settings for how the page is read, neither of them content. Left of it, in
+     reading order, so the pair does not reshuffle between pages. */
+  .lang {
+    position: fixed;
+    top: 1.25rem;
+    right: 4rem;
+    z-index: 10;
+    display: flex;
+    padding: 3px;
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius-pill);
+    background: color-mix(in srgb, var(--bg) 72%, transparent);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+  }
+  .lang button {
+    font: inherit; font-size: .8125rem; line-height: 1; cursor: pointer;
+    padding: 6px 10px; border: 0; border-radius: var(--radius-pill);
+    background: none; color: var(--muted); white-space: nowrap;
+    transition: color .16s, background .16s;
+  }
+  .lang button:hover { color: var(--fg); }
+  .lang button[aria-pressed="true"] { background: var(--line-soft); color: var(--fg); }
+</style>
+<div class="lang">
+  <button type="button" data-lang="zh" aria-pressed="true">中文</button>
+  <button type="button" data-lang="en" aria-pressed="false">EN</button>
+</div>
+<script>
+  (function () {
+    var T = ${json}
+    function apply(next) {
+      document.documentElement.lang = next === 'zh' ? 'zh-CN' : 'en'
+      if (T['doc.title']) document.title = T['doc.title'][next]
+      var write = function (selector, attribute, set) {
+        var nodes = document.querySelectorAll(selector)
+        for (var i = 0; i < nodes.length; i += 1) {
+          var entry = T[nodes[i].getAttribute(attribute)]
+          if (entry) set(nodes[i], entry[next])
+        }
+      }
+      write('[data-t]',  'data-t',  function (el, text) { el.textContent = text })
+      write('[data-th]', 'data-th', function (el, html) { el.innerHTML = html })
+      // Attributes, not content: a placeholder and a label have to be
+      // translated too, and neither is reachable through textContent.
+      write('[data-tp]', 'data-tp', function (el, text) { el.placeholder = text; el.setAttribute('aria-label', text) })
+      write('[data-ta]', 'data-ta', function (el, text) { el.setAttribute('aria-label', text) })
+      var buttons = document.querySelectorAll('.lang button')
+      for (var j = 0; j < buttons.length; j += 1) {
+        buttons[j].setAttribute('aria-pressed', String(buttons[j].dataset.lang === next))
+      }
+      current = next
+      try { localStorage.setItem('dsh-lang', next) } catch (error) { /* private mode */ }
+    }
+    // For the strings a page's own script produces rather than renders: a hint
+    // written into an element on an event, the sentence a confirm dialog asks.
+    // They cannot carry a data-t attribute because they do not exist until
+    // something happens, so the page asks for them by the same key instead.
+    var current = 'zh'
+    window.dshText = function (key) {
+      var entry = T[key]
+      return entry === undefined ? key : entry[current]
+    }
+    var stored = null
+    try { stored = localStorage.getItem('dsh-lang') } catch (error) { /* as above */ }
+    // No stored choice falls back to the browser's own, which for this
+    // deployment's audience is usually the one already on screen.
+    apply(stored === 'zh' || stored === 'en' ? stored
+      : (navigator.language || '').indexOf('zh') === 0 ? 'zh' : 'en')
+    var controls = document.querySelectorAll('.lang button')
+    for (var k = 0; k < controls.length; k += 1) {
+      controls[k].addEventListener('click', function () { apply(this.dataset.lang) })
+    }
+  })()
+</script>`
+}
 
 /**
  * The ground the whole deployment stands on: the landing page's lattice.

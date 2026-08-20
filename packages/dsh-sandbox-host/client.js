@@ -413,9 +413,33 @@ window.__ModuleLoader__.load({
       .${P}-dot { width: 6px; height: 6px; border-radius: 50%; flex: none; }
       .${P}-rings { display: inline-flex; gap: 6px; flex: none; }
       .${P}-ring { position: relative; display: inline-flex; align-items: center; justify-content: center; }
-      .${P}-ring-label {
-        position: absolute; font-size: 9px; line-height: 1;
-        color: var(--dsw-alias-label-tertiary, #81858c);
+      .${P}-ring-label, .${P}-ring-value {
+        position: absolute; line-height: 1;
+        transition: opacity 120ms ease;
+      }
+      .${P}-ring-label { font-size: 9px; color: var(--dsw-alias-label-tertiary, #81858c); }
+      /* The number the ring is drawing, for a pointer that stops on it. The
+         arc says roughly; this says exactly, without spending a row of the
+         sidebar on three figures nobody is reading most of the time.
+
+         Smaller than the label because it has to hold four characters inside a
+         20px opening, and tabular so the last digit does not step sideways as
+         the value changes under the pointer. */
+      .${P}-ring-value {
+        font-size: 8px; font-variant-numeric: tabular-nums; opacity: 0;
+        color: var(--dsw-alias-label-primary, #1a1a1a);
+      }
+      .${P}-ring:hover .${P}-ring-label { opacity: 0; }
+      .${P}-ring:hover .${P}-ring-value { opacity: 1; }
+
+      /* The arc moves to a new reading rather than cutting to it. Samples
+         arrive seconds apart, so an untweened arc jumps — which reads as the
+         number being unstable rather than as the sampling being coarse. The
+         stroke is tweened too, so crossing a threshold is a shift rather than
+         a flash of a different colour. */
+      .${P}-ring-arc { transition: stroke-dashoffset 600ms ease, stroke 300ms ease; }
+      @media (prefers-reduced-motion: reduce) {
+        .${P}-ring-label, .${P}-ring-value, .${P}-ring-arc { transition: none; }
       }
     `
 
@@ -839,6 +863,7 @@ window.__ModuleLoader__.load({
             stroke: 'var(--dsw-alias-border-l1, rgb(0 0 0 / 4%))', strokeWidth: RING.width,
           }),
           known && React.createElement('circle', {
+            className: `${P}-ring-arc`,
             cx: RING.size / 2, cy: RING.size / 2, r: RING.r, fill: 'none',
             stroke, strokeWidth: RING.width, strokeLinecap: 'round',
             strokeDasharray: CIRCUMFERENCE,
@@ -847,6 +872,13 @@ window.__ModuleLoader__.load({
           }),
         ),
         React.createElement('span', { className: `${P}-ring-label` }, label),
+        // Derived from the same fraction the arc is drawn from, so the number
+        // under the pointer cannot disagree with the ring around it.
+        known && React.createElement(
+          'span',
+          { className: `${P}-ring-value` },
+          `${String(Math.round(shown * 100))}%`,
+        ),
       )
     }
 

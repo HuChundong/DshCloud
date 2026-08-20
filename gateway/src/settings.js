@@ -166,6 +166,8 @@ export class Settings {
  * @returns {string} a description safe to render.
  */
 export function describeKey(apiKey) {
-  if (apiKey === '') return '未设置'
-  return `已设置 · 末四位 ${apiKey.slice(-4)}`
+  // Markup, because it is page copy: the words are translated at read time and
+  // the last four characters of the key are not words at all.
+  if (apiKey === '') return '<span data-t="key.unset">未设置</span>'
+  return `<span data-t="key.set">已设置</span> · <span data-t="key.tail">末四位</span> ${apiKey.slice(-4)}`
 }

@@ -107,6 +107,8 @@ const T = {
   'copy.idle':    { en: 'Copy',                zh: '复制' },
   'copy.done':    { en: 'Copied',              zh: '已复制' },
 
+  'nav.theme':    { en: 'Switch between light and dark', zh: '切换深色/浅色' },
+
   'doc.title':    { en: 'HamsterHQ — Agent in SANDBOX', zh: 'HamsterHQ — 让 agent 住进沙箱' },
 }
 
@@ -151,6 +153,27 @@ apply(stored === 'zh' || stored === 'en' ? stored : (navigator.language || '').s
 for (const button of document.querySelectorAll('.lang button')) {
   button.addEventListener('click', () => apply(button.dataset.lang))
 }
+
+/* ---------- light or dark ---------- */
+
+/*
+  The choice is already applied — an inline script in the head does that before
+  first paint, so a page asked for dark never flashes white. This only handles
+  the click.
+
+  Stored under the same key the sign-in page uses, so a visitor who picks dark
+  here does not meet a white form one link later.
+*/
+document.getElementById('theme').addEventListener('click', () => {
+  // Reads what is rendered rather than what was stored, so the first click on a
+  // page that is dark only because the system is dark goes to light, rather
+  // than setting dark again and appearing to do nothing.
+  const dark = matchMedia('(prefers-color-scheme: dark)').matches
+  const current = document.documentElement.dataset.theme || (dark ? 'dark' : 'light')
+  const next = current === 'dark' ? 'light' : 'dark'
+  document.documentElement.dataset.theme = next
+  try { localStorage.setItem('dsh-theme', next) } catch { /* private mode */ }
+})
 
 /* ---------- the two install paths ---------- */
 

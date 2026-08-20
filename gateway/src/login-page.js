@@ -40,6 +40,8 @@ import {
   GROUND_SCRIPT,
   PALETTE_CSS,
   THEME_TOGGLE,
+  langToggle,
+  toastEntry,
   TOAST_CSS,
   escapeHtml,
   toast,
@@ -78,7 +80,7 @@ export function loginPage(state = {}) {
   // two this is. Asking one and not the other would make the form a way to ask
   // which addresses are registered.
   const inviteField = inviteRequired !== true ? '' : `<div class="field">
-        <input name="invite" aria-label="邀请码" placeholder="邀请码（首次注册需要，老用户留空）" value="${escapeHtml(invite ?? '')}" autocomplete="off" spellcheck="false">
+        <input name="invite" data-tp="invite.hint" data-ta="invite.label" aria-label="邀请码" placeholder="邀请码（首次注册需要，老用户留空）" value="${escapeHtml(invite ?? '')}" autocomplete="off" spellcheck="false">
       </div>`
 
   // The address is resubmitted as a hidden field rather than held in a cookie or
@@ -90,23 +92,23 @@ export function loginPage(state = {}) {
   // code they were sent.
   const fields = pending === undefined
     ? `<div class="field">
-        <input name="email" type="email" aria-label="邮箱" autocomplete="email" placeholder="邮箱" autofocus required>
+        <input name="email" type="email" data-tp="email" aria-label="邮箱" autocomplete="email" placeholder="邮箱" autofocus required>
       </div>
       ${inviteField}`
     : `<input type="hidden" name="email" value="${escapeHtml(pending)}">
       <div class="field readonly">
-        <input value="${escapeHtml(pending)}" aria-label="邮箱" readonly tabindex="-1">
+        <input value="${escapeHtml(pending)}" data-ta="email" aria-label="邮箱" readonly tabindex="-1">
       </div>
       <div class="field">
-        <input name="code" aria-label="验证码" autocomplete="one-time-code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="6 位验证码" autofocus required>
+        <input name="code" data-tp="code.hint" data-ta="code.label" aria-label="验证码" autocomplete="one-time-code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="6 位验证码" autofocus required>
       </div>
       ${inviteField}`
 
   // The heading says which of the two steps this is, because the fields alone
   // do not: an address in a box and a code in a box are the same shape.
   const heading = pending === undefined
-    ? '<h1>登录</h1>\n      <p class="lede">输入邮箱，我们会发一封带验证码的邮件。</p>'
-    : '<h1>输入验证码</h1>\n      <p class="lede">验证码已发送，请查收邮箱。</p>'
+    ? '<h1 data-t="step.address.h">登录</h1>\n      <p class="lede" data-t="step.address.lede">输入邮箱，我们会发一封带验证码的邮件。</p>'
+    : '<h1 data-t="step.code.h">输入验证码</h1>\n      <p class="lede" data-t="step.code.lede">验证码已发送，请查收邮箱。</p>'
 
   // Consent, and the reason it is a checkbox on every sign-in rather than a
   // sentence under the button.
@@ -124,7 +126,7 @@ export function loginPage(state = {}) {
   const consent = pending === undefined
     ? `<label class="consent">
         <input type="checkbox" name="agree" value="${POLICY_VERSION}" required${agreed ? ' checked' : ''}>
-        <span>我已阅读并同意 ${policyLinks({ separator: '、' })}</span>
+        <span data-th="consent">我已阅读并同意 ${policyLinks({ separator: '、' })}</span>
       </label>`
     : `<input type="hidden" name="agree" value="${escapeHtml(agreed ? agree : POLICY_VERSION)}">`
 
@@ -136,11 +138,66 @@ export function loginPage(state = {}) {
   // repeating what the field above it already asks for is one more thing to
   // read on the way to the same action.
   const alt = pending === undefined
-    ? inviteRequired === true ? '' : '<div class="alt"><span>首次登录将自动注册</span></div>'
-    : '<div class="alt"><a href="/login">换个邮箱</a></div>'
+    ? inviteRequired === true ? '' : '<div class="alt"><span data-t="alt.register">首次登录将自动注册</span></div>'
+    : '<div class="alt"><a href="/login" data-t="alt.another">换个邮箱</a></div>'
   // The dsh release, not a version of the gateway: it is what a tenant would
   // quote when reporting something, and what the notice above is about.
   const release = version === undefined || version === '' ? '' : ` · v${escapeHtml(version)}`
+
+  // Everything this page says, in both languages. The markup carries the
+  // Chinese and this carries the English; `scripts/check-pages.mjs` renders the
+  // page in each of its states and refuses any Chinese that has no key here.
+  //
+  // Built per state rather than once, because the form is two forms: only one
+  // step's strings are on screen, and shipping the other's would be a table
+  // carrying answers to questions this page never asks.
+  const table = {
+    email:  { zh: '邮箱', en: 'Email' },
+    wechat: { zh: '微信扫码关注公众号', en: 'Scan to follow on WeChat' },
+    footer: { zh: 'HamsterHQ · 自建部署', en: 'HamsterHQ · self-hosted' },
+    docs: {
+      zh: policyLinks({ separator: '', lang: 'zh' }),
+      en: policyLinks({ separator: '', lang: 'en' }),
+    },
+    // Whatever the banner is saying, if it is saying anything.
+    ...toastEntry(error, notice),
+  }
+
+  if (inviteRequired === true) {
+    table['invite.label'] = { zh: '邀请码', en: 'Invite code' }
+    table['invite.hint'] = {
+      zh: '邀请码（首次注册需要，老用户留空）',
+      en: 'Invite code (needed to register; leave empty if you have an account)',
+    }
+  }
+
+  if (pending === undefined) {
+    table['doc.title'] = { zh: '登录 · HamsterHQ', en: 'Sign in · HamsterHQ' }
+    table['step.address.h'] = { zh: '登录', en: 'Sign in' }
+    table['step.address.lede'] = {
+      zh: '输入邮箱，我们会发一封带验证码的邮件。',
+      en: 'Enter your email and we will send you a code.',
+    }
+    table['submit.send'] = { zh: '获取验证码', en: 'Send code' }
+    // Rendered with the links inside it, so the sentence reads as a sentence in
+    // both languages rather than as a phrase with a list bolted on the end.
+    table.consent = {
+      zh: `我已阅读并同意 ${policyLinks({ separator: '、', lang: 'zh' })}`,
+      en: `I have read and agree to ${policyLinks({ separator: ', ', lang: 'en' })}`,
+    }
+    if (inviteRequired !== true) {
+      table['alt.register'] = { zh: '首次登录将自动注册', en: 'Signing in for the first time registers you' }
+    }
+  } else {
+    table['doc.title'] = { zh: '输入验证码 · HamsterHQ', en: 'Enter the code · HamsterHQ' }
+    table['step.code.h'] = { zh: '输入验证码', en: 'Enter the code' }
+    table['step.code.lede'] = { zh: '验证码已发送，请查收邮箱。', en: 'The code has been sent. Check your mail.' }
+    table['code.label'] = { zh: '验证码', en: 'Code' }
+    table['code.hint'] = { zh: '6 位验证码', en: '6-digit code' }
+    table['submit.signin'] = { zh: '登录', en: 'Sign in' }
+    table['alt.another'] = { zh: '换个邮箱', en: 'Use a different address' }
+  }
+
   return `<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -390,10 +447,11 @@ ${TOAST_CSS}
 <body>
 ${banner}
 ${THEME_TOGGLE}
+${langToggle(table)}
 ${GROUND_HTML}
 <div class="glow" aria-hidden="true"></div>
 <main>
-  <a class="brand" href="/welcome/">
+  <a class="brand" href="/">
     <img src="/login-assets/hamster.svg" alt="">
     <span class="word">HamsterHQ</span>
   </a>
@@ -403,19 +461,19 @@ ${GROUND_HTML}
       ${heading}
       ${fields}
       ${consent}
-      <button type="submit">${pending === undefined ? '获取验证码' : '登录'}</button>
+      <button type="submit" data-t="${pending === undefined ? 'submit.send' : 'submit.signin'}">${pending === undefined ? '获取验证码' : '登录'}</button>
       ${alt}
     </form>
 
     <aside>
-      <img src="/login-assets/wechat-qr.webp" width="168" height="168" alt="微信公众号二维码">
-      <span>微信扫码关注公众号</span>
+      <img src="/login-assets/wechat-qr.webp" width="168" height="168" alt="">
+      <span data-t="wechat">微信扫码关注公众号</span>
     </aside>
   </div>
 </main>
 <footer>
-  <nav class="docs">${policyLinks({ separator: '' })}</nav>
-  <p>HamsterHQ · 自建部署${release}</p>
+  <nav class="docs" data-th="docs">${policyLinks({ separator: '' })}</nav>
+  <p><span data-t="footer">HamsterHQ · 自建部署</span>${release}</p>
 </footer>
 ${GROUND_SCRIPT}
 </body>

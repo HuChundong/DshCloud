@@ -63,6 +63,14 @@ jobs:
       - name: Uploads
         run: node scripts/check-uploads.mjs
 
+      # The gateway's own pages are written in Chinese and translated in the
+      # browser from a table beside the markup. A string that never got a key
+      # simply stays Chinese when someone switches to English — nothing errors,
+      # nothing logs — so the pages are rendered here and every piece of Chinese
+      # in them has to be attached to a key.
+      - name: Gateway pages
+        run: node scripts/check-pages.mjs
+
       - name: Panel paths
         run: node scripts/check-panel-paths.mjs
 

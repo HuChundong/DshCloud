@@ -75,7 +75,7 @@ export async function handleSignIn(req, res, deps) {
   }
 
   if (!isEmailAddress(email)) {
-    page(400, { error: '请填写一个有效的邮箱地址。' })
+    page(400, { error: 'email.invalid' })
     return
   }
 
@@ -102,7 +102,7 @@ export async function handleSignIn(req, res, deps) {
     // someone's mail. Only one that was actually typed is checked; an empty
     // field is judged below, where the answer does not reach the page.
     if (invite !== '' && !await deps.invites.usable(invite)) {
-      page(403, { error: '邀请码无效或已被使用。' })
+      page(403, { error: 'invite.rejected' })
       return
     }
 
@@ -159,7 +159,7 @@ export async function handleSignIn(req, res, deps) {
       // The address is not told whether the failure was about it. Delivery
       // problems are the operator's, and the log is where they can be acted on.
       console.error(`gateway: sending a code to ${email} failed: ${error.message}`)
-      page(502, { error: '验证码发送失败，请稍后再试。' })
+      page(502, { error: 'code.unsent' })
       return
     }
     page(200, { pending: email, notice: SENT_NOTICE })
@@ -168,11 +168,11 @@ export async function handleSignIn(req, res, deps) {
 
   const answer = await deps.verification.answer(email, code.trim())
   if (answer === 'wrong') {
-    page(401, { pending: email, error: '验证码不正确。' })
+    page(401, { pending: email, error: 'code.wrong' })
     return
   }
   if (answer === 'expired') {
-    page(401, { error: '验证码已失效，请重新获取。' })
+    page(401, { error: 'code.expired' })
     return
   }
 
@@ -193,7 +193,7 @@ export async function handleSignIn(req, res, deps) {
   if (gate.sandboxLimit > 0 && !isAdminEmail(email) && !await deps.sandboxes.holds(email)) {
     if (await deps.sandboxes.live() >= gate.sandboxLimit) {
       console.log(`gateway: refused ${email} — ${gate.sandboxLimit} sandboxes are already running`)
-      page(503, { error: '当前在线沙箱已达上限，请稍后再试。' })
+      page(503, { error: 'capacity.full' })
       return
     }
   }
@@ -218,7 +218,7 @@ export async function handleSignIn(req, res, deps) {
   if (account.disabled) {
     // Checked after the code, not before: refusing earlier would make the
     // sign-in form a way to ask which addresses are suspended.
-    page(403, { error: '该账号已被停用，请联系管理员。' })
+    page(403, { error: 'account.disabled' })
     return
   }
   // Nothing can refuse the sign-in from here, so the code is spent now. Spending
