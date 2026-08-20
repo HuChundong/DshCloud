@@ -1,0 +1,18 @@
+[package]
+name = "dsh-agent"
+version = "0.1.0"
+edition = "2021"
+description = "The small resident tools a sandbox runs for the gateway."
+
+# No dependencies, on purpose. Everything this does is a socket and a loop, and
+# a sandbox is a machine per tenant: what runs in it is paid for once per
+# tenant, so the cheapest correct thing wins. The Node script this replaced
+# cost 21MB of resident memory to poll a local HTTP endpoint.
+[dependencies]
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

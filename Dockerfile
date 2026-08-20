@@ -114,6 +114,26 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=arm64 \
 
 FROM envd-${TARGETARCH} AS envd
 
+# ----------------------------------------------------------- agent-build ----
+# The small resident tools a sandbox runs for the gateway.
+#
+# Rust because of where this runs. A sandbox is one machine per tenant, so
+# everything resident in it is paid for once per tenant — and what this
+# replaced was `node -e '<script>'`, 21MB of resident memory and a second of
+# start-up to poll a local HTTP endpoint every five seconds. This is a static
+# binary with no dependencies: 1.5MB resident, and it starts in the time it
+# takes to open a socket.
+#
+# Built for TARGETPLATFORM like every other stage, so there is no
+# cross-compilation to arrange: buildx runs this stage for the architecture the
+# image is being built for. No dependencies means no registry to point at a
+# mirror, and `--offline` says so rather than discovering it.
+FROM rust:1.89-bookworm AS agent-build
+WORKDIR /agent
+COPY sandbox/agent/Cargo.toml ./
+COPY sandbox/agent/src ./src
+RUN cargo build --release --offline && ./target/release/dsh-agent 2>&1 | grep -q "unknown command"
+
 # ---------------------------------------------------------- panel-build ----
 # The right-hand panel's browser half, bundled.
 #
@@ -139,6 +159,10 @@ RUN npm run build
 
 # ---------------------------------------------------------------- sandbox ----
 FROM node:24-slim AS sandbox
+
+# The resident tools, before anything that might want them. See `agent-build`
+# for why they are a compiled binary rather than a script.
+COPY --from=agent-build /agent/target/release/dsh-agent /usr/local/bin/dsh-agent
 
 ARG APT_MIRROR=
 RUN if [ -n "$APT_MIRROR" ]; then \

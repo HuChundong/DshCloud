@@ -701,10 +701,10 @@ export async function metrics(handle) {
  * @returns {Promise<{close: () => void}>} the live process.
  * @throws {Error} when the process cannot be started.
  */
-async function streamLines(handle, args, sink) {
+async function streamLines(handle, cmd, args, sink) {
   const endpoint = endpointOf(handle)
   const body = encodeEnvelope({
-    process: { cmd: 'node', args, envs: {}, cwd: '/' },
+    process: { cmd, args, envs: {}, cwd: '/' },
     // Kept open so the process is not handed EOF on stdin and does not exit.
     stdin: true,
   })
@@ -780,6 +780,14 @@ const MAX_DIRS = 20000
 
 const say = (message) => process.stdout.write(JSON.stringify(message) + '\\n')
 
+// The reader having gone is the only signal this gets that it is no longer
+// wanted, and it is a signal only this side can see: closing the stream tears
+// down the GATEWAY's end of the connection and leaves this process running.
+// Without this, every gateway restart left one of these behind for the life of
+// the sandbox — 33 of them were found on one tenant's machine, each watching a
+// tree for a reader that had not existed for hours.
+process.stdout.on('error', () => { process.exit(0) })
+
 fs.watch(root, { recursive: true }, (type, name) => {
   if (name) say({ type, name })
 }).on('error', (error) => {
@@ -817,6 +825,9 @@ setInterval(() => {
   if (moved) say({ stale: true })
 }, SWEEP_MS)
 
+// Held open deliberately: this watches for events that may not come for hours,
+// and stdin is the only thing keeping the loop alive between them. What ends
+// it is the stdout handler above, not EOF here.
 process.stdin.resume()
 `
 
@@ -844,7 +855,7 @@ process.stdin.resume()
  * @throws {Error} when the watcher cannot be started.
  */
 export async function watchDir(handle, path, sink) {
-  return await streamLines(handle, ['-e', WATCHER_SOURCE, path], {
+  return await streamLines(handle, 'node', ['-e', WATCHER_SOURCE, path], {
     onLine: (line) => {
       let change
       try { change = JSON.parse(line) } catch { return }
@@ -864,31 +875,24 @@ export async function watchDir(handle, path, sink) {
  * the measurement but WHO is holding the timer: one per sandbox instead of one
  * per sandbox held by the single machine that has all of them.
  */
-const SAMPLER_SOURCE = `
-const http = require('http')
-const auth = 'Basic ' + Buffer.from('root:').toString('base64')
-const SAMPLE_MS = 5000
+/**
+ * The sandbox-side tool the gateway reads readings from.
+ *
+ * A compiled binary, installed by the image at this path. It replaced a Node
+ * script passed with `-e`, which cost 21MB of resident memory to poll a local
+ * HTTP endpoint — and which could not be stopped: closing the stream tears
+ * down the gateway's end of the connection and never the process at the other
+ * end, and that script held itself open with `process.stdin.resume()`. Every
+ * gateway restart left one behind for the life of the sandbox; one tenant's
+ * machine was found carrying 62 of them.
+ *
+ * The binary ends itself instead, the moment a write to stdout fails — which
+ * is exactly when the gateway has gone. Nothing here has to remember to kill
+ * it, which is the only arrangement that survives a gateway that dies without
+ * cleaning up. See `sandbox/agent/src/main.rs`.
+ */
+const AGENT = '/usr/local/bin/dsh-agent'
 
-const sample = () => {
-  const request = http.get(
-    { host: '127.0.0.1', port: 49983, path: '/metrics', headers: { Authorization: auth } },
-    (response) => {
-      let body = ''
-      response.on('data', (chunk) => { body += chunk })
-      response.on('end', () => {
-        if (response.statusCode === 200) process.stdout.write(body.trim() + '\\n')
-      })
-    },
-  )
-  // A sandbox whose envd is not answering yet is an ordinary state during
-  // start-up, not a reason to die: the next tick tries again.
-  request.on('error', () => {})
-}
-
-sample()
-setInterval(sample, SAMPLE_MS)
-process.stdin.resume()
-`
 
 /**
  * Hear a sandbox's own measurements as it takes them.
@@ -899,7 +903,7 @@ process.stdin.resume()
  * @throws {Error} when the sampler cannot be started.
  */
 export async function streamMetrics(handle, sink) {
-  return await streamLines(handle, ['-e', SAMPLER_SOURCE], {
+  return await streamLines(handle, AGENT, ['metrics'], {
     onLine: (line) => {
       let reading
       try { reading = JSON.parse(line) } catch { return }
