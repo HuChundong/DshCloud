@@ -73,6 +73,24 @@ window.__ModuleLoader__.load({
      * @param {{size?: number, className?: string}} props - the host's requested presentation.
      * @returns {object} the mark.
      */
+    /**
+     * The rule that decides which way the mark is drawn.
+     *
+     * The mark is one ink-black line drawing embedded as an img, so it
+     * inherits no colour, and an img-embedded SVG resolves
+     * prefers-color-scheme against the SYSTEM rather than against the shell it
+     * sits in — a shell switched to dark on a light system showed a black mark
+     * on a black ground. The shell says which way it is being read with
+     * data-ds-dark-theme on the body, so that is what this asks.
+     *
+     * Injected once, from a plugin that otherwise mounts no styles at all: a
+     * filter is not something an inline style can make conditional.
+     */
+    const MARK_CSS = `
+      img[src="${MARK}"] { filter: none; }
+      body[data-ds-dark-theme] img[src="${MARK}"] { filter: invert(1); }
+    `
+
     function BrandMark({ size, className }) {
       const box = `${size ?? 20}px`
       return React.createElement('img', {
@@ -109,6 +127,14 @@ window.__ModuleLoader__.load({
        * @param {object} ctx - the client root context.
        */
       apply(ctx) {
+        ctx.effect(() => {
+          const style = document.createElement('style')
+          style.setAttribute('data-dsh-brand-style', '')
+          style.textContent = MARK_CSS
+          document.head.appendChild(style)
+          return () => { style.remove() }
+        }, 'brand: the mark reads on both grounds')
+
         // One declaration-aware registration set, nested the way the shipped
         // package nests it: the rows may activate in either order relative to
         // the sidebar and conversation declarers, and a partial brand — our

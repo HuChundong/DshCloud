@@ -3,8 +3,14 @@
   <title id="title">HamsterHQ</title>
   <desc id="description">HamsterHQ 的单色镂空线稿标志：一只侧身站立、露出白色腹部的仓鼠。</desc>
   <style>
-    :root { color-scheme: light dark; --mark-ink: #101113; }
-    @media (prefers-color-scheme: dark) { :root { --mark-ink: #F4F4F2; } }
+    /* One colour, and no media query of its own. This file is embedded with
+       an <img>, and an <img>-embedded SVG resolves prefers-color-scheme
+       against the SYSTEM — it cannot see the theme the page it sits in was
+       switched to. A page set to dark by hand on a light system therefore got
+       an ink-black mark on an ink-black ground. The pages invert it from
+       outside, where the choice is known; #101113 inverts to #EFEEEC, which is
+       the warm white this is meant to be. */
+    :root { --mark-ink: #101113; }
     .ink { fill: var(--mark-ink); }
     .belly { fill: none; stroke: var(--mark-ink); stroke-width: 24; stroke-linecap: round; }
   </style>

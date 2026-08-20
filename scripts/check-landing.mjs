@@ -183,6 +183,33 @@ for (const name of ['mark.svg', 'hamster.svg', 'favicon.svg', 'wechat-qr.webp'])
   }
 }
 
+// ---- the mark reads on both grounds, everywhere it is shown ----
+
+// It is one ink-black line drawing with transparent negative space, embedded as
+// an `<img>` in three places. Two things follow, and both have been got wrong:
+//
+// - the SVG may carry no `prefers-color-scheme` rule of its own. An
+//   `<img>`-embedded SVG resolves that against the SYSTEM, so a page switched
+//   to dark by hand on a light system got a black mark on a black ground — and
+//   a page whose own rule then inverted it got a black mark again.
+// - every page that shows it must invert it when dark. A missing rule is not a
+//   broken layout or an error in a console; it is a mark that is simply not
+//   there, on the one screen its author was not looking at.
+const mark = readFileSync(join(root, 'gateway/assets/hamster.svg'), 'utf8')
+if (/@media[^{]*prefers-color-scheme/.test(mark)) {
+  problems.push('gateway/assets/hamster.svg: carries its own prefers-color-scheme rule, which resolves against the system rather than the page it is embedded in')
+}
+
+for (const [file, rule, what] of [
+  ['web/landing/styles.css', 'img[src*="hamster"] { filter: invert(1); }', 'the landing page'],
+  ['gateway/src/page-chrome.js', 'img[src*="hamster"] { filter: invert(1); }', "the gateway's own pages"],
+  ['packages/dsh-brand/client.js', 'body[data-ds-dark-theme] img', 'the application shell'],
+]) {
+  if (!readFileSync(join(root, file), 'utf8').includes(rule)) {
+    problems.push(`${file}: nothing inverts the mark for dark, so it is invisible in ${what}`)
+  }
+}
+
 // ---- the faces the design is set in are actually in the tree ----
 
 // A missing woff2 does not fail the build and does not error in a browser:

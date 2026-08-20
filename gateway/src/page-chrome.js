@@ -170,6 +170,25 @@ export const PALETTE_CSS = `${FONT_CSS}
 
   ::selection { background: var(--accent); color: var(--on-accent); }
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+/* The mark, in whichever direction this page is being read.
+
+   It is one ink-black line drawing with transparent negative space, embedded
+   as an <img> — so it inherits no colour, and its own media query could not
+   see this document's choice: an <img>-embedded SVG resolves
+   prefers-color-scheme against the SYSTEM. A page switched to dark by hand
+   on a light system showed a black mark on a black ground, which is the bug
+   this replaces. Decided out here, where the choice is known.
+
+   invert(1) rather than a second file: #101113 inverts to #EFEEEC, the warm
+   white the mark is meant to be, and one file cannot fall out of step with
+   itself. Matched on the name so the rule survives the build renaming it. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) img[src*="hamster"] { filter: invert(1); }
+}
+:root[data-theme="dark"] img[src*="hamster"] { filter: invert(1); }
+:root[data-theme="light"] img[src*="hamster"] { filter: none; }
+
 `
 
 /**
