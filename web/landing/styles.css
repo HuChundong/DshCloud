@@ -217,19 +217,21 @@ header.top .rail { display: flex; justify-content: center; }
   backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
 }
 .brand { display: flex; align-items: center; gap: 9px; font-family: var(--display); font-weight: 600; font-size: 17px; letter-spacing: -.02em; }
-/* The name is two parts: `Hamster` is the word and `HQ` is the mark on it.
-   The mark sits in a rounded rectangle filled with the deployment's own green
-   — the same colour a running sandbox wears — and it is the one place the
-   wordmark carries the brand colour, which is why the hamster beside it is
-   monochrome. Sized in em units so the header and the footer, set at different
-   sizes, are one shape. */
+/* The name is two parts: `Hamster` is the word and `HQ` is the mark on it,
+   reversed out of an ink block. Monochrome, like the hamster beside it and for
+   the same reason — this brand has two colours, ink and the surface, and the
+   pair turns over together with the theme. Sized in em units so the header and
+   the footer, set at different sizes, are one shape. */
 .brand .word, .top .word { display: inline-flex; align-items: baseline; gap: .18em; }
 .word-hq {
   display: inline-block;
-  padding: .06em .22em .1em;
-  border-radius: .22em;
-  background: var(--accent);
-  color: var(--on-accent);
+  padding: .1em .2em;
+  /* Inherited, the box is as tall as a LINE of text rather than as tall as the
+     letters, and the chip stands off the word by a leading it has no use for. */
+  line-height: 1;
+  border-radius: .2em;
+  background: var(--btn-bg);
+  color: var(--btn-text);
   /* A lockup, not running text: the negative tracking around it would pull the
      two letters into each other. */
   letter-spacing: 0;

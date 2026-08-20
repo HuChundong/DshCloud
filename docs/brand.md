@@ -52,13 +52,13 @@ as an image instead of copying its path data into each consumer.
 ## Wordmark
 
 The name is two parts and is set as two parts: **Hamster** is the word, and
-**HQ** is the mark on it — a rounded rectangle filled with the deployment's
-green, with the two letters in the colour that contrasts with it.
+**HQ** is the mark on it — reversed out of a rounded ink block.
 
-Green here and nowhere else in the lockup. The hamster beside it is a
-monochrome line drawing precisely so that the two do not compete for the same
-attention, which leaves the wordmark as the one place the brand colour appears
-in the name.
+Monochrome, like the mark above and in the same two colours: ink black
+`#101113` and warm white `#F4F4F2`. The pair turns over together, so the chip is
+ink on a light surface and warm white on a dark one. No third colour enters the
+lockup, and the accent green belongs to product state — a running sandbox — and
+not to the name.
 
 Three rules make it one shape wherever it is set:
 
@@ -66,15 +66,16 @@ Three rules make it one shape wherever it is set:
   the same lockup rather than two designs;
 - the chip carries `letter-spacing: 0`, because the negative tracking the word
   is set with pulls `H` and `Q` into each other;
-- the colours come from `--accent` and `--on-accent`, which flip together, so
-  the chip is dark green on white and light green on near-black rather than one
-  of those on both.
+- the chip carries `line-height: 1`. Inherited, its box is as tall as a LINE of
+  text rather than as tall as the letters, and it stands off the word above and
+  below by a leading it has no use for.
 
 It is defined once per surface and shared: `WORDMARK` and `BRAND_CSS` in
 `gateway/src/page-chrome.js` for the pages that the gateway renders, `.word-hq`
 in `web/landing/styles.css` for the front door, and `BrandName` in
 `packages/dsh-brand/client.js` for the application shell — which cannot use the
-tokens, since they are this deployment's and the shell's accent is DeepSeek's.
+tokens, since they are this deployment's, so it carries the two colours itself
+and turns them over on `body[data-ds-dark-theme]`.
 
 ## Filled mascot and scenes
 

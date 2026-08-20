@@ -233,16 +233,20 @@ export const BRAND_CSS = `
     letter-spacing: -.03em;
     color: var(--fg);
   }
-  /* A chip, not a highlight: it has its own box, its own baseline, and enough
-     air that the two letters are not touching its corners. Sized in em units so
-     it tracks whatever the word around it is set at — the sign-in page and the
-     footer are different sizes and this is one shape. */
+  /* Reversed out, in the mark's own two colours: the brand is monochrome, so
+     the chip is ink with the surface showing through the letters, and it turns
+     over with the theme exactly as the hamster does.
+
+     A line-height of 1 is what keeps it tight. Inherited, the box is as tall
+     as a line of text rather than as tall as the letters, and the chip stands
+     off the word above and below by a leading it has no use for. */
   .brand .word-hq {
     display: inline-block;
-    padding: .06em .22em .1em;
-    border-radius: .22em;
-    background: var(--accent);
-    color: var(--on-accent);
+    padding: .1em .2em;
+    line-height: 1;
+    border-radius: .2em;
+    background: var(--ink);
+    color: var(--on-ink);
     /* The chip is a lockup rather than running text: the negative tracking the
        word carries would pull its two letters into each other. */
     letter-spacing: 0;

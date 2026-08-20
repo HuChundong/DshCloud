@@ -36,18 +36,18 @@ window.__ModuleLoader__.load({
     /**
      * What this deployment is called, in two parts.
      *
-     * `Hamster` is the word and `HQ` is the mark on it — a rounded rectangle in
-     * the deployment's own green, which is the same treatment the sign-in page
-     * and the front door give it. Green here and nowhere else in the lockup:
-     * the hamster is a monochrome line drawing so that the two do not compete,
-     * and this is the one place the wordmark carries the brand colour.
+     * `Hamster` is the word and `HQ` is the mark on it, reversed out of an ink
+     * block — the same treatment the sign-in page and the front door give it.
+     * Monochrome, like the hamster beside it and for the same reason: this
+     * brand has two colours, ink and the surface, and `docs/brand.md` names
+     * them. They turn over together with the theme.
      */
     const NAME = 'Hamster'
     const MARK_TEXT = 'HQ'
 
-    /** The deployment's green, which is not the shell's accent and must not be. */
-    const BRAND_GREEN = '#0a7d55'
-    const BRAND_GREEN_DARK = '#40d99b'
+    /** The mark's two colours, from `docs/brand.md`. */
+    const INK = '#101113'
+    const PAPER = '#F4F4F2'
 
     /**
      * The mark, served by nginx from the deployment's own root.
@@ -106,24 +106,27 @@ window.__ModuleLoader__.load({
       img[src="${MARK}"] { filter: none; }
       body[data-ds-dark-theme] img[src="${MARK}"] { filter: invert(1); }
 
-      /* A chip, not a highlight: its own box, its own baseline, and enough air
-         that the two letters are not touching its corners. Sized in em units so
-         it tracks whatever the sidebar sets the word at. */
+      /* Reversed out of an ink block, and sized in em units so it tracks
+         whatever the sidebar sets the word at.
+
+         A line-height of 1 is what keeps it tight. Inherited, the box is as
+         tall as a line of text rather than as tall as the letters, and the chip
+         stands off the word by a leading it has no use for. */
       .${CLASS}-hq {
         display: inline-block;
-        padding: .06em .24em .1em;
-        border-radius: .24em;
-        background: ${BRAND_GREEN};
-        color: #ffffff;
+        padding: .1em .2em;
+        line-height: 1;
+        border-radius: .2em;
+        background: ${INK};
+        color: ${PAPER};
         /* A lockup rather than running text: the word's negative tracking would
            pull these two letters into each other. */
         letter-spacing: 0;
       }
-      /* The green lightens on a dark ground for the same reason the rest of the
-         palette does, and the text on it darkens to match. */
+      /* Over, on a dark ground: the same two colours, the other way round. */
       body[data-ds-dark-theme] .${CLASS}-hq {
-        background: ${BRAND_GREEN_DARK};
-        color: #05231a;
+        background: ${PAPER};
+        color: ${INK};
       }
     `
 
