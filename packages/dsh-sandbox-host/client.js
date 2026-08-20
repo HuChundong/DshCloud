@@ -474,17 +474,24 @@ window.__ModuleLoader__.load({
      * themes without this file knowing either.
      */
     /**
-     * How often a reading arrives, which is what the arc's tween is paced to.
+     * How long the arc takes to reach a new reading.
      *
-     * The sampler's own period, and it has to stay that: this is `SAMPLE_MS` in
-     * `gateway/src/envd.js`, where the in-sandbox reader sits. Too short and the
-     * arc parks between readings; too long and it never catches up with one.
+     * Short, and nothing to do with how often readings arrive. Pacing it to the
+     * sampler's five seconds was the previous attempt and it was worse than
+     * either thing it was trying to balance: an arc interpolating across the
+     * whole interval is never showing the current reading, only travelling
+     * towards it, so the ring disagreed with the number under the pointer for
+     * seconds at a time. That is the lag, and no amount of smoothness pays for
+     * it.
+     *
+     * Parking between readings is not a fault to design around. The value
+     * genuinely does not change between samples, and a still arc says so.
      *
      * Declared HERE, above the stylesheet, because `STYLE` interpolates it at
      * module scope. Further down it was in the temporal dead zone by the time
      * that template ran, and the plugin failed to import at all.
      */
-    const SAMPLE_MS = 5000
+    const ARC_MS = 420
 
     const STYLE = `
       .${P}-cards { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 14px 0; }
@@ -597,24 +604,17 @@ window.__ModuleLoader__.load({
       .${P}-ring:hover .${P}-ring-label { opacity: 0; }
       .${P}-ring:hover .${P}-ring-value { opacity: 1; }
 
-      /* The arc travels to each new reading over exactly the interval between
-         readings, at a constant rate. Both halves of that matter.
+      /* The arc moves to each new reading and then holds it.
 
-         Linear, because ease-in-out starts and stops — and something that
-         starts and stops every five seconds is a twitch, not an animation.
+         ease-out, which is the part the first version got wrong. It used
+         ease — ease-in-OUT — whose slow start reads as hesitation: the
+         reading lands, and for the first fraction of a second nothing appears
+         to happen. Starting at full speed and decelerating into place reads as
+         a response.
 
-         A full SAMPLE_MS, because anything shorter leaves the arc parked for
-         the remainder: 600ms of movement and 4.4s of stillness was the first
-         attempt, and it read as jerkier than no animation at all. Matching the
-         interval means the arc is always moving and arrives just as the next
-         reading lands. The cost is that the ring lags the true figure by up to
-         one sample, which is the right trade for a gauge whose whole job is to
-         be glanceable — and the number on hover is not tweened, so anyone who
-         wants the current figure gets it exactly.
-
-         The stroke keeps a short tween of its own: a colour crossfading over
-         five seconds spends most of that time being neither colour. */
-      .${P}-ring-arc { transition: stroke-dashoffset ${String(SAMPLE_MS)}ms linear, stroke 300ms ease; }
+         Short enough that the ring and the number shown on hover are never
+         meaningfully apart, which is the whole reason not to stretch this. */
+      .${P}-ring-arc { transition: stroke-dashoffset ${String(ARC_MS)}ms ease-out, stroke 300ms ease; }
       @media (prefers-reduced-motion: reduce) {
         .${P}-ring-label, .${P}-ring-value, .${P}-ring-arc { transition: none; }
       }
