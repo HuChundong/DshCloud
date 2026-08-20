@@ -215,17 +215,22 @@ ${TOAST_CSS}
   }
   .creds .save { background: var(--ink); color: var(--on-ink); border-color: var(--ink); }
   .creds .save:hover { opacity: .85; border-color: var(--ink); }
-  /* The switch sits in the same row as the number it qualifies, because they
-     are one decision — who may come in, and how many may be here — and saving
-     them separately would let an operator close registration and forget the
-     ceiling. It takes its own width rather than a share of the row,
-     because it is a sentence and not a field. */
-  .creds .check { display: flex; align-items: center; gap: .45rem; flex: 0 0 auto; margin-right: .5rem; white-space: nowrap; font-size: .8125rem; color: var(--fg); }
-  /* It takes no basis, because the rule above gives every input in this row a
-     14rem basis, and a checkbox that took one would push its own label off the
-     end of the line. */
-  .creds .check input { flex: none; width: 1rem; height: 1rem; accent-color: var(--ink); margin: 0; }
-  .creds input[type="number"] { flex: 0 0 5.5rem; }
+  /* One form, because they are one decision — who may come in, and how many
+     may be here — and saving them separately would let an operator close
+     registration and forget the ceiling. But a line each: both are sentences,
+     and side by side they run together into one long row that pushes the save
+     button up against the number field. */
+  .creds .check { display: flex; align-items: center; gap: .45rem; flex: 0 0 100%; white-space: nowrap; font-size: .8125rem; color: var(--fg); }
+  /* The checkbox ONLY. The rule above gives every input in this row a 14rem
+     basis and a checkbox that took one would push its own label off the line —
+     but the ceiling's number field is nested in a .check label too, and an
+     unqualified input here handed it a 16px box: a number field one character
+     wide, at a third the height of every other field on the page. That is the
+     mismatch, so the selector names the type it means. */
+  .creds .check input[type="checkbox"] { flex: none; width: 1rem; height: 1rem; accent-color: var(--ink); margin: 0; }
+  /* Wide enough for four digits and the browser's spinner; the height comes
+     from the .creds input rule, like every other field. */
+  .creds input[type="number"] { flex: 0 0 6rem; }
   .card .note { margin: 0 0 1rem; color: var(--muted); font-size: .8125rem; line-height: 1.6; }
 
   .mint { display: flex; align-items: center; gap: .5rem; margin-bottom: 1.25rem; }

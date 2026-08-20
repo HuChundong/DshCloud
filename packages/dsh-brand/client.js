@@ -54,23 +54,34 @@ window.__ModuleLoader__.load({
     const UPSTREAM = 'DeepSeek Harness'
 
     /**
-     * The mark, at whatever size its host surface asks for.
+     * The mark, inside the box its host surface asks for.
      *
-     * `width: auto` because the artwork is wider than it is tall — a hamster
-     * standing, not a disc — and the slot's `size` is a height. Forcing it
-     * square would letterbox it into a fifth of the space.
+     * `size` is a box, not a height. The shell reserves a square — its own
+     * `FishLogo` is a 50x50 viewBox rendered at `size` both ways — and this
+     * artwork is not square: the hamster's viewBox is 1200x746, so a mark set
+     * to `size` tall and `auto` wide came out half again as wide as the space
+     * kept for it. Nothing clips while the sidebar is open, so it read as
+     * merely large; collapsed to the rail, the rail is the box, and the far
+     * side of the hamster was cut off.
+     *
+     * So both axes are the box and `object-fit: contain` fits the artwork
+     * inside it, which preserves the aspect ratio rather than squashing it.
+     * A wide mark in a square box is shorter than a square one — that is what
+     * fitting means, and it is the trade for occupying exactly the room the
+     * layout has.
      *
      * @param {{size?: number, className?: string}} props - the host's requested presentation.
      * @returns {object} the mark.
      */
     function BrandMark({ size, className }) {
+      const box = `${size ?? 20}px`
       return React.createElement('img', {
         src: MARK,
         alt: '',
         className,
         // `block` kills the inline-baseline gap that would otherwise push the
         // mark a pixel or two below the wordmark beside it.
-        style: { height: `${size ?? 20}px`, width: 'auto', display: 'block' },
+        style: { width: box, height: box, objectFit: 'contain', display: 'block' },
       })
     }
 

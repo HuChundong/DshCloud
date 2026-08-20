@@ -203,15 +203,30 @@ window.__ModuleLoader__.load({
             activeId: tab.id,
           })
         },
+        /**
+         * Close one tab, and the panel with it when it was the last.
+         *
+         * Closing the last tab is how someone says they are done with the
+         * panel — there is nothing left in it to look at, and what stayed
+         * behind was a half-width empty state they then had to dismiss a
+         * second time, with a different control, to get their reading width
+         * back. The panel can still be opened onto that empty state
+         * deliberately; it is only being left on one that is wrong.
+         *
+         * One write, not two: `open` and the tab group are the same store, and
+         * writing them separately paints a frame of an empty open panel.
+         */
         closeTab: (id) => {
           const { tabs, activeId } = group()
           const next = tabs.filter((entry) => entry.id !== id)
-          if (activeId !== id) { writeGroup({ tabs: next, activeId }); return }
           // Focus falls to the neighbour on the left, or the new first tab —
           // the position the eye is already at, rather than the end.
           const index = tabs.findIndex((entry) => entry.id === id)
-          const neighbour = next[Math.max(0, index - 1)]
-          writeGroup({ tabs: next, activeId: neighbour?.id })
+          const focus = activeId === id ? next[Math.max(0, index - 1)]?.id : activeId
+          write({
+            groups: { ...state.groups, [state.session]: Object.freeze({ tabs: next, activeId: focus }) },
+            ...next.length === 0 ? { open: false } : {},
+          })
         },
         select: (id) => { writeGroup({ ...group(), activeId: id }) },
         /** Start another shell, and show it. */

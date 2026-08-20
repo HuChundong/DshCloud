@@ -182,6 +182,22 @@ docker inspect <container> --format '{{.Image}}'   # must equal
 docker images -q --no-trunc <image>:latest
 ```
 
+**`down -v` reaches further than this deployment.** The postgres volume holds
+accounts, and on a host where JuiceFS was installed against the same database
+server it holds the volume filesystem's metadata too — which is not a copy of
+tenants' files but the only record of where they are. Removing it leaves the
+object store full of blocks nothing can name, wedges the shared mount, and
+turns every sandbox creation into a `408` that mentions none of this. Check
+before removing volumes, not after:
+
+```sh
+docker exec <postgres> psql -U <user> -d postgres -tAc \
+  "SELECT datname FROM pg_database WHERE datname NOT IN ('postgres','template0','template1')"
+```
+
+Anything there that the deployment did not create is somebody else's, and this
+project's own `db.js` creates exactly one.
+
 ## Documentation
 
 Every page is a pair: `X.md` in English and `X.zh.md` in Chinese, each linking

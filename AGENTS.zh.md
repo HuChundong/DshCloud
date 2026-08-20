@@ -143,6 +143,18 @@ docker inspect <container> --format '{{.Image}}'   # 必须等于
 docker images -q --no-trunc <image>:latest
 ```
 
+**`down -v`的影响超出这套部署。** postgres 的卷里放着账号；而在把 JuiceFS 装在同一个
+数据库服务上的宿主机上，它还放着卷文件系统的元数据——那不是租户文件的副本，而是「文件在哪」
+的唯一记录。删掉它，对象存储里就只剩没有任何东西能命名的数据块，共享挂载卡死，之后每一次
+创建沙箱都变成一个只字未提原因的 `408`。要在删卷之前查，而不是之后：
+
+```sh
+docker exec <postgres> psql -U <user> -d postgres -tAc \
+  "SELECT datname FROM pg_database WHERE datname NOT IN ('postgres','template0','template1')"
+```
+
+里面凡是不是这套部署建的，就是别人的；而本项目的 `db.js` 只建一个。
+
 ## 文档
 
 每一页都是一对：英文 `X.md` 与中文 `X.zh.md`，互相链接，`##` 章节相同且顺序一致。英文是默认

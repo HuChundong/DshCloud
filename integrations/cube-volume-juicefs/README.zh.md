@@ -120,10 +120,20 @@ sudo ./install-deps.sh            # installs what is missing
 | `no plugin registered for driver "juicefs"` | Cubelet 缺同名条目，或没重启 |
 | `missing on this node: juicefs` | 在那个节点上跑 `install-deps.sh` |
 | 每个调用都返回 `EIO` | 元数据数据库不可达；恢复后插件会自行换掉挂载 |
+| 每次 attach 卡约 30 秒，然后 CubeSandbox 用 `408` 回应创建 | 共享挂载卡死了。先 `timeout 5 ls $SHARED_MOUNT` 确认，再读 JuiceFS 客户端日志——元数据库「不存在」而不只是「连不上」时就是这个样子 |
 | attach 挂载失败 | 先看 `ls /dev/fuse`，再手工执行挂载以读到 JuiceFS 自己的报错 |
 | 租户看到 `EDQUOT` | 他的 volume 满了——`juicefs quota get $META --path /volumes/<id>` |
 
 ## 安装
+
+**元数据库就是文件系统本身。**它不是缓存，也不是副本：丢了它，所有租户的文件就没了，
+对象存储再完好也没用。所以在把 `META` 指向任何地方之前，先想清楚它住在哪。
+
+把它放进部署自己的 Postgres 是可行的，也少运维一个组件——代价是 `docker compose down -v`
+这种对部署来说再平常不过的操作，会顺带毁掉所有租户的文件。这件事在这里真实发生过：
+重建时那个库被删掉，共享挂载卡死，每次 attach 挂 30 秒，CubeSandbox 对每次创建都回
+`408`，而这个 `408` 完全没提原因。如果确实放在那里，就要在写拆除步骤的地方注明，
+因为那条命令本身跟 JuiceFS 一点关系都看不出来。
 
 ```sh
 # once, anywhere that can reach both the database and the object store

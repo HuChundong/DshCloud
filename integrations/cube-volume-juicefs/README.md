@@ -149,10 +149,24 @@ The hooks check the same things, but they run when a tenant is already waiting.
 | `no plugin registered for driver "juicefs"` | Cubelet is missing the same-name entry, or it was not restarted |
 | `missing on this node: juicefs` | run `install-deps.sh` there |
 | every call returns `EIO` | the metadata database is unreachable; the plugin replaces the mount once it is back |
+| every attach hangs ~30s, then CubeSandbox answers create with `408` | the shared mount is wedged. `timeout 5 ls $SHARED_MOUNT` to confirm, then read the JuiceFS client's log — a metadata database that has gone *missing* rather than merely unreachable looks like this |
 | attach fails to mount | `ls /dev/fuse`, then run the mount by hand to read JuiceFS's own error |
 | a tenant sees `EDQUOT` | their volume is full — `juicefs quota get $META --path /volumes/<id>` |
 
 ## Installing
+
+**The metadata database is the filesystem.** Not a cache of it and not a copy:
+lose it and every tenant's files are gone, however intact the object store is.
+So think once about where it lives before pointing `META` at anything.
+
+Pointing it at the deployment's own Postgres works and is one fewer thing to
+run — and it means `docker compose down -v`, which is an ordinary thing to do
+to a deployment, destroys every tenant's files as a side effect. That has
+happened here: the volume was dropped during a rebuild, the shared mount
+wedged, every attach hung for 30 seconds, and CubeSandbox answered every
+create with a `408` that says nothing about why. If it does live there, say so
+where the teardown is written down, because nothing about the command mentions
+JuiceFS.
 
 ```sh
 # once, anywhere that can reach both the database and the object store
