@@ -81,6 +81,9 @@ console.log('\n=== 11. The page boots in a real browser ===')
 // state either way.
 await page.goto(`${GATEWAY}/login`, { waitUntil: 'domcontentloaded' })
 await page.fill('input[name="email"]', USER)
+// The consent box, which is `required`: without this the browser refuses the
+// submit and the failure looks like a form that did nothing.
+await page.check('input[name="agree"]')
 await Promise.all([
   page.waitForSelector('input[name="code"]', { timeout: 30_000 }),
   page.click('button[type="submit"]'),

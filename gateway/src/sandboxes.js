@@ -263,6 +263,38 @@ export class SandboxManager {
   }
 
   /**
+   * How many sandboxes are running across the whole deployment.
+   *
+   * From the table rather than from `byUser`, which is only this gateway's own
+   * share of them: the ceiling this answers is the host's, and a second gateway
+   * holding half the machines would otherwise be invisible to it. One row per
+   * tenant is the schema's own invariant, so counting rows counts machines.
+   *
+   * @returns {Promise<number>} the number of live sandboxes.
+   */
+  async live() {
+    const { rows } = await this.db.query('SELECT count(*)::int AS live FROM sandboxes')
+    return rows[0].live
+  }
+
+  /**
+   * Whether one tenant is already holding a machine.
+   *
+   * Asked of the table for the same reason as `live`, and asked at all because
+   * a deployment at its ceiling must still let in the people already occupying
+   * it: they cost nothing further, and locking out the tenants who are the
+   * reason it is full is the one refusal that helps nobody.
+   *
+   * @param {string} username - the account to ask about.
+   * @returns {Promise<boolean>} whether a sandbox is recorded for them.
+   */
+  async holds(username) {
+    if (this.byUser.has(username)) return true
+    const { rows } = await this.db.query('SELECT 1 FROM sandboxes WHERE username = $1', [username])
+    return rows.length > 0
+  }
+
+  /**
    * Record that a user's sandbox was just used, deferring its idle reclamation.
    * @param {string} username - the authenticated user.
    */

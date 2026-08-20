@@ -57,10 +57,17 @@ location = /login   { proxy_pass http://gateway; proxy_set_header Host $host; pr
 location = /logout  { proxy_pass http://gateway; proxy_set_header Host $host; proxy_set_header X-Forwarded-Proto $scheme; }
 location /login-assets/ { proxy_pass http://gateway; proxy_set_header Host $host; }
 location = /whoami  { proxy_pass http://gateway; proxy_set_header Host $host; proxy_set_header X-Forwarded-Proto $scheme; }
-# The tenant's own name and picture. Served by the gateway because the account
-# is the gateway's, and because it has to work before a sandbox exists — an
-# account reaches it on the way in, before it has ever loaded the shell.
-location = /profile { proxy_pass http://gateway; proxy_set_header Host $host; proxy_set_header X-Forwarded-Proto $scheme; }
+# The deployment's terms, data notice and safe-use policy. Anonymous: they are
+# what someone reads before agreeing to them on the sign-in form, which is
+# before they have an account. A prefix, because there are three of them and
+# `/policy` itself redirects to the first.
+location /policy { proxy_pass http://gateway; proxy_set_header Host $host; }
+
+# The tenant's own name and picture, and closing the account. A prefix rather
+# than the exact match this was: `/profile/delete` is a second path on the same
+# handler, and an exact match sent it to `try_files` and a 404 — with a curl
+# aimed straight at the gateway passing, which is the confusing kind of broken.
+location /profile { proxy_pass http://gateway; proxy_set_header Host $host; proxy_set_header X-Forwarded-Proto $scheme; }
 # The tenant's own sandbox environment. A prefix rather than an exact match:
 # `/secrets` lists and writes, `/secrets/delete` removes.
 location /secrets { proxy_pass http://gateway; proxy_set_header Host $host; proxy_set_header X-Forwarded-Proto $scheme; }

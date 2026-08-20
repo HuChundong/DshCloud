@@ -16,7 +16,10 @@ const form = (body) => ({
   body: new URLSearchParams(body),
   redirect: 'manual',
 })
-const response = await fetch(`${GATEWAY}/login`, form({ email: PROBE_EMAIL, code: PROBE_CODE }))
+// The version the form is asking people to accept, read off the form: signing
+// in over HTTP still has to say what a browser would have ticked.
+const agree = (await (await fetch(`${GATEWAY}/login`)).text()).match(/name="agree" value="([^"]*)"/)?.[1]
+const response = await fetch(`${GATEWAY}/login`, form({ email: PROBE_EMAIL, code: PROBE_CODE, agree }))
 const setCookie = response.headers.getSetCookie?.() ?? []
 if (setCookie.length === 0) throw new Error(`sign-in failed: HTTP ${response.status}`)
 

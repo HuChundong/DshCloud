@@ -35,8 +35,9 @@ import { handleConsole } from './console.js'
 import { request as cubeRequest } from './cubesandbox.js'
 import { connect } from './db.js'
 import { canSendEmail } from './email.js'
-import { Invites, inviteRequired } from './invites.js'
+import { Invites } from './invites.js'
 import { loginPage } from './login-page.js'
+import { POLICY_SLUGS, policyPage } from './policy-page.js'
 import { handlePanel } from './panel.js'
 import { TERMINAL_PATH, serveTerminal } from './terminal.js'
 import { handleProfile } from './profile.js'
@@ -100,6 +101,20 @@ if ((process.env.GATEWAY_ADMINS ?? '') === '') {
   console.warn('gateway: GATEWAY_ADMINS is empty; nobody can reach the user console')
 }
 
+/**
+ * Where a tenant reaches whoever runs this deployment.
+ *
+ * The policy pages have to name somebody: a data notice that grants rights and
+ * gives no way to exercise them grants nothing. It defaults to the first
+ * administrator, because that address is already the deployment's owner and is
+ * already in its configuration — naming it twice would be one more thing to
+ * keep in step. `POLICY_CONTACT` overrides it for a deployment that would
+ * rather publish a role address than a person's.
+ */
+const POLICY_CONTACT = (process.env.POLICY_CONTACT ?? process.env.GATEWAY_ADMINS ?? '')
+  .split(',')[0]
+  .trim()
+
 // Accounts, invites, refresh tokens, and pending codes live outside the gateway,
 // so it keeps no disk state and a restart neither signs everyone out nor forgets
 // who registered.
@@ -122,9 +137,16 @@ const LOGIN_ASSETS = {
     type: 'image/svg+xml',
     body: readFileSync(fileURLToPath(new URL('../assets/mark.svg', import.meta.url))),
   },
-  'ad.webp': {
+  // The deployment's WeChat account, in the sign-in page's panel. An image
+  // rather than a link because a QR code is how someone follows an account
+  // from a laptop, which is where they are when they read this page.
+  //
+  // `ad.webp` was here and is not: the panel it filled now carries this. The
+  // file stays in the tree because the landing page's avatar is cut from it and
+  // the READMEs say so — it is a source, not a served asset.
+  'wechat-qr.webp': {
     type: 'image/webp',
-    body: readFileSync(fileURLToPath(new URL('../assets/ad.webp', import.meta.url))),
+    body: readFileSync(fileURLToPath(new URL('../assets/wechat-qr.webp', import.meta.url))),
   },
 }
 const sandboxes = new SandboxManager({
@@ -166,8 +188,18 @@ const sandboxes = new SandboxManager({
 // What bounds the mail this deployment can be made to send. Held here because
 // it is per-process state with a lifetime, like the pool and the manager.
 const sendLimit = new SendLimit()
-const signInDeps = { accounts, invites, tokens, verification, sendLimit, readBody, version: DSH_VERSION }
-const profileDeps = { accounts, callerOf, readBody, version: DSH_VERSION }
+const signInDeps = { accounts, invites, settings, sandboxes, tokens, verification, sendLimit, readBody, version: DSH_VERSION }
+const profileDeps = {
+  accounts,
+  callerOf,
+  readBody,
+  // What closing an account takes with it. The same four the console's own
+  // delete uses, because both hand them to `eraseAccount`.
+  tokens,
+  sandboxes,
+  destroyVolume: async (accountId) => { await destroyVolume(cubeRequest, accountId) },
+  version: DSH_VERSION,
+}
 const consoleDeps = {
   accounts,
   invites,
@@ -289,8 +321,39 @@ async function handleRequest(req, res) {
     // Never cached: the page carries its own styles inline, so a cached copy
     // survives a redeploy and shows the previous design to anyone who has been
     // here before.
+    //
+    // `done` is how something that redirected here says what it did — closing
+    // an account is the one thing that does, and it has nowhere else to say it,
+    // the page it was on having ceased to belong to anyone. It is rendered as
+    // escaped text by the toast, and carried in the URL rather than in a
+    // session, there no longer being one.
+    const done = new URL(req.url ?? '/', 'http://gateway').searchParams.get('done') ?? undefined
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' })
-    res.end(loginPage({ inviteRequired: inviteRequired(), version: DSH_VERSION }))
+    res.end(loginPage({
+      notice: done,
+      inviteRequired: (await settings.access()).inviteRequired,
+      version: DSH_VERSION,
+    }))
+    return
+  }
+
+  // The deployment's terms, data notice and safe-use policy. Anonymous by
+  // necessity: they are what someone reads before agreeing to them, which is
+  // before they have an account. Served from the gateway like the sign-in page
+  // they are linked from, so that a deployment whose frontend is not up still
+  // shows the documents its sign-in form asks people to accept.
+  if (path.startsWith('/policy') && req.method === 'GET') {
+    const slug = path.slice('/policy/'.length)
+    if (!POLICY_SLUGS.includes(slug)) {
+      res.writeHead(303, { Location: `/policy/${POLICY_SLUGS[0]}` })
+      res.end()
+      return
+    }
+    // Cacheable, briefly. These are the same bytes for everyone and change a
+    // few times a year, but a stale copy of a document someone is agreeing to
+    // is worth less than the request it saves.
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=300' })
+    res.end(policyPage(slug, { contact: POLICY_CONTACT, version: DSH_VERSION }))
     return
   }
 
@@ -372,8 +435,9 @@ async function handleRequest(req, res) {
     return
   }
 
-  if (path === '/profile' && (req.method === 'GET' || req.method === 'POST')) {
-    await handleProfile(req, res, profileDeps)
+  if ((path === '/profile' && (req.method === 'GET' || req.method === 'POST'))
+    || (path === '/profile/delete' && req.method === 'POST')) {
+    await handleProfile(path, req, res, profileDeps)
     return
   }
 

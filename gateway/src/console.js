@@ -14,8 +14,8 @@
 
 import { adminPage } from './admin-page.js'
 import { normalizeEmail } from './accounts.js'
-import { inviteRequired, normalizeInvite } from './invites.js'
-import { volumesEnabled } from './volumes.js'
+import { eraseAccount } from './erase.js'
+import { normalizeInvite } from './invites.js'
 
 /**
  * What the console needs from the rest of the gateway.
@@ -23,7 +23,7 @@ import { volumesEnabled } from './volumes.js'
  * @property {import('./accounts.js').Accounts} accounts - who exists.
  * @property {import('./invites.js').Invites} invites - the codes that admit them.
  * @property {import('./tokens.js').Tokens} tokens - what suspension and deletion revoke.
- * @property {import('./settings.js').Settings} settings - the model credential.
+ * @property {import('./settings.js').Settings} settings - the model credential, and the gate.
  * @property {import('./sandboxes.js').SandboxManager} sandboxes - whose machine is running.
  * @property {(req: import('node:http').IncomingMessage, res?: import('node:http').ServerResponse) => Promise<object | undefined>} callerOf - resolves the caller, renewing tokens.
  * @property {(req: import('node:http').IncomingMessage, limit: number) => Promise<Buffer | undefined>} readBody - the capped body reader.
@@ -95,6 +95,22 @@ export async function handleConsole(path, req, res, deps) {
     backToConsole(res, '已保存。已在运行的沙箱不受影响，新建的会用它。', req)
     return
   }
+  if (path === '/admin/access') {
+    // A checkbox absent from the body is a checkbox that was unticked, which is
+    // how HTML says "off" and the only reason this reads presence rather than
+    // value.
+    const wantsInvite = form.get('inviteRequired') !== null
+    const typed = Number.parseInt(form.get('sandboxLimit') ?? '', 10)
+    if (form.get('sandboxLimit') !== null && form.get('sandboxLimit').trim() !== '' && (!Number.isInteger(typed) || typed < 0)) {
+      backToConsole(res, '沙箱上限要填一个不小于 0 的整数（0 表示不限）。', req)
+      return
+    }
+    const limit = Number.isInteger(typed) && typed > 0 ? typed : 0
+    await deps.settings.setAccess(wantsInvite, limit, account.email)
+    console.log(`gateway: ${account.email} set registration to ${wantsInvite ? 'invite-only' : 'open'}, sandbox limit ${limit === 0 ? 'unlimited' : limit}`)
+    backToConsole(res, `已保存：${wantsInvite ? '注册需要邀请码' : '注册已开放'}，沙箱上限 ${limit === 0 ? '不限' : limit}。`, req)
+    return
+  }
   if (path === '/admin/invites/discard') {
     const code = normalizeInvite(form.get('code') ?? '')
     const discarded = await deps.invites.discard(code)
@@ -134,19 +150,10 @@ export async function handleConsole(path, req, res, deps) {
     }
     case '/admin/delete': {
       const doomed = await deps.accounts.read(email)
-      await deps.tokens.revokeAll(email)
-      await deps.sandboxes.release(email).catch((error) => {
-        console.error(`gateway: releasing ${email} failed: ${error.message}`)
-      })
-      // The volume outlives every sandbox that used it, so deleting the account
-      // is the only moment it is right to take it — and the only moment its
-      // space is returned to the deployment's ceiling.
-      if (doomed !== undefined && volumesEnabled()) {
-        await deps.destroyVolume(doomed.id).catch((error) => {
-          console.error(`gateway: destroying ${email}'s volume failed: ${error.message}`)
-        })
-      }
-      await deps.accounts.erase(email)
+      // The same sequence a tenant's own deletion runs, from the same place:
+      // two ways to delete an account that took different things away would be
+      // two different promises about what deletion means.
+      if (doomed !== undefined) await eraseAccount(deps, doomed)
       notice = `${email} 已删除。`
       break
     }
@@ -198,16 +205,19 @@ function backToConsole(res, notice, req) {
  * @returns {Promise<void>} resolves once the response is complete.
  */
 async function renderConsole(caller, res, notice, deps) {
-  const [listed, invited, credential] = await Promise.all([
+  const [listed, invited, credential, access, live] = await Promise.all([
     deps.accounts.list(),
     deps.invites.list(),
     deps.settings.modelCredential(),
+    deps.settings.access(),
+    deps.sandboxes.live(),
   ])
   const html = adminPage({
     accounts: listed.map((account) => ({ ...account, sandbox: deps.sandboxes.stateOf(account.email) })),
     invites: invited,
-    inviteRequired: inviteRequired(),
     credential,
+    access,
+    live,
     viewer: caller.email,
     notice,
     version: deps.version,

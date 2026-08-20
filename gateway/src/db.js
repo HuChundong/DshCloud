@@ -56,6 +56,17 @@ CREATE TABLE IF NOT EXISTS accounts (
 ALTER TABLE accounts ADD COLUMN IF NOT EXISTS display_name text;
 ALTER TABLE accounts ADD COLUMN IF NOT EXISTS avatar text;
 
+-- Which version of the policies this account last agreed to, and when.
+--
+-- Consent that is asked for and not written down is consent nobody can show
+-- afterwards, which is the same as not having asked. The version is the date
+-- stamped on the documents, so a row can be compared against the text that was
+-- on the page rather than against whatever it says today.
+--
+-- Null for accounts that registered before there was anything to agree to.
+ALTER TABLE accounts ADD COLUMN IF NOT EXISTS agreed_at timestamptz;
+ALTER TABLE accounts ADD COLUMN IF NOT EXISTS agreed_policy text;
+
 -- Cascades from the account: a deleted account must not leave a token that
 -- still renews, and the database is a better place to guarantee that than a
 -- sequence of calls that can be interrupted halfway.

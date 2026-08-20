@@ -9,6 +9,12 @@
  * Only registration is gated. A returning account signs in with nothing but its
  * code, because the invite bought the account, not each session.
  *
+ * Whether the gate is up at all is not decided here: it is a switch in the
+ * administrator's console, kept with the rest of the deployment's own state in
+ * `settings.js`, so that closing registration is something an operator does to
+ * a running deployment rather than to a compose file. This module is what a
+ * code is, not who needs one.
+ *
  * An invite is redeemed rather than deleted, so an operator can see which one
  * admitted whom. Redemption is the same statement as the check — a code claimed
  * twice by two simultaneous sign-ins would otherwise admit two people on one
@@ -16,16 +22,6 @@
  */
 
 import { randomInt } from 'node:crypto'
-import process from 'node:process'
-
-/**
- * Whether registration needs an invite.
- *
- * Named `open` explicitly rather than inferred from whether any invites exist:
- * a deployment that has issued none would otherwise be wide open, which is the
- * opposite of what having none suggests.
- */
-const REQUIRED = (process.env.REGISTRATION ?? 'invite') !== 'open'
 
 /**
  * The alphabet invite codes are drawn from.
@@ -41,14 +37,6 @@ const CODE_LENGTH = 10
 
 /** The most codes one generation request will make. */
 const MAX_BATCH = 200
-
-/**
- * Whether this deployment requires an invite to register.
- * @returns {boolean} whether registration is gated.
- */
-export function inviteRequired() {
-  return REQUIRED
-}
 
 /**
  * Format one code for reading: `XXXXX-XXXXX`.

@@ -12,9 +12,10 @@
 import { isAdminEmail, isEmailAddress, normalizeEmail } from './accounts.js'
 import { isSecureRequest } from './auth.js'
 import { sendVerificationCode } from './email.js'
-import { inviteRequired, normalizeInvite } from './invites.js'
+import { normalizeInvite } from './invites.js'
 import { callerAddress } from './send-limit.js'
 import { loginPage } from './login-page.js'
+import { POLICY_VERSION } from './policy-page.js'
 import { signedInCookies } from './tokens.js'
 import { CODE_TTL_SECONDS } from './verification.js'
 
@@ -23,6 +24,8 @@ import { CODE_TTL_SECONDS } from './verification.js'
  * @typedef {object} SignInDeps
  * @property {import('./accounts.js').Accounts} accounts - who exists.
  * @property {import('./invites.js').Invites} invites - what admits a new address.
+ * @property {import('./settings.js').Settings} settings - the gate: whether an invite is needed, and how many sandboxes may run.
+ * @property {import('./sandboxes.js').SandboxManager} sandboxes - how many machines are running, for the ceiling.
  * @property {import('./send-limit.js').SendLimit} sendLimit - what bounds the mail this can be made to send.
  * @property {import('./tokens.js').Tokens} tokens - what a session is made of.
  * @property {import('./verification.js').Verification} verification - the code challenge.
@@ -53,6 +56,14 @@ export async function handleSignIn(req, res, deps) {
   const email = normalizeEmail(form.get('email') ?? '')
   const code = form.get('code')
   const invite = normalizeInvite(form.get('invite') ?? '')
+  // What the visitor ticked, which is a policy version rather than "on": the
+  // page puts the version in the checkbox's value, so what arrives here says
+  // which text was on the page they read, and that is what gets recorded.
+  const agree = form.get('agree') ?? ''
+  // Read once per request, not once per process: an operator who closes
+  // registration means the next person through this door, and this is that
+  // door.
+  const gate = await deps.settings.access()
 
   /**
    * @param {number} status - the status to answer with.
@@ -60,11 +71,29 @@ export async function handleSignIn(req, res, deps) {
    */
   const page = (status, state) => {
     res.writeHead(status, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' })
-    res.end(loginPage({ invite, inviteRequired: inviteRequired(), ...state, version: deps.version }))
+    res.end(loginPage({ invite, agree, inviteRequired: gate.inviteRequired, ...state, version: deps.version }))
   }
 
   if (!isEmailAddress(email)) {
     page(400, { error: '请填写一个有效的邮箱地址。' })
+    return
+  }
+
+  // Before anything is sent, read or written. The browser refuses the submit
+  // first, so reaching here means the box was defeated rather than missed —
+  // and consent is the one thing that cannot be inferred from silence.
+  // Consent has to be to the text that is on the page now, so the version is
+  // checked rather than merely present. A form left open across a change to the
+  // documents agreed to something that has since been rewritten, and the answer
+  // is to read the new one — which is also the only reason a browser can end up
+  // here, the checkbox being `required` and the second step carrying what it
+  // agreed as a hidden field. Either way the form comes back from the top.
+  if (agree !== POLICY_VERSION) {
+    page(400, {
+      error: agree === ''
+        ? '请先阅读并同意服务条款、数据处理说明与安全使用政策。'
+        : '相关条款已更新，请重新阅读并同意。',
+    })
     return
   }
 
@@ -94,7 +123,7 @@ export async function handleSignIn(req, res, deps) {
     // Open registration means anyone may have an account, so withholding the
     // code would withhold the thing they are entitled to; there the two
     // counters carry the load alone.
-    const mayReceive = !inviteRequired()
+    const mayReceive = !gate.inviteRequired
       || isAdminEmail(email)
       || await deps.accounts.exists(email)
       || (invite !== '' && await deps.invites.usable(invite))
@@ -147,11 +176,33 @@ export async function handleSignIn(req, res, deps) {
     return
   }
 
+  // The deployment's capacity, checked before the invite is spent and after the
+  // code was answered.
+  //
+  // After, because a refusal that arrives before the code would differ by
+  // address — the people already holding a machine are let through — and this
+  // form must not become a way to ask who has one. It is the same reason a
+  // suspended account is told so only here.
+  //
+  // Before the invite, because refusing afterwards would burn the code on a
+  // sign-in that did not happen, and a full deployment is a "come back later"
+  // rather than a "you are not welcome".
+  //
+  // An administrator is never refused: this ceiling is about capacity, and the
+  // person who can raise it has to be able to reach the console that raises it.
+  if (gate.sandboxLimit > 0 && !isAdminEmail(email) && !await deps.sandboxes.holds(email)) {
+    if (await deps.sandboxes.live() >= gate.sandboxLimit) {
+      console.log(`gateway: refused ${email} — ${gate.sandboxLimit} sandboxes are already running`)
+      page(503, { error: '当前在线沙箱已达上限，请稍后再试。' })
+      return
+    }
+  }
+
   // The invite is checked here rather than before the code was mailed, so that
   // the first step answers identically for every address. Asking a stranger for
   // an invite and a returning tenant for nothing would make this form a way to
   // ask which addresses are registered.
-  if (inviteRequired() && !isAdminEmail(email) && !await deps.accounts.exists(email)) {
+  if (gate.inviteRequired && !isAdminEmail(email) && !await deps.accounts.exists(email)) {
     if (invite === '' || !await deps.invites.redeem(invite, email)) {
       page(403, {
         pending: email,
@@ -161,7 +212,9 @@ export async function handleSignIn(req, res, deps) {
     }
   }
 
-  const account = await deps.accounts.admit(email)
+  // The version they ticked, not the one this build ships: the record has to say
+  // what was on the page they read.
+  const account = await deps.accounts.admit(email, agree)
   if (account.disabled) {
     // Checked after the code, not before: refusing earlier would make the
     // sign-in form a way to ask which addresses are suspended.

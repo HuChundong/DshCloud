@@ -79,7 +79,9 @@ function save(path, body) {
 // Everything that contributes a client half is identical, so the manifest this
 // captures is the one the sandboxes serve.
 const patch = process.env.DSH_PATCH ?? '/app/web/harvest.patch.yml'
-const host = spawn('node', [process.env.DSH_BIN ?? '/app/node_modules/@deepseek-ai/dsh/lib/bin.js', 'web', '--patch', patch, '--port', '3080'], {
+// `--no-open` for the same reason the sandbox passes it: since 0.1.0-rc.8 this
+// command opens a browser, and this one runs inside a build.
+const host = spawn('node', [process.env.DSH_BIN ?? '/app/node_modules/@deepseek-ai/dsh/lib/bin.js', 'web', '--patch', patch, '--port', '3080', '--no-open'], {
   cwd: process.cwd(),
   stdio: ['ignore', 'inherit', 'inherit'],
 })

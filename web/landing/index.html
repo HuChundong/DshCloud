@@ -4,12 +4,18 @@
 
   The page opens as the product rather than as an argument about it: the first
   screen is the workspace a visitor gets after signing in, rendered here as a
-  still. Everything in that still is a link to /login — there is nothing to type
+  still. The headline over it names the category — a computer built for an
+  agent — rather than the deployment fact it used to name, because "DSH, hosted
+  in the cloud" answers a question only someone who already knows DSH is asking.
+  Which harness runs on it is the line underneath. Everything in that still is a link to /login — there is nothing to type
   into and nothing that pretends to answer, because a composer that swallows a
   sentence and then asks you to sign in has wasted the sentence.
 
-  Below it, the rhythm of happycapy.ai — what they can ship, what the sandbox
-  is, how to get one. Technology stays in docs/design.md. The header is ours
+  Below it, the rhythm of happycapy.ai — what they can ship, what the machine
+  behind it is, how to get one. It is called a computer rather than a sandbox
+  wherever a visitor is being told what they get: "sandbox" is what it is made
+  of, and belongs in docs/design.md and in the policies, not in the sentence
+  that has to land first. Technology stays in docs/design.md. The header is ours
   and stays ours:
   this project is open source and that is the difference worth leading with, so
   the repository sits in the top bar rather than in a footer column.
@@ -44,8 +50,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>DshCloud — DSH, hosted in the cloud</title>
-<meta name="description" content="DSH, hosted in the cloud. Runs in a dedicated sandbox with a replaceable runtime. Bring your own key. Open source. Free to start.">
+<title>DshCloud — your computer, built for an agent</title>
+<meta name="description" content="An agent-native computer, one per account, running DSH in the cloud. Models configured. Open source. Free to start.">
 <meta name="color-scheme" content="light dark">
 <link rel="icon" href="mark.svg" onerror="this.onerror=null;this.href='../../gateway/assets/mark.svg'">
 <link rel="preload" href="fonts/host-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
@@ -233,7 +239,7 @@ header.top .rail { display: flex; justify-content: center; }
    inherit a token the way the wordmark beside it does — and on the dark ground
    it was black on black. Inverting is exact rather than approximate: the only
    colour in the file is #000. The login page carries this identically. */
-@media (prefers-color-scheme: dark) { .brand img { filter: invert(1); } }
+@media (prefers-color-scheme: dark) { .brand img, footer.foot .mark { filter: invert(1); } }
 .chip {
   font-family: var(--mono); font-size: 11px; letter-spacing: .04em;
   color: var(--text-3); padding: 3px 10px; white-space: nowrap;
@@ -447,7 +453,6 @@ h1 { font-size: clamp(34px, 4vw, 52px); line-height: 1.14; letter-spacing: -.04e
 
 .stage .under { text-align: center; margin: clamp(22px, 3vw, 32px) auto 0; max-width: 44em; }
 .stage .under .cta { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
-.stage .under .note { font-size: 13px; color: var(--text-4); margin: 14px 0 0; }
 
 /* ---------- sections ---------- */
 
@@ -510,18 +515,6 @@ a.work:hover .work-preview img { transform: scale(1.035); filter: saturate(1) co
 .work-meta h3 { margin-bottom: 8px; }
 .work-meta p { color: var(--text-3); font-size: 14.5px; line-height: 1.55; }
 
-.task {
-  margin-top: clamp(16px, 2vw, 22px);
-  border: 1px solid var(--border-soft); border-radius: var(--radius-card);
-  background: var(--bg-raised); padding: clamp(20px, 2.4vw, 28px);
-}
-.task-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
-.task-head .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
-.task-head .state { font-family: var(--mono); font-size: 12px; color: var(--accent); }
-.task-head b { font-weight: 600; font-size: 16px; letter-spacing: -.02em; }
-.task p { color: var(--text-3); font-size: 15px; margin: 0 0 8px; }
-.task .thinking { font-family: var(--mono); font-size: 12px; color: var(--text-4); }
-
 /* ---------- how you run it ---------- */
 
 .pair { display: grid; gap: clamp(16px, 2vw, 22px); margin-top: clamp(40px, 5vw, 56px); }
@@ -582,20 +575,114 @@ a.work:hover .work-preview img { transform: scale(1.035); filter: saturate(1) co
 .close .cta { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 32px; }
 
 /*
-  The independence notice is a legal statement, not small print, so it is a band
-  of its own above the footer. It matters more here than in the README, because
-  the mark beside the wordmark above is upstream's.
+  The independence notice.
+ 
+  It was a full-width band with its own ground and an accent-coloured label,
+  which gave a statement about who does NOT publish this the visual weight of a
+  feature. It stays — it is why the mark beside the wordmark at the top is
+  allowed to be there at all, and it matters more here than in the README — but
+  it now reads as what it is: a note above the footer, in one column, in the
+  ink the footer is set in.
 */
-.notice { border-top: 1px solid var(--border-soft); background: var(--surface-3); }
-.notice .rail { padding-top: 30px; padding-bottom: 30px; display: grid; gap: 12px 32px; }
-@media (min-width: 900px) { .notice .rail { grid-template-columns: 200px minmax(0, 1fr); } }
-.notice .rail > * { min-width: 0; }
-.notice .tag { font-family: var(--mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin: 0; }
-.notice p { font-size: 13.5px; line-height: 1.7; color: var(--text-4); max-width: 54em; }
+.notice { border-top: 1px solid var(--border-soft); }
+.notice .rail { padding-top: 26px; padding-bottom: 0; }
+/* A column, not the page. It is set to a reading measure and stops there, so
+   the eye reads it as the note it is rather than as a section — and the
+   sentence that matters keeps a little more ink than the rest of it. */
+.notice p { max-width: 44em; font-size: 12.5px; line-height: 1.7; color: var(--text-4); }
 .notice strong { color: var(--text-3); font-weight: 500; }
 
-footer.foot { border-top: 1px solid var(--border-soft); }
-footer.foot .rail { padding-top: 26px; padding-bottom: 42px; display: flex; flex-wrap: wrap; gap: 10px 24px; align-items: center; font-family: var(--mono); font-size: 12px; color: var(--text-4); }
+/* No rule of its own: the notice above it already drew one, and the two
+   together are the bottom of the page rather than two more sections. */
+footer.foot .rail { padding-top: 22px; padding-bottom: 42px; display: flex; flex-wrap: wrap; gap: 10px 20px; align-items: center; font-family: var(--mono); font-size: 12px; color: var(--text-4); }
+/* Each name wears its own mark, so the row reads as three projects rather than
+   three words. The glyphs are drawn here rather than fetched: this page reaches
+   no other host, and a footer is not worth an exception to that. */
+footer.foot a { display: inline-flex; align-items: center; gap: 7px; }
+footer.foot a svg, footer.foot a .mark { width: 15px; height: 15px; flex: none; }
+/* Their own file, kept here rather than linked from their site. The page
+   reaches no other host — that is a promise the data notice makes in so many
+   words, and it is also what keeps the page whole on a private network — so a
+   logo it needs is a logo it carries. It is upright and coloured, so it takes
+   its own proportions and is not inverted with the rest. */
+footer.foot a .cube { width: 13px; height: 16px; flex: none; }
+/* The licence is the one thing in this row that is a fact about this project
+   rather than a link out of it, so it is set the way the sign-in page's badge
+   is: filled, small, and the only thing here with a ground of its own. */
+footer.foot .lic {
+  padding: 3px 7px;
+  border-radius: 5px;
+  background: var(--text);
+  color: var(--bg);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: .1em;
+}
+/* Pushes the deployment's own documents to the other end of the row, away from
+   the three repositories: they are what this deployment says about itself, not
+   another thing it is built on. It collapses to nothing when the row wraps. */
+footer.foot .gap { flex: 1 1 0; min-width: 0; }
+
+/*
+  The WeChat account, as a code that appears over the footer rather than a
+  132px square sitting in it: it is the one thing here that is only useful to
+  someone reaching for a phone, and it should cost the rest of the page nothing
+  until then.
+
+  A button, not a hover target on a span, so it opens on focus as well —
+  `:focus-within` is what makes it reachable by keyboard and is also what makes
+  a tap work on a touch screen, where there is no hover to have.
+
+  Absolutely positioned and painted with opacity, so revealing it moves nothing:
+  the page's own rule is that nothing may move after it is painted, and a
+  popover that pushed the footer's row apart would break it at the very bottom.
+*/
+.wechat {
+  position: relative;
+  font: inherit;
+  color: var(--text-4);
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+.wechat:hover { color: var(--text-2); }
+.wechat .qr {
+  position: absolute;
+  /* A width, because the popover is absolutely positioned inside a label a few
+     characters wide: shrink-to-fit resolved against that, and the global
+     `max-width: 100%` then pulled the code down to the width of its own
+     caption. The code is sized here and the frame is sized to it. */
+  width: 204px;
+  bottom: calc(100% + 12px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  display: grid;
+  justify-items: center;
+  gap: 9px;
+  padding: 14px;
+  border: 1px solid var(--border-soft);
+  border-radius: 16px;
+  /* Opaque rather than the capsule's translucency: a QR code needs its quiet
+     zone to stay quiet, and the lattice showing through it is noise a scanner
+     has to work past. */
+  background: var(--bg-raised);
+  box-shadow: var(--lift);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity .16s, transform .16s, visibility .16s;
+}
+/* The code itself stays on white in both themes: a scanner reads dark modules
+   on a light ground, and inverting it would make the footer prettier and the
+   code unreadable. */
+.wechat .qr img { width: 176px; height: 176px; border-radius: 8px; background: #fff; }
+.wechat .qr em { font-style: normal; font-size: 12px; color: var(--text-4); white-space: nowrap; }
+.wechat:hover .qr, .wechat:focus-visible .qr, .wechat:focus-within .qr {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
+@media (prefers-reduced-motion: reduce) { .wechat .qr { transition: none; } }
 footer.foot a:hover { color: var(--text-2); }
 </style>
 </head>
@@ -611,7 +698,7 @@ footer.foot a:hover { color: var(--text-2); }
       <span class="spacer"></span>
       <nav>
         <a href="#work" data-t="nav.work">Work</a>
-        <a href="#sandbox" data-t="nav.sandbox">Why host it</a>
+        <a href="#computer" data-t="nav.sandbox">Your computer</a>
         <a href="#run" data-t="nav.run">Get started</a>
       </nav>
       <a class="btn btn-ghost btn-sm" href="https://github.com/HuChundong/DshCloud">
@@ -632,8 +719,8 @@ footer.foot a:hover { color: var(--text-2); }
   <div class="rail">
 
     <div class="headline">
-      <h1 data-t="hero.h1">DSH, hosted in the cloud</h1>
-      <p data-t="hero.p">The same DSH, running in its own sandbox. Bring your own key.</p>
+      <h1 data-t="hero.h1">Your computer, built for an agent</h1>
+      <p data-t="hero.p">Runs in the cloud, and keeps running. On the DSH you already know.</p>
     </div>
 
     <div class="app">
@@ -704,7 +791,6 @@ footer.foot a:hover { color: var(--text-2); }
         <a class="btn btn-primary" href="/login" data-t="hero.cta1">Get started for free</a>
         <a class="btn btn-ghost" href="https://github.com/HuChundong/DshCloud" data-t="hero.cta2">Read the source</a>
       </div>
-      <p class="note" data-t="hero.note">The free plan is open. New workstations are handed out by invitation.</p>
     </div>
 
   </div>
@@ -713,7 +799,7 @@ footer.foot a:hover { color: var(--text-2); }
 <section class="band" id="work">
   <div class="rail">
     <h2 data-t="work.h2">The DSH you already know</h2>
-    <p class="lede" data-t="work.lede">Build websites. Research. Ship code. The experience does not change — only where it runs.</p>
+    <p class="lede" data-t="work.lede">The experience does not change — only where it runs.</p>
 
     <div class="works">
       <a class="work" href="/login">
@@ -743,7 +829,7 @@ footer.foot a:hover { color: var(--text-2); }
         <div class="work-meta">
           <p class="en">Data</p>
           <h3 data-t="work.w3h">Weekly sales table, cleaned</h3>
-          <p data-t="work.w3b">Clean, join, export. Files stay on the workstation.</p>
+          <p data-t="work.w3b">Clean, join, export. The files stay on it.</p>
         </div>
       </a>
       <a class="work" href="/login">
@@ -770,21 +856,21 @@ footer.foot a:hover { color: var(--text-2); }
   </div>
 </section>
 
-<section class="band" id="sandbox">
+<section class="band" id="computer">
   <div class="rail">
-    <h2 data-t="value.h2">Runs in a sandbox. Always on.</h2>
-    <p class="lede" data-t="value.lede">One sandbox per person. Close the computer — DSH keeps working. Bring your own key.</p>
+    <h2 data-t="value.h2">Everyone gets a computer.</h2>
+    <p class="lede" data-t="value.lede">One per account: a shell, a filesystem, a network. Close your laptop — it keeps working.</p>
 
     <div class="quad">
       <div class="card">
         <p class="en">Same DSH</p>
         <h3 data-t="value.c1h">Same DSH</h3>
-        <p class="body" data-t="value.c1b">The interface you already know. Nothing new to learn.</p>
+        <p class="body" data-t="value.c1b">The interface you already know.</p>
       </div>
       <div class="card">
         <p class="en">Pluggable runtime</p>
-        <h3 data-t="value.c2h">Swap the sandbox runtime</h3>
-        <p class="body" data-t="value.c2b">Docker and CubeSandbox are supported today; the latter uses an E2B-compatible API.</p>
+        <h3 data-t="value.c2h">Swap what it runs on</h3>
+        <p class="body" data-t="value.c2b">Docker or CubeSandbox, over an E2B-compatible API.</p>
       </div>
       <div class="card">
         <p class="en">Not your laptop</p>
@@ -792,21 +878,12 @@ footer.foot a:hover { color: var(--text-2); }
         <p class="body" data-t="value.c3b">Keeps working even when your computer is off.</p>
       </div>
       <div class="card">
-        <p class="en">BYOK</p>
-        <h3 data-t="value.c4h">Bring your own key</h3>
-        <p class="body" data-t="value.c4b">Use your own key. It stays on your workstation.</p>
+        <p class="en">Models included</p>
+        <h3 data-t="value.c4h">Models, ready to go</h3>
+        <p class="body" data-t="value.c4b">Configured already. Or bring your own key.</p>
       </div>
     </div>
 
-    <div class="task">
-      <div class="task-head">
-        <i class="dot" aria-hidden="true"></i>
-        <span class="state" data-t="task.state">Running</span>
-        <b data-t="task.title">Draft this week's revenue report</b>
-      </div>
-      <p data-t="task.prompt">Draft this week's revenue report and send it to my team</p>
-      <div class="thinking" data-t="task.thinking">Thinking…</div>
-    </div>
   </div>
 </section>
 
@@ -820,9 +897,9 @@ footer.foot a:hover { color: var(--text-2); }
         <p class="en">Hosted · Free</p>
         <h3 data-t="run.ah">Start on ours</h3>
         <ul>
-          <li data-t="run.a1">Open DSH in your browser. Nothing to install or configure.</li>
-          <li data-t="run.a2">Your sandbox keeps running after your computer turns off.</li>
-          <li data-t="run.a3">Files and sessions stay there, ready when you come back.</li>
+          <li data-t="run.a1">Open a browser. Nothing to install.</li>
+          <li data-t="run.a2">Your own computer can be off. That one keeps running.</li>
+          <li data-t="run.a3">Files and sessions are there next time.</li>
         </ul>
         <div class="tail"><a class="btn btn-primary" href="/login" data-t="run.acta">Get started for free</a></div>
       </div>
@@ -832,7 +909,7 @@ footer.foot a:hover { color: var(--text-2); }
         <h3 data-t="run.bh">Or run it on your own cloud</h3>
         <ul>
           <li data-t="run.b1">Every line is public.</li>
-          <li data-t="run.b2">Swap runtimes: Docker for a trial, CubeSandbox microVMs in production.</li>
+          <li data-t="run.b2">Docker to try it, CubeSandbox microVMs in production.</li>
           <li data-t="run.b3">Your credentials, your data, your perimeter.</li>
         </ul>
         <div class="tail">
@@ -877,17 +954,36 @@ footer.foot a:hover { color: var(--text-2); }
 
 <aside class="notice">
   <div class="rail">
-    <p class="tag" data-t="notice.tag">Independent project</p>
     <p data-th="notice.body"><strong>DshCloud is an independently developed, unofficial project. DshCloud and DSH are not products of the same company or organization.</strong> This project is not affiliated with, sponsored by, endorsed by, or maintained by DeepSeek AI, the <code>deepseek-ai</code> organization, Tencent Cloud, or the maintainers of DSH or CubeSandbox. Their names and marks are used only to identify interoperability and upstream dependencies; this project claims no ownership of them.</p>
   </div>
 </aside>
 
 <footer class="foot">
   <div class="rail">
-    <span>MIT</span>
-    <a href="https://github.com/HuChundong/DshCloud">GitHub</a>
-    <a href="https://github.com/deepseek-ai/deepseek-harness" data-t="foot.dsh">DSH (upstream)</a>
-    <a href="https://github.com/TencentCloud/CubeSandbox">CubeSandbox</a>
+    <span class="lic">MIT</span>
+    <a href="https://github.com/HuChundong/DshCloud">
+      <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0a8 8 0 0 0-2.53 15.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.4 7.4 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48l-.01 2.19c0 .21.15.46.55.38A8 8 0 0 0 8 0Z"/></svg>
+      GitHub
+    </a>
+    <a href="https://github.com/deepseek-ai/deepseek-harness">
+      <img class="mark" src="mark.svg" alt="" width="15" height="15" onerror="this.onerror=null;this.src='../../gateway/assets/mark.svg'">
+      <span data-t="foot.dsh">deepseek Harness</span>
+    </a>
+    <a href="https://github.com/TencentCloud/CubeSandbox">
+      <img class="cube" src="cubesandbox.svg" alt="" width="13" height="16">
+      CubeSandbox
+    </a>
+    <span class="gap"></span>
+    <button type="button" class="wechat">
+      <span data-t="foot.wechat">WeChat</span>
+      <span class="qr">
+        <img src="wechat-qr.webp" alt="" width="176" height="176" onerror="this.onerror=null;this.src='../../gateway/assets/wechat-qr.webp'">
+        <em data-t="foot.scan">Scan to follow</em>
+      </span>
+    </button>
+    <a href="/policy/terms" target="_blank" rel="noopener" data-t="foot.terms">Terms</a>
+    <a href="/policy/privacy" target="_blank" rel="noopener" data-t="foot.privacy">Data notice</a>
+    <a href="/policy/security" target="_blank" rel="noopener" data-t="foot.security">Safe use</a>
   </div>
 </footer>
 
@@ -904,17 +1000,15 @@ footer.foot a:hover { color: var(--text-2); }
 const T = {
   'nav.chip':     { en: 'Open source · MIT',   zh: '开源 · MIT' },
   'nav.work':     { en: 'Work',                zh: '能力' },
-  'nav.sandbox':  { en: 'Why host it',         zh: '为何托管' },
+  'nav.sandbox':  { en: 'Your computer',       zh: '你的电脑' },
   'nav.run':      { en: 'Get started',         zh: '开始' },
   'nav.cta':      { en: 'Get started for free', zh: '免费开始' },
 
-  'hero.h1':      { en: 'DSH, hosted in the cloud', zh: '云端托管的 DSH' },
-  'hero.p':       { en: 'The same DSH, running in its own sandbox. Bring your own key.',
-                    zh: '还是原来的 DSH，运行在独立沙箱中。用你自己的 Key。' },
+  'hero.h1':      { en: 'Your computer, built for an agent', zh: '你的电脑，为 agent 而生' },
+  'hero.p':       { en: 'Runs in the cloud, and keeps running. On the DSH you already know.',
+                    zh: '持续在云端运行，跑着你熟悉的 DSH。' },
   'hero.cta1':    { en: 'Get started for free', zh: '免费开始' },
   'hero.cta2':    { en: 'Read the source',     zh: '查看源码' },
-  'hero.note':    { en: 'The free plan is open. New workstations are handed out by invitation.',
-                    zh: '免费套餐已开放。新工作站暂以邀请码发放。' },
 
   'app.new':      { en: 'New session',         zh: '新会话' },
   'app.workspace':{ en: 'Workspace',           zh: '工作区' },
@@ -938,48 +1032,43 @@ const T = {
   'app.s5':       { en: 'Read a repository',   zh: '读一个仓库' },
 
   'work.h2':      { en: 'The DSH you already know', zh: '你已经熟悉的 DSH' },
-  'work.lede':    { en: 'Build websites. Research. Ship code. The experience does not change — only where it runs.',
-                    zh: '做网站、做调研、把代码跑起来。体验不变，变的只是它跑在哪。' },
+  'work.lede':    { en: 'The experience does not change — only where it runs.',
+                    zh: '体验不变，变的只是它跑在哪。' },
   'work.w1h':     { en: 'Product launch landing page', zh: '产品上线落地页' },
   'work.w1b':     { en: 'From a sentence to pages you can open.', zh: '从一句话到能打开的页面。' },
   'work.w2h':     { en: 'Competitive research brief', zh: '竞品调研简报' },
   'work.w2b':     { en: 'Sources, notes, and a write-up you can send.', zh: '来源、笔记，和一份能发出去的成稿。' },
   'work.w3h':     { en: 'Weekly sales table, cleaned', zh: '清洗好的周销售表' },
-  'work.w3b':     { en: 'Clean, join, export. Files stay on the workstation.', zh: '清理、拼接、导出。文件留在工作站。' },
+  'work.w3b':     { en: 'Clean, join, export. The files stay on it.', zh: '清理、拼接、导出，文件就留在这台电脑上。' },
   'work.w4h':     { en: 'A nightly report that runs', zh: '每晚自动跑的报表' },
   'work.w4b':     { en: 'Install, build, run — on the same machine.', zh: '安装、构建、运行，就在这台机器上。' },
   'work.w5h':     { en: 'Read a repository',   zh: '读一个仓库' },
   'work.w5b':     { en: 'Clone, search, patch.', zh: '克隆、搜索、改代码。' },
-  'value.h2':     { en: 'Runs in a sandbox. Always on.', zh: '在沙箱中运行。电脑关了也不停。' },
-  'value.lede':   { en: 'One sandbox per person. Close the computer — DSH keeps working. Bring your own key.',
-                    zh: '一人一个沙箱。合上电脑，DSH 还在跑。用你自己的 Key。' },
+  'value.h2':     { en: 'Everyone gets a computer.', zh: '每个人分到一台电脑。' },
+  'value.lede':   { en: 'One per account: a shell, a filesystem, a network. Close your laptop — it keeps working.',
+                    zh: '一个账号一台：有终端、有文件系统、能联网。合上笔记本，它照样干活。' },
   'value.c1h':    { en: 'Same DSH',            zh: '体验不变' },
-  'value.c1b':    { en: 'The interface you already know. Nothing new to learn.', zh: '还是你熟悉的 DSH，不用重新学。' },
-  'value.c2h':    { en: 'Swap the sandbox runtime', zh: '沙箱运行时可替换' },
-  'value.c2b':    { en: 'Docker and CubeSandbox are supported today; the latter uses an E2B-compatible API.', zh: '目前支持 Docker 与 CubeSandbox，后者通过 E2B 兼容 API 接入。' },
-  'value.c3h':    { en: 'Not your laptop',     zh: '不用担心自己的电脑' },
+  'value.c1b':    { en: 'The interface you already know.', zh: '还是你熟悉的界面，不用重学。' },
+  'value.c2h':    { en: 'Swap what it runs on', zh: '底层运行时可替换' },
+  'value.c2b':    { en: 'Docker or CubeSandbox, over an E2B-compatible API.', zh: 'Docker 或 CubeSandbox，走 E2B 兼容 API。' },
+  'value.c3h':    { en: 'Not your laptop',     zh: '不占你自己的电脑' },
   'value.c3b':    { en: 'Keeps working even when your computer is off.', zh: '电脑关了也还在干活。' },
-  'value.c4h':    { en: 'Bring your own key',  zh: '使用自己的 Key' },
-  'value.c4b':    { en: 'Use your own key. It stays on your workstation.', zh: 'BYOK。Key 留在你的工作站里。' },
-
-  'task.state':   { en: 'Running',             zh: '运行中' },
-  'task.title':   { en: "Draft this week's revenue report", zh: '起草本周营收报告' },
-  'task.prompt':  { en: "Draft this week's revenue report and send it to my team", zh: '起草本周营收报告，发给团队' },
-  'task.thinking':{ en: 'Thinking…',           zh: '思考中…' },
+  'value.c4h':    { en: 'Models, ready to go',  zh: '模型开箱即用' },
+  'value.c4b':    { en: 'Configured already. Or bring your own key.', zh: '默认就配好了，也可以换成自己的 Key。' },
 
   'run.h2':       { en: 'Choose how to run DSH', zh: '选择 DSH 的运行方式' },
   'run.lede':     { en: 'Use the hosted service, or deploy it to your own cloud.', zh: '直接使用托管版，或部署到自己的云上。' },
   'run.ah':       { en: 'Start on ours',       zh: '直接用我们的' },
-  'run.a1':       { en: 'Open DSH in your browser. Nothing to install or configure.',
-                    zh: '打开浏览器就是 DSH，不用安装，也不用配置环境。' },
-  'run.a2':       { en: 'Your sandbox keeps running after your computer turns off.',
-                    zh: '你的沙箱跑在云端，电脑关了也不会停。' },
-  'run.a3':       { en: 'Files and sessions stay there, ready when you come back.',
-                    zh: '文件和会话留在工作站里，下次登录接着做。' },
+  'run.a1':       { en: 'Open a browser. Nothing to install.',
+                    zh: '打开浏览器就能用，不用安装。' },
+  'run.a2':       { en: 'Your own computer can be off. That one keeps running.',
+                    zh: '你的电脑关了，那台还在跑。' },
+  'run.a3':       { en: 'Files and sessions are there next time.',
+                    zh: '文件和会话都在，下次接着做。' },
   'run.acta':     { en: 'Get started for free', zh: '免费开始' },
   'run.bh':       { en: 'Or run it on your own cloud', zh: '或部署到自己的云上' },
   'run.b1':       { en: 'Every line is public.', zh: '每一行代码都是公开的。' },
-  'run.b2':       { en: 'Swap runtimes: Docker for a trial, CubeSandbox microVMs in production.', zh: '沙箱运行时可替换：试跑用 Docker，生产用 CubeSandbox 微虚机。' },
+  'run.b2':       { en: 'Docker to try it, CubeSandbox microVMs in production.', zh: '试跑用 Docker，生产用 CubeSandbox 微虚机。' },
   'run.b3':       { en: 'Your credentials, your data, your perimeter.', zh: '你的密钥、你的数据、你的边界。' },
 
   'term.tab1':    { en: 'Docker',              zh: 'Docker' },
@@ -993,16 +1082,23 @@ const T = {
   'close.cta1':   { en: 'Get started for free', zh: '免费开始' },
   'close.cta2':   { en: 'Star on GitHub',      zh: '去 GitHub 点个 Star' },
 
-  'notice.tag':   { en: 'Independent project', zh: '独立项目声明' },
   'notice.body':  { en: '<strong>DshCloud is an independently developed, unofficial project. DshCloud and DSH are not products of the same company or organization.</strong> This project is not affiliated with, sponsored by, endorsed by, or maintained by DeepSeek AI, the <code>deepseek-ai</code> organization, Tencent Cloud, or the maintainers of DSH or CubeSandbox. Their names and marks are used only to identify interoperability and upstream dependencies; this project claims no ownership of them.',
                     zh: '<strong>DshCloud 是独立开发维护的非官方项目。DshCloud 与 DSH 不是同一家公司或组织的产品。</strong>本项目不隶属于、不代表，也未获得 DeepSeek AI、GitHub 上的 <code>deepseek-ai</code> 组织、腾讯云、DSH 或 CubeSandbox 维护方的赞助、背书或维护。文中相关名称与标识仅用于说明兼容性和上游依赖；本项目不主张对其享有任何权利。' },
 
-  'foot.dsh':     { en: 'DSH (upstream)',      zh: 'DSH（上游）' },
+  'foot.dsh':     { en: 'deepseek Harness',    zh: 'deepseek Harness' },
+  // Served by the deployment rather than by this file: on GitHub Pages, where
+  // this page is also published, they are the same kind of link as the sign-in
+  // button beside them.
+  'foot.wechat':  { en: 'WeChat Official Account', zh: '微信公众号' },
+  'foot.scan':    { en: 'Scan to follow',      zh: '微信扫码关注' },
+  'foot.terms':   { en: 'Terms',               zh: '服务条款' },
+  'foot.privacy': { en: 'Data notice',         zh: '数据处理说明' },
+  'foot.security':{ en: 'Safe use',            zh: '安全使用政策' },
 
   'copy.idle':    { en: 'Copy',                zh: '复制' },
   'copy.done':    { en: 'Copied',              zh: '已复制' },
 
-  'doc.title':    { en: 'DshCloud — DSH, hosted in the cloud', zh: 'DshCloud — 云端托管的 DSH' },
+  'doc.title':    { en: 'DshCloud — your computer, built for an agent', zh: 'DshCloud — 你的电脑，为 agent 而生' },
 }
 
 /*

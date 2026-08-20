@@ -131,8 +131,19 @@ services:
       REFRESH_TTL_SECONDS: ${REFRESH_TTL_SECONDS:-2592000}
       # Whether an invite is needed to register. `open` lets anyone who can
       # receive mail in, which is what a deployment on a reachable address
-      # should not be.
+      # should not be. Both this and the ceiling below are what the deployment
+      # starts from: the administrator's console stores its own answer, and
+      # that one wins.
       REGISTRATION: ${REGISTRATION:-invite}
+      # The most sandboxes that may run at once; 0 is no ceiling. Every live
+      # sandbox is memory and a volume on this host, so this is the number that
+      # host can carry — a sign-in that would exceed it is refused rather than
+      # discovered as an out-of-memory kill.
+      SANDBOX_LIMIT: ${SANDBOX_LIMIT:-0}
+      # The address the deployment's own policy pages tell tenants to write to.
+      # Empty falls back to the first GATEWAY_ADMINS entry, and the contact
+      # section is simply omitted when there is neither.
+      POLICY_CONTACT: ${POLICY_CONTACT:-}
       DATABASE_URL: postgres://${POSTGRES_USER:-dsh}:${POSTGRES_PASSWORD:?set a database password}@postgres:5432/${POSTGRES_DB:-dsh}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
       DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL}

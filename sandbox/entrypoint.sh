@@ -98,7 +98,11 @@ fi
 # workspace — and with full access inside the container, the agent's default
 # working directory would have been the harness's own installation.
 cd "$WORKSPACE"
-node "$DSH_BIN" web --patch /app/sandbox/cordis.patch.yml --port 3080 &
+# `--no-open` because 0.1.0-rc.8 made `dsh web` open the default browser, and
+# this one is a container with no desktop, no DISPLAY and nobody in front of it.
+# The browser that reaches this backend is served by the web deployment and
+# arrives over the tunnel; there is nothing here to open.
+node "$DSH_BIN" web --patch /app/sandbox/cordis.patch.yml --port 3080 --no-open &
 DSH_PID=$!
 
 # The tunnel is a plugin in the composition above, not a second process, so

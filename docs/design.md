@@ -145,6 +145,47 @@ code rather than before, so the first step answers identically for every
 address: asking a stranger for an invite and a returning tenant for nothing
 would make the form a way to ask who is registered.
 
+Both the gate and the ceiling beside it are switches in the administrator's
+console, and the environment is only where they start: `REGISTRATION` and
+`SANDBOX_LIMIT` are read from the database on every sign-in, so closing
+registration while a link is circulating in a group chat closes it for the next
+person to follow it rather than for the next restart. The ceiling is the most
+sandboxes that may run at once — 0 for none — and it is the host's memory
+written down. A sign-in that would exceed it is refused after the code and
+before the invite is spent, so a full deployment costs a visitor the wait and
+not their code; whoever is already holding a machine passes regardless, because
+they cost nothing further, and so does an administrator, who has to be able to
+reach the console that raises the number.
+
+This deployment states what it does with what a tenant gives it, and the
+statement has to stay true of the code: three documents at `/policy/…` — the
+terms, the data notice, and the safe-use policy — served by the gateway beside
+the sign-in page they are linked from, because they are what someone reads
+before they have an account. Two of them are shorter than a commercial
+equivalent for a structural reason rather than a stylistic one. The deployment
+runs no model, so what governs the inference is the upstream provider's policy
+and the safe-use document says so instead of restating it badly; and having no
+model, it has no use for tenant data at all — no training, no profiling, no
+analytics, no third-party script — so the data notice spends its length on the
+honest part, which is what nonetheless leaves: the model provider and the mail
+sender.
+
+Agreement is a checkbox on the sign-in form, and it is checked on every sign-in
+rather than only at registration for the same reason the invite is only checked
+after the mailed code: this form does not know which of the two it is doing, and
+an answer that differed would say who has an account. What the box carries is
+the documents' version rather than "on", so what is recorded on the account is
+which text was actually on the page — and a form left open across a change to
+the documents is asked to read the new one rather than silently accepting it.
+
+The other half of that promise is being able to leave. `/profile/delete` closes
+an account from the profile page: it revokes the sessions, releases the sandbox,
+destroys the volume and deletes the row, in that order and through the same
+`eraseAccount` the administrator's own delete runs — two paths that took
+different things away would be two different promises about what deletion means.
+It is confirmed by typing the address, which is a confirmation a browser with no
+JavaScript can also give.
+
 A session is then two tokens. The access token is a signed JWT the gateway
 verifies without asking anything, which keeps the store off the path of every
 `/api` call — and, for exactly that reason, cannot be taken back, so it lasts

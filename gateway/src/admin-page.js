@@ -19,7 +19,7 @@
  * and its sandbox with it.
  */
 
-import { PALETTE_CSS, THEME_TOGGLE, TOAST_CSS, escapeHtml, toast } from './page-chrome.js'
+import { FONT_PRELOAD, PALETTE_CSS, THEME_TOGGLE, TOAST_CSS, escapeHtml, toast } from './page-chrome.js'
 import { describeKey } from './settings.js'
 
 /**
@@ -43,13 +43,15 @@ function when(at) {
  * @param {Array<import('./accounts.js').Account & {sandbox: string}>} state.accounts - the accounts, each with the state of its sandbox.
  * @param {Array<{code: string, createdAt: number, redeemedAt: number | undefined, redeemedBy: string | undefined}>} state.invites - the invite codes, unredeemed first.
  * @param {{baseUrl: string, apiKey: string, source: string, updatedAt: number | undefined, updatedBy: string | undefined}} state.credential - the model credential in force, described rather than shown.
+ * @param {{inviteRequired: boolean, sandboxLimit: number, source: string, updatedAt: number | undefined, updatedBy: string | undefined}} state.access - the gate in force: who may register, and how many sandboxes may run.
+ * @param {number} state.live - how many sandboxes are running right now, which is what the ceiling is measured against.
  * @param {string} state.viewer - the administrator's own address, so the page can refuse to offer them their own delete button.
  * @param {string} [state.notice] - the outcome of the action that led here.
  * @param {string} [state.version] - the dsh release this deployment runs.
  * @returns {string} the HTML document.
  */
 export function adminPage(state) {
-  const { accounts, invites, credential, viewer, notice, version } = state
+  const { accounts, invites, credential, access, live, viewer, notice, version } = state
   const release = version === undefined || version === '' ? '' : ` · v${escapeHtml(version)}`
   // A toast rather than a block in the page. It reports an action that has
   // already happened, so it dismisses itself — and being out of the layout, it
@@ -74,6 +76,13 @@ export function adminPage(state) {
   const credentialHint = credential.source === 'console'
     ? `${describeKey(credential.apiKey)} · ${escapeHtml(credential.updatedBy ?? '')} · ${when(credential.updatedAt)}`
     : `${describeKey(credential.apiKey)} · 环境变量`
+  // Where the gate came from, for the same reason the credential says so: an
+  // operator reading a switch needs to know whether the console owns it or the
+  // compose file does, because that decides where a change has to be made.
+  const accessHint = access.source === 'console'
+    ? `${escapeHtml(access.updatedBy ?? '')} · ${when(access.updatedAt)}`
+    : '环境变量'
+  const ceiling = access.sandboxLimit === 0 ? '不限' : `${live} / ${access.sandboxLimit}`
   const inviteRows = invites.length === 0
     ? '<tr><td colspan="4" class="empty">还没有邀请码。</td></tr>'
     : invites.map(inviteRow).join('\n')
@@ -84,7 +93,9 @@ export function adminPage(state) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>用户管理 · DeepSeek Harness</title>
+<meta name="color-scheme" content="light dark">
 <link rel="icon" href="/favicon.svg">
+${FONT_PRELOAD}
 <style>
 ${PALETTE_CSS}
 ${TOAST_CSS}
@@ -96,8 +107,10 @@ ${TOAST_CSS}
     flex-direction: column;
     background: var(--bg);
     color: var(--fg);
-    font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "PingFang SC",
-          "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
   }
   main { flex: 1; width: 100%; max-width: 960px; margin: 0 auto; padding: 2.5rem 1.25rem; }
 
@@ -112,8 +125,14 @@ ${TOAST_CSS}
   }
   :root[data-theme="dark"] .brand img { filter: invert(1); }
   :root[data-theme="light"] .brand img { filter: none; }
-  .brand .word { font-size: 1.375rem; font-weight: 600; letter-spacing: -.02em; color: var(--ink); }
+  .brand .word { font-family: var(--display); font-size: 1.375rem; font-weight: 600; letter-spacing: -.03em; color: var(--fg); }
+  /* Filled, not outlined: the wordmark reads as one lockup — the name and the
+     product beside it — and a hairline chip there is a second thing to read
+     rather than the other half of the first. --ink inverts with the theme, so
+     the block is black on the light page and white on the dark one; the mark
+     beside it inverts with it. */
   .brand .badge {
+    align-self: center;
     padding: .15rem .4rem;
     border-radius: 4px;
     background: var(--ink);
@@ -151,8 +170,11 @@ ${TOAST_CSS}
     letter-spacing: .02em;
   }
   .tag.admin { background: var(--ink); color: var(--on-ink); }
-  .tag.off { background: rgb(180 52 31 / 10%); color: var(--danger); }
-  .tag.live { background: rgb(23 23 23 / 6%); color: var(--fg); }
+  /* Mixed from the tokens rather than written out, so both survive the theme:
+     the fixed tints these carried were a light-page grey and a light-page red,
+     and on the dark ground the running tag disappeared into the row. */
+  .tag.off { background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger); }
+  .tag.live { background: var(--surface); color: var(--fg); }
 
   form { display: inline; }
   button {
@@ -188,7 +210,7 @@ ${TOAST_CSS}
 
   h2 { margin: 2.5rem 0 .35rem; font-size: 1.125rem; font-weight: 600; }
 
-  .creds { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem; }
+  .creds { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-bottom: 1rem; }
   .creds input {
     flex: 1 1 14rem;
     height: 2.15rem;
@@ -202,6 +224,18 @@ ${TOAST_CSS}
   }
   .creds .save { background: var(--ink); color: var(--on-ink); border-color: var(--ink); }
   .creds .save:hover { opacity: .85; border-color: var(--ink); }
+  /* The switch sits in the same row as the number it qualifies, because they
+     are one decision — who may come in, and how many may be here — and saving
+     them separately would let an operator close registration and forget the
+     ceiling. It takes its own width rather than a share of the row,
+     because it is a sentence and not a field. */
+  .creds .check { display: flex; align-items: center; gap: .45rem; flex: 0 0 auto; margin-right: .5rem; white-space: nowrap; font-size: .8125rem; color: var(--fg); }
+  /* It takes no basis, because the rule above gives every input in this row a
+     14rem basis, and a checkbox that took one would push its own label off the
+     end of the line. */
+  .creds .check input { flex: none; width: 1rem; height: 1rem; accent-color: var(--ink); margin: 0; }
+  .creds input[type="number"] { flex: 0 0 5.5rem; }
+  .card .note { margin: 0 0 1rem; color: var(--muted); font-size: .8125rem; line-height: 1.6; }
 
   .mint { display: flex; align-items: center; gap: .5rem; margin-bottom: 1.25rem; }
   .mint input {
@@ -220,7 +254,7 @@ ${TOAST_CSS}
 
   /* Monospaced and selectable in one gesture: these are copied out and pasted
      into a chat window, which is the only thing anyone does with them. */
-  .code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .02em; user-select: all; }
+  .code { font-family: var(--mono); letter-spacing: .02em; user-select: all; }
   .code.spent { color: var(--muted); text-decoration: line-through; }
 
   /* A native dialog element rather than a hand-rolled overlay: the browser
@@ -261,6 +295,24 @@ ${THEME_TOGGLE}
   </div>
 
   <h1>管理</h1>
+
+  <section class="card">
+    <h2>接入 <span class="hint">${accessHint}</span></h2>
+    <form method="post" action="/admin/access" class="creds">
+      <label class="check">
+        <input type="checkbox" name="inviteRequired" value="on"${access.inviteRequired ? ' checked' : ''}>
+        注册需要邀请码
+      </label>
+      <label class="check">
+        沙箱上限
+        <input type="number" name="sandboxLimit" min="0" max="10000" step="1" value="${access.sandboxLimit}" aria-label="沙箱上限">
+      </label>
+      <button type="submit" class="save">保存</button>
+    </form>
+    <p class="note">
+      在线沙箱 ${escapeHtml(ceiling)}。上限填 0 表示不限；达到上限后，手上没有沙箱的账号既不能注册也不能登录，已在运行的租户不受影响。
+    </p>
+  </section>
 
   <section class="card">
     <h2>模型密钥 <span class="hint">${credentialHint}</span></h2>

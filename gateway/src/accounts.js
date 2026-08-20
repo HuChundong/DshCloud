@@ -42,6 +42,8 @@ const ADMIN_EMAILS = new Set(
  * @property {number} lastSeenAt - epoch milliseconds of the most recent sign-in.
  * @property {string | undefined} displayName - what the tenant asked to be called; undefined until they have said.
  * @property {string | undefined} avatar - their avatar as a `data:` URI; undefined for the default.
+ * @property {number | undefined} agreedAt - epoch milliseconds of the most recent acceptance of the policies.
+ * @property {string | undefined} agreedPolicy - which version of them was accepted; undefined for an account that registered before there were any.
  */
 
 /**
@@ -109,6 +111,10 @@ function toAccount(row) {
     // needs one reads a single account, where both columns are always present.
     displayName: row.display_name ?? undefined,
     avatar: row.avatar ?? undefined,
+    // Which policy version this account last accepted, for the console to show
+    // and for anyone who has to answer "did they agree, and to what".
+    agreedAt: row.agreed_at?.getTime(),
+    agreedPolicy: row.agreed_policy ?? undefined,
   }
 }
 
@@ -172,15 +178,23 @@ export class Accounts {
    * duplicate, which the unique index would refuse and the caller would see as a
    * failed sign-in.
    *
+   * The agreement is written on every sign-in rather than only on the first,
+   * because the box is ticked on every sign-in: what the column then says is
+   * which version this account last accepted, which is the thing anyone would
+   * want to know. Overwriting the first acceptance loses nothing that was not
+   * already superseded.
+   *
    * @param {string} email - the normalized, verified address.
+   * @param {string} policyVersion - the version of the policies the caller just agreed to.
    * @returns {Promise<Account>} the existing or newly created account.
    */
-  async admit(email) {
+  async admit(email, policyVersion) {
     const { rows } = await this.pool.query(
-      `INSERT INTO accounts (id, email) VALUES ($1, $2)
-       ON CONFLICT (email) DO UPDATE SET last_seen_at = now()
+      `INSERT INTO accounts (id, email, agreed_at, agreed_policy) VALUES ($1, $2, now(), $3)
+       ON CONFLICT (email) DO UPDATE
+         SET last_seen_at = now(), agreed_at = now(), agreed_policy = EXCLUDED.agreed_policy
        RETURNING *`,
-      [randomUUID(), email],
+      [randomUUID(), email, policyVersion],
     )
     return toAccount(rows[0])
   }

@@ -19,7 +19,10 @@
  */
 
 import { hasProfile, normalizeEmail } from './accounts.js'
+import { eraseAccount } from './erase.js'
 import { profilePage } from './profile-page.js'
+import { signedOutCookies } from './tokens.js'
+import { isSecureRequest } from './auth.js'
 
 /**
  * The longest name this will store, in code points rather than UTF-16 units so
@@ -92,6 +95,9 @@ export function isStorableAvatar(raw) {
  * @property {import('./accounts.js').Accounts} accounts - who exists.
  * @property {(req: import('node:http').IncomingMessage, res?: import('node:http').ServerResponse) => Promise<{email: string, id: string, admin: boolean} | undefined>} callerOf - the authenticated caller.
  * @property {(req: import('node:http').IncomingMessage, limit: number) => Promise<Buffer | undefined>} readBody - the capped body reader.
+ * @property {import('./tokens.js').Tokens} tokens - the sessions a deletion revokes.
+ * @property {import('./sandboxes.js').SandboxManager} sandboxes - the machine a deletion releases.
+ * @property {(accountId: string) => Promise<void>} destroyVolume - what takes a deleted tenant's durable state with them.
  * @property {string | undefined} version - the release shown in the footer.
  */
 
@@ -102,12 +108,13 @@ export function isStorableAvatar(raw) {
  * the caller's own, so there is no target to authorize and no way to name
  * somebody else's account.
  *
+ * @param {string} path - the request path, which says whether this is the form or the deletion.
  * @param {import('node:http').IncomingMessage} req - the request.
  * @param {import('node:http').ServerResponse} res - the response.
  * @param {ProfileDeps} deps - the stores this reads and writes.
  * @returns {Promise<void>} resolves once the response is complete.
  */
-export async function handleProfile(req, res, deps) {
+export async function handleProfile(path, req, res, deps) {
   const caller = await deps.callerOf(req, res)
   if (caller === undefined) {
     // The page is worthless without knowing whose profile it is, and a 401 here
@@ -153,6 +160,33 @@ export async function handleProfile(req, res, deps) {
 
   if (req.method === 'GET') {
     page(200)
+    return
+  }
+
+  // Closing the account. Its own path rather than a field on the form above,
+  // because it is not an edit: nothing it does can be undone, and a mistyped
+  // name should not be able to reach it.
+  //
+  // Confirmed by typing the address, which is the same confirmation a browser
+  // with no JavaScript can give and the same one every service that deletes
+  // things irreversibly asks for. The dialog on the page is a courtesy in front
+  // of it; this check is what actually stands between a click and the deletion.
+  if (path === '/profile/delete') {
+    const form = new URLSearchParams((await deps.readBody(req, 4096))?.toString('utf8') ?? '')
+    if (normalizeEmail(form.get('confirm') ?? '') !== account.email) {
+      page(400, { error: '请输入你的完整邮箱地址以确认注销。' })
+      return
+    }
+    await eraseAccount(deps, account)
+    console.log(`gateway: ${account.email} closed their own account`)
+    // Signed out on the way out: the tokens are already revoked, and leaving
+    // the cookies in the browser would mean the next request is authenticated
+    // as an account that no longer exists.
+    res.writeHead(303, {
+      Location: '/login?done=' + encodeURIComponent('账号已注销，相关数据已删除。'),
+      'Set-Cookie': signedOutCookies(isSecureRequest(req)),
+    })
+    res.end()
     return
   }
 

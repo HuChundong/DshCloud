@@ -72,8 +72,20 @@ mint_invite() {  # mint_invite -> one unused code
         ) SELECT code FROM minted"
 }
 
+# The version of the policies the sign-in form is currently asking people to
+# accept, read off the form rather than written down here.
+#
+# Two reasons it is read: bumping the documents must not break this suite, and a
+# form that stopped asking at all would then fail here — a consent checkbox that
+# quietly disappeared is exactly the regression nothing else would catch.
+policy_version() {
+  curl -s "$GATEWAY/login" \
+    | sed -n 's/.*name="agree" value="\([^"]*\)".*/\1/p' \
+    | head -1
+}
+
 login() {  # login <email> <cookiejar> -> status of the sign-in step
-  local code invite status
+  local code invite agree status
   # Minted before the code is asked for, not after. A code only goes out to an
   # address the deployment already knows or a request that carries a usable
   # invite — otherwise the form would be a way to mail anyone. This is the flow
@@ -83,12 +95,13 @@ login() {  # login <email> <cookiejar> -> status of the sign-in step
   # only the server knows which this is, and an invite an existing account does
   # not need is simply not spent.
   invite=$(mint_invite)
+  agree=$(policy_version)
   curl -s -o /dev/null -c "$2" -X POST "$GATEWAY/login" \
-    --data-urlencode "email=$1" --data-urlencode "invite=$invite"
+    --data-urlencode "email=$1" --data-urlencode "invite=$invite" --data-urlencode "agree=$agree"
   code=$(code_for "$1")
   status=$(curl -s -o /dev/null -w '%{http_code}' -b "$2" -c "$2" \
     -X POST "$GATEWAY/login" --data-urlencode "email=$1" --data-urlencode "code=$code" \
-    --data-urlencode "invite=$invite")
+    --data-urlencode "invite=$invite" --data-urlencode "agree=$agree")
 
   # Signing in is not finishing signing up. Until an account has a name, the
   # gateway answers 403 for the shell document and nginx turns that into a
@@ -279,10 +292,12 @@ echo '=== 2. Login ==='
 # A code is the whole credential, so a wrong one has to be worth nothing. The
 # address is one that has a challenge outstanding, because a guess against an
 # address with none is refused for the wrong reason.
-curl -s -o /dev/null -X POST "$GATEWAY/login" --data-urlencode "email=$ALICE"
+curl -s -o /dev/null -X POST "$GATEWAY/login" --data-urlencode "email=$ALICE" --data-urlencode "agree=$(policy_version)"
 check 'a wrong code is rejected' 401 \
   "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$GATEWAY/login" \
-     --data-urlencode "email=$ALICE" --data-urlencode 'code=000000')"
+     --data-urlencode "email=$ALICE" --data-urlencode 'code=000000' --data-urlencode "agree=$(policy_version)")"
+# No consent on this one, deliberately: the address is judged before the
+# checkbox is, so this still fails for the reason it is testing.
 check 'an address that is not one is refused' 400 \
   "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$GATEWAY/login" --data-urlencode 'email=not-an-address')"
 # Registration is gated, and the gate is now in front of the mail rather than
@@ -295,7 +310,7 @@ if [ "$(psql "SELECT current_setting('server_version_num')" > /dev/null 2>&1; ec
   psql "DELETE FROM accounts WHERE email = '$NEWCOMER'" > /dev/null
   psql "DELETE FROM challenges WHERE email = '$NEWCOMER'" > /dev/null
   check 'asking without an invite answers as if it had sent' 200 \
-    "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$GATEWAY/login" --data-urlencode "email=$NEWCOMER")"
+    "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$GATEWAY/login" --data-urlencode "email=$NEWCOMER" --data-urlencode "agree=$(policy_version)")"
   check 'but no code was issued' 0 \
     "$(psql "SELECT count(*) FROM challenges WHERE email = '$NEWCOMER'")"
   check 'and left no account behind' 0 \
@@ -529,7 +544,7 @@ if [ -n "$ADMIN" ]; then
   echo
   echo '=== 15. The console asks before it deletes ==='
   psql "DELETE FROM challenges WHERE email = '$ADMIN'" > /dev/null
-  curl -s -o /dev/null -X POST "$GATEWAY/login" --data-urlencode "email=$ADMIN"
+  curl -s -o /dev/null -X POST "$GATEWAY/login" --data-urlencode "email=$ADMIN" --data-urlencode "agree=$(policy_version)"
   ADMIN_CODE=$(code_for "$ADMIN")
   # A tenant the console can offer to delete. Alice is registered by now and is
   # not an administrator, so her row carries the button this drives.
@@ -558,7 +573,7 @@ fi
 # code is read here and handed in. Asking for it now is also what puts the
 # address into cooldown, so the suite's own first submit lands on the code step
 # without minting a second code.
-curl -s -o /dev/null -X POST "$GATEWAY/login" --data-urlencode "email=$ALICE"
+curl -s -o /dev/null -X POST "$GATEWAY/login" --data-urlencode "email=$ALICE" --data-urlencode "agree=$(policy_version)"
 BROWSER_CODE=$(code_for "$ALICE")
 export BROWSER_CODE BROWSER_EMAIL="$ALICE"
 

@@ -81,14 +81,22 @@ export async function signIn(gateway, email) {
     redirect: 'manual',
   })
 
+  // The policies the form is currently asking people to accept, read off the
+  // form rather than written down here: bumping the documents must not break
+  // the suites, and a form that stopped asking would fail here instead.
+  const agree = (await (await fetch(`${gateway}/login`)).text())
+    .match(/name="agree" value="([^"]*)"/)?.[1]
+  if (agree === undefined) throw new Error('the sign-in form no longer asks for consent')
+
   // A cooldown answer is not a failure here: it means a code is already
   // outstanding for this address, which is the code the next step reads.
-  await fetch(`${gateway}/login`, form({ email }))
+  await fetch(`${gateway}/login`, form({ email, agree }))
 
   const response = await fetch(`${gateway}/login`, form({
     email,
     code: await pendingCode(email),
     invite: await mintInvite(),
+    agree,
   }))
   const setCookie = response.headers.getSetCookie?.() ?? []
   if (setCookie.length === 0) throw new Error(`sign-in failed for ${email}: HTTP ${response.status}`)

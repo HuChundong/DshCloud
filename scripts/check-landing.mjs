@@ -107,7 +107,7 @@ for (const match of source.matchAll(/\s(?:src|href)="([^"]+)"/g)) {
     // Absolute, which is right for the application and wrong for an asset:
     // these are the paths the container answers and Pages does not, so the
     // page may only use them for links a visitor follows out of the page.
-    if (!/^\/(login|logout|profile|admin)(\/|$)/.test(target)) {
+    if (!/^\/(login|logout|profile|admin|policy)(\/|$)/.test(target)) {
       problems.push(`${target}: absolute, but not one of the application's own paths`)
     }
     continue
@@ -126,7 +126,7 @@ const checkoutMark = '../../gateway/assets/mark.svg'
 const imageFallback = `onerror="this.onerror=null;this.src='${checkoutMark}'"`
 const iconFallback = `onerror="this.onerror=null;this.href='${checkoutMark}'"`
 const imageFallbacks = source.split(imageFallback).length - 1
-if (imageFallbacks !== 3) problems.push(`mark.svg: expected 3 checkout image fallbacks, found ${imageFallbacks}`)
+if (imageFallbacks !== 4) problems.push(`mark.svg: expected 4 checkout image fallbacks, found ${imageFallbacks}`)
 if (!source.includes(iconFallback)) problems.push('mark.svg: the favicon has no checkout fallback')
 if (!existsSync(resolve(join(root, 'web/landing'), checkoutMark))) {
   problems.push(`${checkoutMark}: checkout fallback resolves to nothing`)
@@ -168,6 +168,7 @@ for (const line of [
   'COPY web/landing /usr/share/nginx/landing',
   'COPY docs/assets /usr/share/nginx/landing/assets',
   'COPY gateway/assets/mark.svg /usr/share/nginx/landing/mark.svg',
+  'COPY gateway/assets/wechat-qr.webp /usr/share/nginx/landing/wechat-qr.webp',
 ]) {
   if (!dockerfile.includes(line)) problems.push(`Dockerfile: missing \`${line}\``)
 }

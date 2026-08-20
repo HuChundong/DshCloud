@@ -24,7 +24,7 @@
 # DSH_VERSION` to bring this default into its own scope — which is the only way
 # to read it after a FROM, and which is what was missing when the footer went
 # blank.
-ARG DSH_VERSION=0.1.0-rc.7
+ARG DSH_VERSION=0.1.0-rc.8
 
 # ------------------------------------------------------------------- deps ----
 FROM node:24-slim AS deps
@@ -52,9 +52,15 @@ WORKDIR /app
 # `dsh-web-frontend` is named outright. cordis resolves plugins by package name
 # at load time, so which packages a composition needs is not derivable from the
 # dependency graph — and the frontend is not reachable from `dsh` through it.
+#
+# Pinned to the same version, which it was not: unpinned, npm resolves the
+# `latest` tag, and upstream's `latest` for this package points at 0.0.1-rc.5
+# while the harness is on 0.1.0-rc.8 — a shell four releases behind the backend
+# it renders, chosen silently at build time. The two halves ship as one release
+# and are installed as one.
 RUN npm install --omit=dev --no-audit --no-fund \
       "@deepseek-ai/dsh@${DSH_VERSION}" \
-      "@deepseek-ai/dsh-web-frontend"
+      "@deepseek-ai/dsh-web-frontend@${DSH_VERSION}"
 
 
 # Declared before any FROM that interpolates it: `FROM envd-${TARGETARCH}`
@@ -528,6 +534,10 @@ COPY docs/assets /usr/share/nginx/landing/assets
 # file the gateway serves rather than duplicated into `web/`, so a replacement
 # lands on the front door and the sign-in page at the same time.
 COPY gateway/assets/mark.svg /usr/share/nginx/landing/mark.svg
+# The deployment's WeChat code, for the same reason and from the same place: the
+# sign-in page's footer and the landing page's footer show one account, and one
+# file is how they cannot come to show two.
+COPY gateway/assets/wechat-qr.webp /usr/share/nginx/landing/wechat-qr.webp
 COPY web/nginx.conf /etc/nginx/conf.d/default.conf
 # Not under conf.d: everything matching conf.d/*.conf is included at the http
 # level, and this is a fragment of a server block.

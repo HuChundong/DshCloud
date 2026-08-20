@@ -19,7 +19,18 @@
  * of a type this deployment allows.
  */
 
-import { PALETTE_CSS, THEME_TOGGLE, TOAST_CSS, escapeHtml, toast } from './page-chrome.js'
+import { policyLinks } from './policy-page.js'
+import {
+  FONT_PRELOAD,
+  GROUND_CSS,
+  GROUND_HTML,
+  GROUND_SCRIPT,
+  PALETTE_CSS,
+  THEME_TOGGLE,
+  TOAST_CSS,
+  escapeHtml,
+  toast,
+} from './page-chrome.js'
 
 /** The cropping viewport, and the square that comes out of it. Both in CSS pixels. */
 const VIEW_PX = 240
@@ -58,25 +69,55 @@ export function profilePage(state) {
   // between them and CSS is a better place to say what each looks like.
   const mode = avatar === undefined ? 'letter' : 'stored'
 
+  // Closing the account, and why it is not offered on the way in.
+  //
+  // An account being asked for a name for the first time has nothing to delete
+  // yet and is one form away from the application; putting an irreversible
+  // action beside the button that admits them would be the worst place this
+  // page could put one. Someone who wants out before answering can simply never
+  // come back — and can close the account from here once they have.
+  //
+  // A separate form posting to its own path, with the address typed out. The
+  // dialog below asks first when there is JavaScript; this field is what the
+  // server actually requires, so the page still works without it.
+  const closing = first === true ? '' : `<section class="closing">
+    <h2>注销账号</h2>
+    <p>
+      注销会立即删除你的账号、登录会话、沙箱和工作区文件。本部署不做备份，因此这个操作
+      <b>无法撤销</b>，删除的内容也无法找回。详见 <a href="/policy/privacy" target="_blank" rel="noopener">《数据处理说明》</a>。
+    </p>
+    <form method="post" action="/profile/delete" id="close-form" data-confirm="真的要注销吗？账号、沙箱和工作区文件会被立即删除，且无法恢复。">
+      <div class="field">
+        <input name="confirm" aria-label="输入你的邮箱以确认" placeholder="输入 ${escapeHtml(email)} 以确认"
+               autocomplete="off" spellcheck="false" required>
+      </div>
+      <button type="submit" class="danger">注销账号</button>
+    </form>
+  </section>`
+
   return `<!doctype html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${first === true ? '完善资料' : '个人资料'} · DeepSeek Harness</title>
+<meta name="color-scheme" content="light dark">
 <link rel="icon" href="/favicon.svg">
+${FONT_PRELOAD}
 <style>
 ${PALETTE_CSS}
+${GROUND_CSS}
   * { box-sizing: border-box; }
   html, body { height: 100%; }
   body {
     margin: 0;
     display: flex;
     flex-direction: column;
-    background: var(--bg);
     color: var(--fg);
-    font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "PingFang SC",
-          "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
   }
   main {
     flex: 1;
@@ -84,17 +125,34 @@ ${PALETTE_CSS}
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 2rem 1.25rem;
+    /* Clears the theme button in the corner, as on the sign-in page. */
+    padding: 5rem 1.25rem 2rem;
   }
 
-  .brand { display: flex; align-items: center; gap: .5rem; margin-bottom: 2rem; }
-  .brand img { width: 34px; height: 34px; display: block; }
-  .brand .word { font-size: 1.75rem; font-weight: 600; letter-spacing: -.02em; color: var(--ink); }
+  .brand { display: flex; align-items: center; gap: .5rem; margin-bottom: 1.75rem; }
+  .brand img { width: 28px; height: 28px; display: block; }
+  .brand .word { font-family: var(--display); font-size: 1.5rem; font-weight: 600; letter-spacing: -.03em; color: var(--fg); }
 
-  form { width: 336px; }
+  /* The sign-in page's card, holding the one column this page has: the two are
+     met one after the other and a form that changed its ground between them
+     would read as a different site. */
+  /* The profile form by id, not every form on the page: the account-closing
+     form below is a second one, and dressing it as a card too put a card
+     inside a card. */
+  #form {
+    /* 336 of column plus the padding on either side of it: the fields, the
+       cropping stage and the button are all sized against that column, and
+       taking the card's padding out of it would narrow every one of them. */
+    width: min(400px, 100%);
+    padding: clamp(22px, 4vw, 32px);
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius-panel);
+    background: var(--panel);
+    box-shadow: var(--lift);
+  }
 
-  h1 { margin: 0 0 .35rem; font-size: 1.0625rem; font-weight: 600; text-align: center; }
-  .lede { margin: 0 0 1.75rem; color: var(--muted); font-size: .8125rem; text-align: center; }
+  h1 { font-family: var(--display); margin: 0 0 .3rem; font-size: 1.25rem; font-weight: 600; letter-spacing: -.03em; text-align: center; }
+  .lede { margin: 0 0 1.5rem; color: var(--muted); font-size: .8125rem; text-align: center; line-height: 1.55; }
 
   /* Round, because the application renders it round: a square preview would be
      a promise the sidebar does not keep. Overflow is what makes the circle out
@@ -106,7 +164,10 @@ ${PALETTE_CSS}
     margin: 0 auto 1rem;
     border-radius: 50%;
     overflow: hidden;
-    background: var(--panel);
+    /* A well in the card rather than the card's own colour: --panel is what
+       the card is made of now, and a circle painted in it would only be its
+       hairline ring. */
+    background: var(--surface);
     box-shadow: 0 0 0 1px var(--line);
   }
   .stage canvas, .stage .stored { position: absolute; inset: 0; width: 100%; height: 100%; display: none; }
@@ -159,14 +220,15 @@ ${PALETTE_CSS}
     display: flex;
     align-items: center;
     height: 3rem;
-    padding: 0 1.25rem;
-    margin-bottom: 1rem;
+    padding: 0 1rem;
+    margin-bottom: .625rem;
     border: 1px solid var(--line);
-    border-radius: 999px;
+    border-radius: var(--radius-field);
     background: var(--bg);
-    transition: border-color .15s, box-shadow .15s;
+    transition: border-color .16s, box-shadow .16s;
   }
-  .field:focus-within { border-color: var(--ink); box-shadow: 0 0 0 3px var(--ring); }
+  .field:hover { border-color: var(--line-strong); }
+  .field:focus-within { border-color: var(--line-strong); box-shadow: 0 0 0 4px var(--ring); }
   .field input {
     flex: 1;
     min-width: 0;
@@ -176,23 +238,26 @@ ${PALETTE_CSS}
     font: inherit;
     color: var(--fg);
   }
-  .field input::placeholder { color: var(--muted); }
-  .field.readonly input { color: var(--muted); background: var(--panel); cursor: default; }
-  ::selection { background: rgb(10 10 10 / 14%); color: var(--fg); }
+  .field input::placeholder { color: var(--faint); }
+  /* Inset against the card, and told apart from the editable field above it by
+     being the one thing on the form that is not --bg. */
+  .field.readonly { background: var(--surface); border-color: var(--line-soft); }
+  .field.readonly:hover { border-color: var(--line-soft); }
+  .field.readonly input { color: var(--muted); background: transparent; cursor: default; }
 
   button[type="submit"] {
     width: 100%;
     height: 3rem;
     border: 0;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     background: var(--ink);
     color: var(--on-ink);
     font: inherit;
-    font-weight: 550;
+    font-weight: 500;
     cursor: pointer;
-    transition: opacity .15s;
+    transition: background .16s;
   }
-  button[type="submit"]:hover { opacity: .85; }
+  button[type="submit"]:hover { background: var(--ink-hover); }
 
   .alt {
     display: flex;
@@ -208,12 +273,87 @@ ${PALETTE_CSS}
 
 ${TOAST_CSS}
 
-  footer { padding: 1.5rem; text-align: center; color: var(--muted); font-size: .8125rem; }
+  /* Outside the form's card and quieter than it: this is not a second thing to
+     fill in on the way past, it is where you come back to when you want out.
+     The one loud element is the button, and it is loud in the danger colour
+     rather than in the ink one, so it cannot be mistaken for "save". */
+  .closing {
+    width: min(400px, 100%);
+    margin-top: 1.25rem;
+    padding: clamp(20px, 4vw, 28px);
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius-panel);
+    background: var(--panel);
+  }
+  .closing h2 { font-family: var(--display); margin: 0 0 .4rem; font-size: .9375rem; font-weight: 600; letter-spacing: -.02em; }
+  .closing p { margin: 0 0 1rem; color: var(--muted); font-size: .75rem; line-height: 1.7; }
+  .closing b { color: var(--fg); font-weight: 500; }
+  .closing a { color: var(--muted); text-decoration: none; border-bottom: 1px solid var(--line); }
+  .closing a:hover { color: var(--fg); border-color: var(--line-strong); }
+  .closing .field { margin-bottom: .625rem; }
+  .closing .field input { font-size: .8125rem; }
+  button.danger {
+    width: 100%;
+    height: 2.5rem;
+    border: 1px solid color-mix(in srgb, var(--danger) 40%, var(--line));
+    border-radius: var(--radius-pill);
+    background: transparent;
+    color: var(--danger);
+    font: inherit;
+    font-size: .8125rem;
+    cursor: pointer;
+    transition: background .16s, border-color .16s;
+  }
+  button.danger:hover { border-color: var(--danger); background: color-mix(in srgb, var(--danger) 8%, transparent); }
+
+  /* A native dialog rather than a hand-rolled overlay, as the console uses:
+     the browser owns the focus trap, the escape key and the top layer. */
+  dialog {
+    max-width: min(90vw, 24rem);
+    padding: 1.25rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-panel);
+    background: var(--panel);
+    color: var(--fg);
+    box-shadow: var(--lift);
+  }
+  dialog::backdrop { background: rgb(0 0 0 / 35%); }
+  dialog h3 { margin: 0 0 .5rem; font-size: 1rem; font-weight: 600; }
+  dialog p { margin: 0 0 1.25rem; color: var(--muted); font-size: .8125rem; line-height: 1.6; }
+  dialog .buttons { display: flex; justify-content: flex-end; gap: .5rem; }
+  dialog button {
+    padding: .45rem .9rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-pill);
+    background: var(--bg);
+    color: var(--fg);
+    font: inherit;
+    font-size: .8125rem;
+    cursor: pointer;
+  }
+  dialog button.go { border-color: var(--danger); background: var(--danger); color: #fff; }
+
+  footer {
+    display: grid;
+    justify-items: center;
+    gap: .75rem;
+    padding: 1.5rem 1.25rem 2.5rem;
+    text-align: center;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--faint);
+  }
+  footer p { margin: 0; }
+  .docs { display: flex; flex-wrap: wrap; justify-content: center; font-family: var(--sans); font-size: .75rem; }
+  .docs a { color: var(--muted); text-decoration: none; }
+  .docs a:hover { color: var(--fg); }
 </style>
 </head>
 <body>
 ${toast(error, undefined)}
 ${THEME_TOGGLE}
+${GROUND_HTML}
+<div class="glow" aria-hidden="true"></div>
 <main>
   <div class="brand">
     <img src="/login-assets/mark.svg" alt="">
@@ -254,8 +394,13 @@ ${THEME_TOGGLE}
     <button type="submit">${first === true ? '开始使用' : '保存'}</button>
     ${first === true ? '' : '<div class="alt"><a href="/">返回</a></div>'}
   </form>
+
+  ${closing}
 </main>
-<footer>DeepSeek Harness · 自建部署${release}</footer>
+<footer>
+  <nav class="docs">${policyLinks({ separator: '' })}</nav>
+  <p>DeepSeek Harness · 自建部署${release}</p>
+</footer>
 <script>
   (function () {
     var VIEW = ${VIEW_PX}
@@ -424,6 +569,49 @@ ${THEME_TOGGLE}
     })
   })()
 </script>
+
+<dialog id="confirm">
+  <h3>注销账号</h3>
+  <p id="confirm-text"></p>
+  <div class="buttons">
+    <button type="button" value="cancel">取消</button>
+    <button type="button" class="go" value="go">确认注销</button>
+  </div>
+</dialog>
+<script>
+  // Progressive, like the console's: with scripting on, the irreversible form
+  // asks once more before it posts; with it off, the typed address is the
+  // confirmation and the server is the one enforcing it either way.
+  (function () {
+    var form = document.getElementById('close-form')
+    var dialog = document.getElementById('confirm')
+    if (!form || !dialog) return
+    var text = document.getElementById('confirm-text')
+
+    form.addEventListener('submit', function (event) {
+      if (form.dataset.confirmed === '1') return
+      event.preventDefault()
+      // The browser's own validation first: asking someone to confirm a
+      // deletion and then telling them the field was empty is two dialogs for
+      // one mistake.
+      if (!form.reportValidity()) return
+      text.textContent = form.dataset.confirm
+      dialog.showModal()
+    })
+
+    dialog.addEventListener('click', function (event) {
+      var value = event.target.value
+      if (value === undefined) return
+      dialog.close()
+      if (value !== 'go') return
+      // Submitting in script does not fire the event above, and the flag is
+      // there in case a browser ever decides it should.
+      form.dataset.confirmed = '1'
+      form.submit()
+    })
+  })()
+</script>
+${GROUND_SCRIPT}
 </body>
 </html>
 `
