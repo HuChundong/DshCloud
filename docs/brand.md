@@ -77,6 +77,23 @@ in `web/landing/styles.css` for the front door, and `BrandName` in
 tokens, since they are this deployment's, so it carries the two colours itself
 and turns them over on `body[data-ds-dark-theme]`.
 
+## The application's neutrals
+
+The shell ships a blue-leaning grey ramp — every step has more blue in it than
+red, by two parts at the light end and fifteen in the middle. The front door
+does not: its paper is a warm off-white. Side by side the two read as two
+products, so `packages/dsh-brand/client.js` replaces the ramp with a warm one.
+
+What changes is temperature and nothing else. Each step keeps the luminance it
+had, computed rather than judged, so every contrast ratio in the interface is
+the one upstream chose — sampled pairs move by less than a hundredth. Two steps
+are pinned instead of converted: the lightest is white, and the darkest is the
+brand's ink `#101113`, which is what the front door sets its text in.
+
+The ramp is overridden, not the seventy-eight aliases built on it: those are
+`var()` references and follow by themselves. The accent and the state colours
+are not neutrals and are untouched — a running sandbox is the same green.
+
 ## Filled mascot and scenes
 
 Filled artwork is a separate illustration family, not a rasterisation of the

@@ -90,6 +90,53 @@ window.__ModuleLoader__.load({
      * @returns {object} the mark.
      */
     /**
+     * The deployment's own neutrals, in place of the shell's.
+     *
+     * The shell's greys lean blue — every step of its ramp has more blue in it
+     * than red, by two parts at the light end and fifteen in the middle. The
+     * front door's do not: its paper is a warm off-white, and the two surfaces
+     * sitting side by side did not look like one product.
+     *
+     * What is changed is TEMPERATURE and nothing else. Each step keeps the
+     * luminance it had — computed, not eyeballed — so every contrast ratio in
+     * the interface is the one upstream chose, and only the cast is different.
+     * Two are pinned rather than converted: the lightest is the page's own
+     * white, and the darkest is the brand's ink, which is also the colour the
+     * front door sets its text in.
+     *
+     * The ramp is what is overridden, not the seventy-eight aliases built on
+     * it: those are `var()` references, so they follow. The accent and the
+     * state colours are not neutrals and are left exactly alone — a running
+     * sandbox is the same green it was.
+     *
+     * `html body` because the shell defines this on `body`, and a plugin that
+     * loads first would otherwise be overwritten by the one that owns it.
+     */
+    const PALETTE_CSS = `
+      html body {
+        --dsw-static-neutral-bluish-00: #ffffff;
+        --dsw-static-neutral-bluish-50: #fcfaf8;
+        --dsw-static-neutral-bluish-60: #f8f6f4;
+        --dsw-static-neutral-bluish-75: #f5f3f1;
+        --dsw-static-neutral-bluish-100: #f0eeec;
+        --dsw-static-neutral-bluish-150: #eeecea;
+        --dsw-static-neutral-bluish-200: #e7e5e3;
+        --dsw-static-neutral-bluish-300: #d4d2d0;
+        --dsw-static-neutral-bluish-400: #b2b1b0;
+        --dsw-static-neutral-bluish-500: #9d9c9b;
+        --dsw-static-neutral-bluish-600: #868584;
+        --dsw-static-neutral-bluish-700: #656565;
+        --dsw-static-neutral-bluish-750: #454545;
+        --dsw-static-neutral-bluish-800: #363636;
+        --dsw-static-neutral-bluish-850: #2c2c2c;
+        --dsw-static-neutral-bluish-875: #232323;
+        --dsw-static-neutral-bluish-900: #1b1b1b;
+        --dsw-static-neutral-bluish-950: #151515;
+        --dsw-static-neutral-bluish-1000: #101113;
+      }
+    `
+
+    /**
      * The rule that decides which way the mark is drawn.
      *
      * The mark is one ink-black line drawing embedded as an img, so it
@@ -178,10 +225,10 @@ window.__ModuleLoader__.load({
         ctx.effect(() => {
           const style = document.createElement('style')
           style.setAttribute('data-dsh-brand-style', '')
-          style.textContent = MARK_CSS
+          style.textContent = `${PALETTE_CSS}\n${MARK_CSS}`
           document.head.appendChild(style)
           return () => { style.remove() }
-        }, 'brand: the mark reads on both grounds')
+        }, 'brand: the palette, and a mark that reads on both grounds')
 
         // One declaration-aware registration set, nested the way the shipped
         // package nests it: the rows may activate in either order relative to
