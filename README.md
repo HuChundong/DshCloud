@@ -192,15 +192,15 @@ docker compose -f compose.yml -f compose.cube.yml --profile build build
 
 # The sandbox image reaches CubeSandbox through a registry it can pull from,
 # not through the local Docker daemon.
-docker tag dsh-sandbox:latest 127.0.0.1:5000/dsh-sandbox:$TAG
-docker push 127.0.0.1:5000/dsh-sandbox:$TAG
+docker tag hamsterhq-sandbox:latest 127.0.0.1:5000/hamsterhq-sandbox:$TAG
+docker push 127.0.0.1:5000/hamsterhq-sandbox:$TAG
 
 # A new template each time, not an update to the old one: a template is a
 # snapshot taken when it is created, and pointing an existing one at a new
 # image leaves every sandbox restoring the snapshot it already had. Set
 # CUBE_TEMPLATE_ID to the alias.
 cubemastercli template create-from-image \
-  --image 127.0.0.1:5000/dsh-sandbox:$TAG --alias dsh-sandbox-$TAG \
+  --image 127.0.0.1:5000/hamsterhq-sandbox:$TAG --alias hamsterhq-sandbox-$TAG \
   --writable-layer-size 20Gi --cpu 2000 --memory 4000
 
 docker compose -f compose.yml -f compose.cube.yml up -d

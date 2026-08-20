@@ -118,7 +118,7 @@ login() {  # login <email> <cookiejar> -> status of the sign-in step
   printf '%s' "$status"
 }
 
-DSH_LABEL='dsh.gateway.sandbox'
+DSH_LABEL='hamsterhq.sandbox.owner'
 
 # The cube helper runs in the gateway container: it is the only place with the
 # CubeSandbox client, the credentials for both of Cube's planes, and a route to

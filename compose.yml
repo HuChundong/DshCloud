@@ -8,7 +8,7 @@
 # sandboxes are reached only by the tunnels they dial, so neither is addressable
 # from the host — the same reachability the real deployment will have.
 
-name: dsh-multitenant
+name: hamsterhq
 
 services:
   web:
@@ -29,7 +29,7 @@ services:
         # Valueless on purpose: unset, the Dockerfile's own full list stands.
         AGENT_PYTHON_PACKAGES:
         TZ: ${DEPLOYMENT_TZ:-UTC}
-    image: dsh-web:latest
+    image: hamsterhq-web:latest
     # The user-facing entry: static bytes are answered here from disk, and only
     # the session-bearing surface is proxied to the gateway.
     #
@@ -57,7 +57,7 @@ services:
       # here to replace it.
       - web-tls:/etc/nginx/tls
     depends_on: [gateway]
-    networks: [dsh-net]
+    networks: [hamsterhq-net]
     restart: unless-stopped
 
   # The deployment's one store: accounts, invites, refresh tokens, and the
@@ -85,7 +85,7 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
-    networks: [dsh-net]
+    networks: [hamsterhq-net]
     restart: unless-stopped
 
   gateway:
@@ -96,7 +96,7 @@ services:
       args:
         DSH_VERSION:
         NPM_REGISTRY: ${NPM_REGISTRY:-}
-    image: dsh-gateway:latest
+    image: hamsterhq-gateway:latest
     depends_on:
       postgres:
         condition: service_healthy
@@ -108,11 +108,11 @@ services:
       # lists run on the deployment's own time.
       TZ: ${DEPLOYMENT_TZ:-UTC}
       SANDBOX_RUNTIME: ${SANDBOX_RUNTIME:-docker}
-      SANDBOX_IMAGE: dsh-sandbox:latest
-      SANDBOX_NETWORK: ${COMPOSE_NETWORK:-dsh-multitenant_dsh-net}
+      SANDBOX_IMAGE: hamsterhq-sandbox:latest
+      SANDBOX_NETWORK: ${COMPOSE_NETWORK:-hamsterhq_hamsterhq-net}
       CUBE_API_URL: ${CUBE_API_URL:-http://127.0.0.1:3000}
       CUBE_API_KEY: ${CUBE_API_KEY:-e2b_000000}
-      CUBE_TEMPLATE_ID: ${CUBE_TEMPLATE_ID:-dsh-sandbox}
+      CUBE_TEMPLATE_ID: ${CUBE_TEMPLATE_ID:-hamsterhq-sandbox}
       GATEWAY_TUNNEL_URL: ws://gateway:8080/_tunnel
       # Signs the access tokens. Changing it invalidates every one in
       # circulation, which signs everyone out until their browser refreshes.
@@ -158,7 +158,7 @@ services:
       # no tenant code and does nothing an authenticated request can steer
       # beyond starting that tenant's own sandbox.
       - /var/run/docker.sock:/var/run/docker.sock
-    networks: [dsh-net]
+    networks: [hamsterhq-net]
     restart: unless-stopped
 
   # Built, never run by compose: the gateway starts one of these per tenant
@@ -176,14 +176,14 @@ services:
         PIP_INDEX_URL: ${PIP_INDEX_URL:-}
         AGENT_PYTHON_PACKAGES:
         TZ: ${DEPLOYMENT_TZ:-UTC}
-    image: dsh-sandbox:latest
+    image: hamsterhq-sandbox:latest
     profiles: [build]
-    networks: [dsh-net]
+    networks: [hamsterhq-net]
 
 volumes:
   postgres-data:
   web-tls:
 
 networks:
-  dsh-net:
-    name: ${COMPOSE_NETWORK:-dsh-multitenant_dsh-net}
+  hamsterhq-net:
+    name: ${COMPOSE_NETWORK:-hamsterhq_hamsterhq-net}

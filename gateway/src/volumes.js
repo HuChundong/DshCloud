@@ -57,7 +57,7 @@ export function volumesEnabled() {
  * @returns {string} the volume id.
  */
 function volumeIdFor(accountId) {
-  return `dsh-${accountId}`
+  return `hamsterhq-${accountId}`
 }
 
 /**

@@ -163,13 +163,13 @@ README 自己的那批截图，这样两边不会展示成不同的画面。
 docker compose -f compose.yml -f compose.cube.yml --profile build build
 
 # 沙箱镜像要通过 CubeSandbox 拉得到的 registry 抵达它，而不是本地 Docker 守护进程。
-docker tag dsh-sandbox:latest 127.0.0.1:5000/dsh-sandbox:$TAG
-docker push 127.0.0.1:5000/dsh-sandbox:$TAG
+docker tag hamsterhq-sandbox:latest 127.0.0.1:5000/hamsterhq-sandbox:$TAG
+docker push 127.0.0.1:5000/hamsterhq-sandbox:$TAG
 
 # 每次都建新模板，而不是更新旧的：模板是创建那一刻拍下的快照，把已有模板指向新镜像，
 # 每个沙箱还原的仍是它原来那份快照。把 CUBE_TEMPLATE_ID 指向别名。
 cubemastercli template create-from-image \
-  --image 127.0.0.1:5000/dsh-sandbox:$TAG --alias dsh-sandbox-$TAG \
+  --image 127.0.0.1:5000/hamsterhq-sandbox:$TAG --alias hamsterhq-sandbox-$TAG \
   --writable-layer-size 20Gi --cpu 2000 --memory 4000
 
 docker compose -f compose.yml -f compose.cube.yml up -d

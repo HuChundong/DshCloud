@@ -19,7 +19,7 @@ import { startBackend } from './envd.js'
 import { volumeMountsFor } from './volumes.js'
 
 /** Marker naming the owning tenant, carried as a Docker label or CubeSandbox metadata. */
-export const OWNER_KEY = 'dsh.gateway.sandbox'
+export const OWNER_KEY = 'hamsterhq.sandbox.owner'
 
 /**
  * One sandbox runtime.
@@ -78,9 +78,9 @@ const docker = {
     // has to be an address: on a user-defined network Docker resolves a
     // container by name, and `envd.js` dials it by that name. Docker accepts a
     // name anywhere it accepts an id, so nothing else here has to care.
-    const name = `dsh-sandbox-${env.SANDBOX_ID.slice(0, 12)}`
+    const name = `hamsterhq-sandbox-${env.SANDBOX_ID.slice(0, 12)}`
     await createContainer(name, {
-      Image: process.env.SANDBOX_IMAGE ?? 'dsh-sandbox:latest',
+      Image: process.env.SANDBOX_IMAGE ?? 'hamsterhq-sandbox:latest',
       Labels: { [OWNER_KEY]: owner.username },
       Env: Object.entries(env).map(([key, value]) => `${key}=${value}`),
       // The image's own entrypoint, kept rather than overridden. It starts
@@ -98,7 +98,7 @@ const docker = {
       // one definition of how a sandbox starts.
       Cmd: ['/app/sandbox/entrypoint.sh'],
       HostConfig: {
-        NetworkMode: process.env.SANDBOX_NETWORK ?? 'dsh-net',
+        NetworkMode: process.env.SANDBOX_NETWORK ?? 'hamsterhq-net',
         // A tenant's agent runs arbitrary commands here; these bounds keep one
         // runaway session from starving the host and its neighbours.
         Memory: Number(process.env.SANDBOX_MEMORY_BYTES ?? 2 * 1024 * 1024 * 1024),

@@ -71,7 +71,7 @@ const RUNTIME = process.env.SANDBOX_RUNTIME === 'cube' ? 'cube' : 'docker'
  * and never the gateway's `sandboxId`. The two are not the same thing and only
  * one of them is an address:
  *
- *   docker   handle = `dsh-sandbox-<first 12 of SANDBOX_ID>`, the container name
+ *   docker   handle = `hamsterhq-sandbox-<first 12 of SANDBOX_ID>`, the container name
  *   cube     handle = CubeSandbox's own sandbox id, which is what CubeProxy
  *            routes its `<port>-<id>` virtual host by
  *

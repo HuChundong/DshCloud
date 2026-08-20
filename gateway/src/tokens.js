@@ -44,9 +44,15 @@ export const ACCESS_COOKIE = 'dsh_gw_access'
 /** Cookie carrying the refresh token. */
 export const REFRESH_COOKIE = 'dsh_gw_refresh'
 
-/** Issuer and audience claims, so a token minted for something else is refused. */
-const ISSUER = 'dsh-gateway'
-const AUDIENCE = 'dsh-web'
+/**
+ * Issuer and audience claims, so a token minted for something else is refused.
+ *
+ * Renaming these invalidates every token already issued — which is the point of
+ * having them, and why they are changed with the deployment's name rather than
+ * left behind it. Everyone signs in again once.
+ */
+const ISSUER = 'hamsterhq-gateway'
+const AUDIENCE = 'hamsterhq-web'
 
 export class Tokens {
   /**

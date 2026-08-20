@@ -25,7 +25,7 @@ services:
       SANDBOX_RUNTIME: cube
       CUBE_API_URL: ${CUBE_API_URL:-http://host.docker.internal:3000}
       CUBE_API_KEY: ${CUBE_API_KEY:-e2b_000000}
-      CUBE_TEMPLATE_ID: ${CUBE_TEMPLATE_ID:-dsh-sandbox}
+      CUBE_TEMPLATE_ID: ${CUBE_TEMPLATE_ID:-hamsterhq-sandbox}
       # Starting a tenant's backend is a call *into* their sandbox, which is
       # CubeProxy's job rather than the API's: it routes on a virtual
       # `<port>-<sandboxID>.<domain>` hostname that is not in DNS here, so the
