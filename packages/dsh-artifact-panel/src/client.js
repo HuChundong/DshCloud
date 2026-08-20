@@ -1234,6 +1234,14 @@ window.__ModuleLoader__.load({
       }
       .${NS}-dialog-button[data-primary][data-danger] {
         background: var(--dsw-alias-state-error-primary);
+        /* White in BOTH themes, stated rather than inherited.
+           `label-primary-foreground` is not "white": it is whatever contrasts
+           with the PRIMARY fill, and that fill flips with the theme — so it is
+           white in one and black in the other. The error fill does NOT flip;
+           it is red either way. Inheriting the one from the other put black
+           text on a red button, in whichever theme the primary button is
+           light. */
+        color: var(--dsw-static-neutral-bluish-00, #fff);
       }
       .${NS}-dialog-button:disabled {
         opacity: .55;
