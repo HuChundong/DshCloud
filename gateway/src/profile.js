@@ -80,13 +80,22 @@ export function cleanName(raw) {
 }
 
 /**
- * Whether a submitted avatar is one this will store.
+ * What is wrong with a submitted avatar, if anything.
+ *
+ * Two answers, not one. These used to be a single boolean, and both failures
+ * came back as `avatar.format` — so an ordinary photograph that was merely too
+ * large was reported as being the wrong KIND of file, which is advice nobody
+ * can act on. They are different problems with different remedies: one is
+ * "choose a different file", the other is "this one needs to be smaller", and
+ * only the sender can tell them apart.
  *
  * @param {string} raw - the `data:` URI as submitted.
- * @returns {boolean} whether it is storable.
+ * @returns {string|undefined} the code for what is wrong, or nothing.
  */
-export function isStorableAvatar(raw) {
-  return raw.length <= MAX_AVATAR_CHARS && AVATAR_PATTERN.test(raw)
+export function avatarProblem(raw) {
+  if (!AVATAR_PATTERN.test(raw)) return 'avatar.format'
+  if (raw.length > MAX_AVATAR_CHARS) return 'avatar.large'
+  return undefined
 }
 
 /**
@@ -238,9 +247,10 @@ export async function handleProfile(path, req, res, deps) {
   if (form.get('avatar_clear') === '1') {
     avatar = undefined
   } else if (submitted !== '') {
-    if (!isStorableAvatar(submitted)) {
-      if (wantsJson) { answer(400, { error: 'avatar.format' }); return }
-      page(400, { error: 'avatar.format', name })
+    const problem = avatarProblem(submitted)
+    if (problem !== undefined) {
+      if (wantsJson) { answer(400, { error: problem }); return }
+      page(400, { error: problem, name })
       return
     }
     avatar = submitted

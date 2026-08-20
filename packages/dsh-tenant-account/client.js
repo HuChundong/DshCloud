@@ -237,6 +237,7 @@ window.__ModuleLoader__.load({
         'profile.name': '昵称',
         'profile.edit': '修改',
         'profile.unreadable': '这张图片读不出来，请换一张。',
+        'profile.stubborn': '这张图片压不到限制以内，请换一张。',
         'profile.failed': '保存失败，请稍后再试。',
         'profile.failed.status': '保存失败（{status}）',
 
@@ -260,6 +261,8 @@ window.__ModuleLoader__.load({
         'error.secrets.value_too_long': '值过长。',
         'error.secret.name.invalid': '名称只能由字母、数字和下划线组成，且不能以数字开头。',
         'error.secret.name.reserved': '{name} 由部署本身设置，不能覆盖。',
+        'error.avatar.format': '头像格式不受支持，请重新选择图片。',
+        'error.avatar.large': '头像太大了，请换一张。',
       },
       en: {
         plan: 'Free plan',
@@ -285,6 +288,7 @@ window.__ModuleLoader__.load({
         'profile.name': 'Name',
         'profile.edit': 'Edit',
         'profile.unreadable': 'That picture cannot be read. Choose another.',
+        'profile.stubborn': 'That picture will not compress under the limit. Choose another.',
         'profile.failed': 'Could not save. Try again shortly.',
         'profile.failed.status': 'Could not save ({status})',
 
@@ -306,6 +310,8 @@ window.__ModuleLoader__.load({
         'error.secrets.value_too_long': 'That value is too long.',
         'error.secret.name.invalid': 'A name may hold only letters, digits and underscores, and may not begin with a digit.',
         'error.secret.name.reserved': '{name} is set by the deployment itself and cannot be overridden.',
+        'error.avatar.format': 'That image format is not supported. Choose another picture.',
+        'error.avatar.large': 'That picture is too large. Choose another.',
       },
     }
 
@@ -734,6 +740,15 @@ window.__ModuleLoader__.load({
     const AVATAR_EDGE = 256
 
     /**
+     * The longest `data:` URI the gateway will store.
+     *
+     * `MAX_AVATAR_CHARS` in `gateway/src/profile.js`. Aimed under rather than
+     * discovered by being refused: the refusal costs a round trip and arrives
+     * as a sentence about a picture the person has already chosen.
+     */
+    const AVATAR_LIMIT = 64 * 1024
+
+    /**
      * Turn a chosen image into what the gateway will store.
      *
      * Drawn through a canvas rather than sent as picked: the column holds a
@@ -741,11 +756,18 @@ window.__ModuleLoader__.load({
      * would be megabytes on every page load. Square-cropped from the centre,
      * which is how it will be displayed anyway.
      *
-     * WebP, because that is what the sign-up page's cropper sends and what the
-     * gateway's allowed-types pattern is written around.
+     * The encoding is the sign-up page's, and it has to be: this version asked
+     * for WebP once, at one quality, and sent whatever came back. A canvas
+     * asked for a type it cannot encode answers in PNG WITHOUT SAYING SO —
+     * Safari does exactly this — and a PNG photograph is several times the size
+     * of either alternative, so a perfectly ordinary picture arrived over the
+     * limit and was refused. JPEG where WebP is unavailable, and quality steps
+     * down until it fits, so a busy image loses detail rather than being
+     * turned away.
      *
      * @param {File} file - what was chosen.
      * @returns {Promise<string>} a `data:` URI.
+     * @throws {Error} when nothing this can produce fits.
      */
     const asAvatar = async (file) => {
       const bitmap = await createImageBitmap(file)
@@ -754,13 +776,19 @@ window.__ModuleLoader__.load({
       canvas.width = AVATAR_EDGE
       canvas.height = AVATAR_EDGE
       const context = canvas.getContext('2d')
+      context.imageSmoothingQuality = 'high'
       context.drawImage(
         bitmap,
         (bitmap.width - edge) / 2, (bitmap.height - edge) / 2, edge, edge,
         0, 0, AVATAR_EDGE, AVATAR_EDGE,
       )
       bitmap.close()
-      return canvas.toDataURL('image/webp', 0.85)
+      for (const quality of [0.85, 0.7, 0.55, 0.4]) {
+        let url = canvas.toDataURL('image/webp', quality)
+        if (!url.startsWith('data:image/webp')) url = canvas.toDataURL('image/jpeg', quality)
+        if (url.length <= AVATAR_LIMIT) return url
+      }
+      throw new Error('avatar.stubborn')
     }
 
     /**
@@ -876,7 +904,9 @@ window.__ModuleLoader__.load({
                   const file = event.target.files?.[0]
                   event.target.value = ''
                   if (file === undefined) return
-                  asAvatar(file).then(setAvatar, () => setFailed(t('profile.unreadable')))
+                  asAvatar(file).then(setAvatar, (error) => {
+                    setFailed(t(error?.message === 'avatar.stubborn' ? 'profile.stubborn' : 'profile.unreadable'))
+                  })
                 },
               }),
               React.createElement(
