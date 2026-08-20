@@ -173,11 +173,15 @@ screenshot and it is a different URL, so it arrives on the first load instead
 of whenever the old one expires. One build definition, three consumers: the
 Dockerfile's `landing` stage, the Pages workflow, and the dev server below.
 
-`web/landing/avatar.webp` is a 128px WebP derived from the project's own
-[`gateway/assets/hamster.svg`](gateway/assets/hamster.svg). It uses a tight
-head-and-shoulder crop, an off-white field, and the site's green accent ring so
-the mascot remains identifiable in the application's 26px account circle.
-Regenerate it from the SVG rather than editing the raster in place.
+[`gateway/assets/hamster.svg`](gateway/assets/hamster.svg) is the primary mark:
+a transparent, single-colour line drawing built from curvature-continuous
+Bézier contours. It draws in ink black on light surfaces and warm white on dark
+ones. The square `favicon.svg` uses the same geometry and line weights. The
+filled `web/landing/avatar.webp` is a compact account-avatar variant based on
+the same profile, not a rasterisation of the line mark; keep it as a separate
+variant.
+The anatomy, palette, scene roles, and review sizes are recorded in the
+[brand and mascot guide](docs/brand.md).
 
 The same source is the project page on GitHub Pages, published by
 [`.github/workflows/pages.yml`](.github/workflows/pages.yml). Serving from two

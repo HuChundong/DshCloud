@@ -144,10 +144,11 @@ open http://localhost:8080
 而文档不缓存的前提——换一张截图就是换一个 URL，它在第一次加载时就到，而不是等旧的过期。
 一份构建定义，三处使用：Dockerfile 的 `landing` 阶段、Pages 工作流，以及下面那个开发服务器。
 
-`web/landing/avatar.webp` 是从项目自己的
-[`gateway/assets/hamster.svg`](gateway/assets/hamster.svg) 派生出的 128px WebP。
-它采用紧凑的头肩裁切、暖白底和页面的绿色强调环，让仓鼠在应用内 26px 的账户圆形头像中
-仍能被认出来。要改就从 SVG 重新生成，别直接改位图。
+[`gateway/assets/hamster.svg`](gateway/assets/hamster.svg) 是主标识：透明底、单色线稿，
+轮廓由曲率连续的贝塞尔曲线构成；浅色表面使用墨黑，深色表面自动切换为暖白。方形的
+`favicon.svg` 复用同一套几何和线宽。填充式的 `web/landing/avatar.webp` 是基于同一侧面
+轮廓制作的账户头像变体，并不是线稿标识的位图化版本，应当作为独立变体维护。身体结构、
+配色、场景职责和复核尺寸统一记录在[品牌与仓鼠形象规范](docs/brand.zh.md)中。
 
 同一份源码也是 GitHub Pages 上的项目主页，由
 [`.github/workflows/pages.yml`](.github/workflows/pages.yml) 发布。正因为要从两个

@@ -36,10 +36,10 @@ window.__ModuleLoader__.load({
     /**
      * The mark, served by nginx from the deployment's own root.
      *
-     * An `img` rather than an inlined SVG: the file is 29 KB of path data for a
-     * glyph drawn at twenty pixels, it is the same file the sign-in page and
-     * the landing page use, and one copy served from one place is what keeps
-     * the three from drifting apart.
+     * An `img` rather than an inlined SVG: it is the same theme-aware,
+     * single-colour line mark the sign-in page and the landing page use, and
+     * one copy served from one place is what keeps the three from drifting
+     * apart.
      */
     const MARK = '/brand/hamster.svg'
 
