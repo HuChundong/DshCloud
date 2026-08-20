@@ -220,7 +220,7 @@ export async function handleProfile(path, req, res, deps) {
 
   const name = cleanName(form.get('name') ?? '')
   if (name === undefined) {
-    const problem = `请填写昵称，最多 ${MAX_NAME_POINTS} 个字符。`
+    const problem = { code: 'name.required', params: { max: MAX_NAME_POINTS } }
     if (wantsJson) { answer(400, { error: problem }); return }
     page(400, { error: problem, name: form.get('name') ?? '' })
     return

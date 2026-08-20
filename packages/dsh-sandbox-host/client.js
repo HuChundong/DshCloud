@@ -61,12 +61,30 @@ window.__ModuleLoader__.load({
      * @param {string} text - the section name.
      * @returns {object} the label node.
      */
-    const navLabel = (d, text) => React.createElement(
-      React.Fragment,
-      null,
-      React.createElement(
+    /**
+     * A settings nav row: a glyph, and the section's name in the current
+     * language.
+     *
+     * A component rather than an element, because this is built once when the
+     * section registers and then held in the registration for as long as the
+     * plugin lives. An element would hold whichever language was active at
+     * registration and keep showing it; a component re-renders when the
+     * language changes, like everything else here.
+     *
+     * `data-dsh-section` is how the row is found again — see
+     * `selectSandboxPage`. It used to be found by matching its own visible
+     * text, which is exactly the kind of handle that stops working the moment
+     * the text is translated.
+     */
+    const NavLabel = ({ d, section }) => {
+      const t = useT()
+      return React.createElement(
         'span',
-        { className: NAV_GLYPH, style: { display: 'inline-flex', alignItems: 'center', gap: '8px' } },
+        {
+          className: NAV_GLYPH,
+          'data-dsh-section': section,
+          style: { display: 'inline-flex', alignItems: 'center', gap: '8px' },
+        },
         React.createElement('svg', {
           width: 16, height: 16, viewBox: '0 0 16 16', fill: 'none',
           style: { flex: 'none' }, 'aria-hidden': true,
@@ -74,9 +92,12 @@ window.__ModuleLoader__.load({
           d, stroke: 'currentColor', strokeWidth: 1.3,
           strokeLinecap: 'round', strokeLinejoin: 'round',
         })),
-        text,
-      ),
-    )
+        t(section),
+      )
+    }
+
+    /** The registration's `label`: an element, and this one keeps rendering. */
+    const navLabel = (d, section) => React.createElement(NavLabel, { d, section })
 
 
     /**
@@ -87,6 +108,35 @@ window.__ModuleLoader__.load({
      * input pipeline, and the upload chain outlives whatever rendered it.
      */
     let plugin
+
+    /**
+     * Translate, and re-render this component when the language changes.
+     *
+     * Subscribing here rather than taking the `t` the slot machinery hands a
+     * slot's root component: most of what this plugin says is said several
+     * levels below a root, and one of the things it says is a settings section
+     * LABEL — which is an element built once at registration, so nothing would
+     * ever ask it to render again. A component that subscribes for itself does
+     * not care how far from a slot it sits, or whether it is inside one.
+     *
+     * `getSnapshot`/`subscribe` are the locale service's own pair, so this is
+     * the same signal the shell's own rows re-render on.
+     *
+     * @returns {(key: string, params?: object) => string} the translator.
+     */
+    const useT = () => {
+      React.useSyncExternalStore(
+        (notify) => plugin.locale.subscribe(notify),
+        () => plugin.locale.getSnapshot(),
+      )
+      return plugin.locale.bind(NS)
+    }
+
+    /**
+     * Translate outside a component, for the callers that are not one.
+     * @returns {(key: string, params?: object) => string} the translator.
+     */
+    const say = () => plugin.locale.bind(NS)
 
     /**
      * Read one Blob as base64, without holding a second copy as a JS string of
@@ -305,9 +355,102 @@ window.__ModuleLoader__.load({
       return `${value < 10 ? value.toFixed(1) : String(Math.round(value))} ${units[unit]}`
     }
 
-    /** What the menu calls this group, and what the one item in it says. */
-    const GROUP = '附件'
-    const ITEM = { name: '上传文件…', description: '从这台电脑选择文件，送进你的沙箱' }
+    /**
+     * This plugin's own dictionary namespace.
+     *
+     * Its own, because a namespace is the unit `locale.register` refuses to
+     * collide on: two plugins registering the same one is an error rather than
+     * a silent last-writer-wins, and that is worth having.
+     */
+    const NS = 'hamsterhq.sandbox'
+
+    /**
+     * Everything this plugin says, in both languages.
+     *
+     * Chinese first because this deployment's audience is, and English beside
+     * it because the shell offers a language switch and a plugin that ignores
+     * it is a plugin that half-translates the window. `{name}` holes are filled
+     * by the locale service.
+     */
+    const DICTIONARY = {
+      zh: {
+        'attach.group': '附件',
+        'attach.item': '上传文件…',
+        'attach.item.about': '从这台电脑选择文件，送进你的沙箱',
+        'attach.drop': '松手即可上传到你的沙箱',
+        'attach.uploading': '上传中 {sent} / {size}',
+        'attach.remove': '移除附件 {name}',
+
+        sandbox: '沙箱',
+        configuration: '配置文件',
+
+        'status.running': '运行中',
+        'status.starting': '连接中',
+        'status.unknown': '未知',
+
+        memory: '内存',
+        disk: '磁盘',
+        measuring: '正在测量',
+        'cpu.measuring': 'CPU：正在测量',
+        'cpu.title': 'CPU {percent}%',
+        'cpu.title.cores': 'CPU {percent}%（{cores} 核）',
+        'cpu.value': '{percent}%',
+        'cpu.value.cores': '{cores} 核 · {percent}%',
+        'memory.title': '内存 {value}',
+        'disk.title': '磁盘 {value}',
+
+        'row.id': '标识',
+        'row.status': '状态',
+        'row.usage': '用量',
+        yours: '这台机器只属于你：会话、工作区与文件都不与其他用户共享。闲置一段时间后它会被回收，下次打开时重新创建。',
+
+        'config.reading': '读取中…',
+        'config.unreadable': '无法读取配置文件：{message}',
+        'config.where': '你的后端运行在沙箱里，这个文件在那台机器上，不在你的电脑上——所以它在这里显示，而不是被打开。',
+        'config.empty': '（空）',
+        copy: '复制',
+        download: '下载',
+      },
+      en: {
+        'attach.group': 'Attachments',
+        'attach.item': 'Upload a file…',
+        'attach.item.about': 'Choose a file on this computer and send it to your sandbox',
+        'attach.drop': 'Drop to upload to your sandbox',
+        'attach.uploading': 'Uploading {sent} / {size}',
+        'attach.remove': 'Remove attachment {name}',
+
+        sandbox: 'Sandbox',
+        configuration: 'Configuration',
+
+        'status.running': 'Running',
+        'status.starting': 'Connecting',
+        'status.unknown': 'Unknown',
+
+        memory: 'Memory',
+        disk: 'Disk',
+        measuring: 'measuring',
+        'cpu.measuring': 'CPU: measuring',
+        'cpu.title': 'CPU {percent}%',
+        'cpu.title.cores': 'CPU {percent}% ({cores} cores)',
+        'cpu.value': '{percent}%',
+        'cpu.value.cores': '{cores} cores · {percent}%',
+        'memory.title': 'Memory {value}',
+        'disk.title': 'Disk {value}',
+
+        'row.id': 'ID',
+        'row.status': 'State',
+        'row.usage': 'Usage',
+        yours: 'This machine is yours alone: its sessions, workspace and files are shared with nobody. It is reclaimed after a period of inactivity and built again the next time you open it.',
+
+        'config.reading': 'Reading…',
+        'config.unreadable': 'Could not read the configuration file: {message}',
+        'config.where': 'Your backend runs in the sandbox, and this file is on that machine rather than on yours — which is why it is shown here instead of opened.',
+        'config.empty': '(empty)',
+        copy: 'Copy',
+        download: 'Download',
+      },
+    }
+
 
     // --------------------------------------------------------------- style --
 
@@ -486,6 +629,7 @@ window.__ModuleLoader__.load({
      * @returns {object|null} the cards, or nothing to show.
      */
     const AttachmentCards = ({ useSession, sessionId }) => {
+      const t = useT()
       const rows = useRows()
       const [dragging, setDragging] = React.useState(false)
       const running = useSession((state) => state.running) ?? false
@@ -615,7 +759,7 @@ window.__ModuleLoader__.load({
           dragging && mine.length === 0 && React.createElement(
             'div',
             { className: `${P}-drop` },
-            '松手即可上传到你的沙箱',
+            t('attach.drop'),
           ),
           ...mine.map((row) => {
             const done = row.path !== undefined
@@ -631,7 +775,11 @@ window.__ModuleLoader__.load({
                 React.createElement(
                   'span',
                   { className: `${P}-meta${failed ? ` ${P}-fail` : ''}` },
-                  failed ? row.error : done ? humanBytes(row.size) : `上传中 ${humanBytes(row.sent)} / ${humanBytes(row.size)}`,
+                  failed
+                    ? row.error
+                    : done
+                      ? humanBytes(row.size)
+                      : t('attach.uploading', { sent: humanBytes(row.sent), size: humanBytes(row.size) }),
                 ),
                 !done && !failed && React.createElement(
                   'span',
@@ -648,8 +796,8 @@ window.__ModuleLoader__.load({
                   className: `${P}-x`,
                   // The wording dsh uses for the same gesture on an image is
                   // "移除图片 <name>"; this is its sibling.
-                  title: `移除附件 ${row.name}`,
-                  'aria-label': `移除附件 ${row.name}`,
+                  title: t('attach.remove', { name: row.name }),
+                  'aria-label': t('attach.remove', { name: row.name }),
                   onClick: () => { detach(row) },
                 },
                 '×',
@@ -712,6 +860,7 @@ window.__ModuleLoader__.load({
      * @returns {object|null} the group, or nothing.
      */
     const PlusAttachmentGroup = () => {
+      const t = useT()
       const [seat, setSeat] = React.useState(null)
       const [look, setLook] = React.useState(null)
       const held = React.useRef(null)
@@ -809,7 +958,7 @@ window.__ModuleLoader__.load({
         React.createElement(
           React.Fragment,
           null,
-          React.createElement('div', { className: look.heading, role: 'presentation' }, GROUP),
+          React.createElement('div', { className: look.heading, role: 'presentation' }, t('attach.group')),
           React.createElement(
             'button',
             {
@@ -827,8 +976,8 @@ window.__ModuleLoader__.load({
                 pickAndSend()
               },
             },
-            React.createElement('span', { className: look.name }, ITEM.name),
-            React.createElement('span', { className: look.description }, ITEM.description),
+            React.createElement('span', { className: look.name }, t('attach.item')),
+            React.createElement('span', { className: look.description }, t('attach.item.about')),
           ),
         ),
         seat,
@@ -975,15 +1124,16 @@ window.__ModuleLoader__.load({
     }
 
     const SandboxStatus = ({ wide }) => {
+      const t = useT()
       const { status, stats } = useSandboxStats()
       const dot = status === 'running' ? 'var(--dsw-alias-state-success-primary, #22c55e)'
         : status === 'starting' ? 'var(--dsw-alias-state-warn-label, #dd8629)'
           : 'var(--dsw-alias-border-l2, rgb(0 0 0 / 25%))'
-      const text = status === 'running' ? '运行中' : status === 'starting' ? '连接中' : '未知'
+      const text = t(status === 'running' ? 'status.running' : status === 'starting' ? 'status.starting' : 'status.unknown')
 
       const pct = (part) => (part && part.totalBytes > 0 ? part.usedBytes / part.totalBytes : null)
       const gb = (bytes) => `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`
-      const asText = (part) => (part ? `${gb(part.usedBytes)} / ${gb(part.totalBytes)}` : '未知')
+      const asText = (part) => (part ? `${gb(part.usedBytes)} / ${gb(part.totalBytes)}` : t('status.unknown'))
 
       // Declared with the other hooks, above the early return below. Hooks
       // after a conditional return are not hooks: on the render where the rail
@@ -1019,9 +1169,10 @@ window.__ModuleLoader__.load({
         const attempt = () => {
           tries += 1
           const dialog = document.querySelector('[role="dialog"]')
-          const row = dialog === null
-            ? undefined
-            : [...dialog.querySelectorAll('button')].find((button) => button.textContent?.trim() === '沙箱')
+          // By the marker the row renders, not by what it says: matching the
+          // visible text worked only while there was one language for it to be
+          // in.
+          const row = dialog?.querySelector('[data-dsh-section="sandbox"]')?.closest('button') ?? undefined
           // Stop when the row is the one selected, not when it has been
           // clicked once. A single click was the first version and it landed
           // before the shell had settled its own initial section, which then
@@ -1053,7 +1204,7 @@ window.__ModuleLoader__.load({
         React.createElement(
           'span',
           { className: `${P}-sandbox-text` },
-          React.createElement('span', { className: `${P}-sandbox-title` }, '沙箱'),
+          React.createElement('span', { className: `${P}-sandbox-title` }, t('sandbox')),
           React.createElement(
             'span',
             { className: `${P}-sandbox-state` },
@@ -1068,14 +1219,17 @@ window.__ModuleLoader__.load({
             label: 'CPU',
             value: stats?.cpu ?? null,
             title: stats?.cpu === null || stats?.cpu === undefined
-              ? 'CPU：正在测量'
-              : `CPU ${String(Math.round(stats.cpu * 100))}%${stats.cores ? `（${String(stats.cores)} 核）` : ''}`,
+              ? t('cpu.measuring')
+              : t(stats.cores ? 'cpu.title.cores' : 'cpu.title', {
+                percent: String(Math.round(stats.cpu * 100)),
+                cores: String(stats.cores ?? ''),
+              }),
           }),
           React.createElement(Ring, {
-            label: '内存', value: pct(stats?.memory), title: `内存 ${asText(stats?.memory)}`,
+            label: t('memory'), value: pct(stats?.memory), title: t('memory.title', { value: asText(stats?.memory) }),
           }),
           React.createElement(Ring, {
-            label: '磁盘', value: pct(stats?.disk), title: `磁盘 ${asText(stats?.disk)}`,
+            label: t('disk'), value: pct(stats?.disk), title: t('disk.title', { value: asText(stats?.disk) }),
           }),
         ),
       )
@@ -1113,6 +1267,7 @@ window.__ModuleLoader__.load({
      * @returns {object} the section.
      */
     const SandboxSection = () => {
+      const t = useT()
       // The same subscription the sidebar row uses. Two watchers of one
       // sandbox now cost one sample rather than two polls.
       const state = useSandboxStats()
@@ -1180,12 +1335,12 @@ window.__ModuleLoader__.load({
       return React.createElement(
         'div',
         { style: { display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '32rem' } },
-        row('标识', React.createElement(
+        row(t('row.id'), React.createElement(
           'code',
           { style: { ...secondary, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' } },
-          stats?.id ?? '未知',
+          stats?.id ?? t('status.unknown'),
         )),
-        row('状态', React.createElement(
+        row(t('row.status'), React.createElement(
           'div',
           { style: { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px' } },
           React.createElement('span', {
@@ -1196,37 +1351,40 @@ window.__ModuleLoader__.load({
                   : 'var(--dsw-alias-border-l2, rgb(0 0 0 / 25%))',
             },
           }),
-          status === 'running' ? '运行中' : status === 'starting' ? '连接中' : '未知',
+          t(status === 'running' ? 'status.running' : status === 'starting' ? 'status.starting' : 'status.unknown'),
           // Beside the state, because anything that acts on the machine is
           // answering the state. Empty here: ending a sandbox is the gateway's
           // to offer, and this plugin has no gateway to ask.
           React.createElement('span', { className: `${P}-status-extra`, style: { marginLeft: 'auto' } }),
         )),
-        row('用量', React.createElement(
+        row(t('row.usage'), React.createElement(
           'div',
           { style: { display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '6px' } },
           React.createElement(Meter, {
             label: 'CPU',
             value: stats?.cpu === null || stats?.cpu === undefined
-              ? '正在测量'
-              : `${stats.cores ? `${String(stats.cores)} 核 · ` : ''}${String(Math.round(stats.cpu * 100))}%`,
+              ? t('measuring')
+              : t(stats.cores ? 'cpu.value.cores' : 'cpu.value', {
+                percent: String(Math.round(stats.cpu * 100)),
+                cores: String(stats.cores ?? ''),
+              }),
             fill: stats?.cpu ?? null,
           }),
           React.createElement(Meter, {
-            label: '内存',
-            value: stats?.memory ? `${gb(stats.memory.usedBytes)} / ${gb(stats.memory.totalBytes)}` : '未知',
+            label: t('memory'),
+            value: stats?.memory ? `${gb(stats.memory.usedBytes)} / ${gb(stats.memory.totalBytes)}` : t('status.unknown'),
             fill: ratio(stats?.memory),
           }),
           React.createElement(Meter, {
-            label: '磁盘',
-            value: stats?.disk ? `${gb(stats.disk.usedBytes)} / ${gb(stats.disk.totalBytes)}` : '未知',
+            label: t('disk'),
+            value: stats?.disk ? `${gb(stats.disk.usedBytes)} / ${gb(stats.disk.totalBytes)}` : t('status.unknown'),
             fill: ratio(stats?.disk),
           }),
         )),
         React.createElement(
           'p',
           { style: { ...secondary, margin: 0 } },
-          '这台机器只属于你：会话、工作区与文件都不与其他用户共享。闲置一段时间后它会被回收，下次打开时重新创建。',
+          t('yours'),
         ),
         // A seat for whatever else a deployment has to say about this machine.
         //
@@ -1240,6 +1398,7 @@ window.__ModuleLoader__.load({
     }
 
     const ConfigurationSection = () => {
+      const t = useT()
       const [state, setState] = React.useState({ status: 'loading' })
 
       React.useEffect(() => {
@@ -1253,11 +1412,11 @@ window.__ModuleLoader__.load({
       const secondary = { color: 'var(--dsw-alias-label-tertiary, #81858c)', fontSize: '13px' }
 
       if (state.status === 'loading') {
-        return React.createElement('p', { style: secondary }, '读取中…')
+        return React.createElement('p', { style: secondary }, t('config.reading'))
       }
       if (state.status === 'failed') {
         return React.createElement('p', { style: { ...secondary, color: 'var(--dsw-alias-state-error-primary, #ec1313)' } },
-          `无法读取配置文件：${state.message}`)
+          t('config.unreadable', { message: state.message }))
       }
 
       return React.createElement(
@@ -1267,14 +1426,14 @@ window.__ModuleLoader__.load({
         React.createElement(
           'p',
           { style: { ...secondary, margin: 0 } },
-          '你的后端运行在沙箱里，这个文件在那台机器上，不在你的电脑上——所以它在这里显示，而不是被打开。',
+          t('config.where'),
         ),
         React.createElement(
           'code',
           { style: { ...secondary, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' } },
           state.path,
         ),
-        React.createElement('pre', { className: `${P}-document` }, state.text === '' ? '（空）' : state.text),
+        React.createElement('pre', { className: `${P}-document` }, state.text === '' ? t('config.empty') : state.text),
         React.createElement(
           'div',
           { style: { display: 'flex', gap: '8px' } },
@@ -1285,7 +1444,7 @@ window.__ModuleLoader__.load({
               className: `${P}-button`,
               onClick: () => { void navigator.clipboard?.writeText(state.text) },
             },
-            '复制',
+            t('copy'),
           ),
           React.createElement(
             'button',
@@ -1304,7 +1463,7 @@ window.__ModuleLoader__.load({
                 URL.revokeObjectURL(url)
               },
             },
-            '下载',
+            t('download'),
           ),
         ),
       )
@@ -1313,13 +1472,20 @@ window.__ModuleLoader__.load({
     // --------------------------------------------------------------- mount --
 
     return {
-      inject: ['slots', 'connection'],
+      inject: ['slots', 'connection', 'locale'],
       /**
        * Register the seats.
        * @param {object} ctx - client root context.
        */
       apply(ctx) {
         plugin = ctx
+
+        // Registered before any seat, because a seat may render before the
+        // effect below it has run and would then show its keys.
+        ctx.effect(
+          () => ctx.locale.register(NS, DICTIONARY),
+          'sandbox-host: dictionaries',
+        )
 
         ctx.effect(
           () => ctx.slots.inject('conversation.input.dock', () => ctx.slots.register(
@@ -1348,9 +1514,12 @@ window.__ModuleLoader__.load({
               // The menu titles a group by looking its source name up in the
               // shell's dictionary and returning an unknown key verbatim, so
               // the name IS the heading.
-              name: GROUP,
+              name: say()('attach.group'),
               order: 50,
-              candidates: () => Promise.resolve([ITEM]),
+              candidates: () => Promise.resolve([{
+                name: say()('attach.item'),
+                description: say()('attach.item.about'),
+              }]),
               /**
                * Open the picker, and clear the trigger token.
                * @returns {{text: string}} the token's replacement.
@@ -1362,7 +1531,7 @@ window.__ModuleLoader__.load({
                 return { text: '' }
               },
             }),
-            'sandbox-host: 附件 trigger source',
+            'sandbox-host: attachment trigger source',
           )
         })
 
@@ -1382,7 +1551,7 @@ window.__ModuleLoader__.load({
               name: 'settings.section',
               id: 'configuration',
               order: 890,
-              label: navLabel('M9 1.75H4.5a1 1 0 0 0-1 1v10.5a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V5.25zM9 1.75v3.5h3.5M5.75 8.5h4.5M5.75 11h3', '配置文件'),
+              label: navLabel('M9 1.75H4.5a1 1 0 0 0-1 1v10.5a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V5.25zM9 1.75v3.5h3.5M5.75 8.5h4.5M5.75 11h3', 'configuration'),
             },
             ConfigurationSection,
           )),
@@ -1402,7 +1571,7 @@ window.__ModuleLoader__.load({
               // "things are kept in this" where the page says "this is a machine",
               // and every other glyph in that column is a rounded rectangle, so the
               // one shape that is not is also the easiest to pick out.
-              label: navLabel('M8 1.75 14 5v6l-6 3.25L2 11V5zM2 5l6 3.25L14 5M8 8.25v6', '沙箱'),
+              label: navLabel('M8 1.75 14 5v6l-6 3.25L2 11V5zM2 5l6 3.25L14 5M8 8.25v6', 'sandbox'),
             },
             SandboxSection,
           )),

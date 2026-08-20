@@ -154,7 +154,149 @@ window.__ModuleLoader__.load({
      * exist, and so that nothing downstream is written as though they already
      * do.
      */
-    const PLAN_LABEL = 'Free 套餐'
+    /**
+     * The plugin context, captured at mount, so the pieces that are not
+     * components can still reach the locale service.
+     */
+    let plugin
+
+    /**
+     * Translate, and re-render when the language changes.
+     * @returns {(key: string, params?: object) => string} the translator.
+     */
+    const useT = () => {
+      React.useSyncExternalStore(
+        (notify) => plugin.locale.subscribe(notify),
+        () => plugin.locale.getSnapshot(),
+      )
+      return plugin.locale.bind(NS)
+    }
+
+    /**
+     * What to show for a problem the server reported.
+     *
+     * The server names a problem; it does not word it. A handler that returned
+     * a finished sentence would have chosen a language, and the language is a
+     * preference in this browser that the server has no business knowing.
+     *
+     * A code with no entry here falls back to the generic line rather than
+     * showing the code: the reader learns nothing from `secrets.full`, and a
+     * deployment running a newer gateway than its shell should degrade to
+     * something plain rather than to something raw.
+     *
+     * @param {(key: string, params?: object) => string} t - the translator.
+     * @param {unknown} problem - whatever the server put in `error`.
+     * @returns {string} what to show.
+     */
+    const fromServer = (t, problem) => {
+      const code = typeof problem === 'string' ? problem : problem?.code
+      if (typeof code !== 'string') return t('error.unknown')
+      const key = `error.${code}`
+      const said = t(key, problem?.params)
+      return said === key ? t('error.unknown') : said
+    }
+
+    /** This plugin's own dictionary namespace; see `dsh-sandbox-host` for why. */
+    const NS = 'hamsterhq.account'
+
+    /** Everything this plugin says, in both languages. */
+    const DICTIONARY = {
+      zh: {
+        plan: 'Free 套餐',
+
+        'env.title': '环境变量',
+        'env.what': '这些变量会在创建沙箱时注入它的环境。值只写入、不回显——保存后这里只显示名称。',
+        'env.when': '改动对当前沙箱不生效，会在它被回收、下次重新创建时生效。',
+        'env.set': '已设置',
+        'env.value': '值',
+        delete: '删除',
+        save: '保存',
+        cancel: '取消',
+        saving: '保存中…',
+
+        'restart.idle': '重启',
+        'restart.asking': '确认重启？',
+        'restart.busy': '正在重启…',
+
+        'profile.dialog': '修改个人资料',
+        'profile.title': '个人资料',
+        'profile.avatar': '更换头像',
+        'profile.remove': '移除',
+        'profile.name': '昵称',
+        'profile.edit': '修改',
+        'profile.unreadable': '这张图片读不出来，请换一张。',
+        'profile.failed': '保存失败，请稍后再试。',
+        'profile.failed.status': '保存失败（{status}）',
+
+        'row.user': '当前用户',
+        'row.admin': '管理',
+        console: '用户管理',
+        'sign-out': '退出登录',
+        'sign-out.what': '退出后当前会话立即失效，你的沙箱会被释放。',
+        settings: '设置',
+        account: '账户',
+
+        // Keyed by the codes the gateway sends. A code with no entry falls
+        // back to `error.unknown` rather than showing itself.
+        'error.unknown': '操作失败，请稍后再试。',
+        'error.offline': '无法连接到服务端。',
+        'error.restart': '重启失败。',
+        'error.restart.failed': '重启失败，请稍后再试。',
+        'error.body.too_long': '内容过长。',
+        'error.body.malformed': '请求格式不正确。',
+        'error.secrets.full': '变量数量已达上限。',
+        'error.secrets.value_too_long': '值过长。',
+        'error.secret.name.invalid': '名称只能由字母、数字和下划线组成，且不能以数字开头。',
+        'error.secret.name.reserved': '{name} 由部署本身设置，不能覆盖。',
+      },
+      en: {
+        plan: 'Free plan',
+
+        'env.title': 'Environment variables',
+        'env.what': 'These are put into the sandbox environment when it is created. Values are written and never read back — after saving, only the names are shown here.',
+        'env.when': 'A change does not reach the sandbox running now. It takes effect when that one is reclaimed and the next is created.',
+        'env.set': 'set',
+        'env.value': 'Value',
+        delete: 'Delete',
+        save: 'Save',
+        cancel: 'Cancel',
+        saving: 'Saving…',
+
+        'restart.idle': 'Restart',
+        'restart.asking': 'Restart it?',
+        'restart.busy': 'Restarting…',
+
+        'profile.dialog': 'Edit your profile',
+        'profile.title': 'Profile',
+        'profile.avatar': 'Change picture',
+        'profile.remove': 'Remove',
+        'profile.name': 'Name',
+        'profile.edit': 'Edit',
+        'profile.unreadable': 'That picture cannot be read. Choose another.',
+        'profile.failed': 'Could not save. Try again shortly.',
+        'profile.failed.status': 'Could not save ({status})',
+
+        'row.user': 'Signed in as',
+        'row.admin': 'Console',
+        console: 'Tenants',
+        'sign-out': 'Sign out',
+        'sign-out.what': 'Signing out ends this session at once, and your sandbox is released.',
+        settings: 'Settings',
+        account: 'Account',
+
+        'error.unknown': 'That did not work. Try again shortly.',
+        'error.offline': 'Could not reach the server.',
+        'error.restart': 'Could not restart it.',
+        'error.restart.failed': 'Could not restart it. Try again shortly.',
+        'error.body.too_long': 'That is too long.',
+        'error.body.malformed': 'The request was not well formed.',
+        'error.secrets.full': 'You have as many variables as this deployment allows.',
+        'error.secrets.value_too_long': 'That value is too long.',
+        'error.secret.name.invalid': 'A name may hold only letters, digits and underscores, and may not begin with a digit.',
+        'error.secret.name.reserved': '{name} is set by the deployment itself and cannot be overridden.',
+      },
+    }
+
 
     /**
      * The sandbox row `dsh-sandbox-host` puts at the sidebar's foot.
@@ -254,6 +396,7 @@ window.__ModuleLoader__.load({
      * @returns {object} the section.
      */
     const SecretsSection = () => {
+      const t = useT()
       const [list, setList] = React.useState(null)
       const [name, setName] = React.useState('')
       const [value, setValue] = React.useState('')
@@ -292,13 +435,13 @@ window.__ModuleLoader__.load({
           })
           const body = await response.json().catch(() => ({}))
           if (!response.ok) {
-            setError(String(body?.error ?? '操作失败。'))
+            setError(fromServer(t, body?.error))
             return false
           }
           setList(Array.isArray(body?.secrets) ? body.secrets : [])
           return true
         } catch {
-          setError('无法连接到服务端。')
+          setError(t('error.offline'))
           return false
         } finally {
           setBusy(false)
@@ -346,12 +489,12 @@ window.__ModuleLoader__.load({
                 color: 'var(--dsw-alias-label-secondary, #4c5157)',
               },
             },
-            '环境变量',
+            t('env.title'),
           ),
           React.createElement(
             'p',
             { style: { ...secondary, margin: 0, lineHeight: 1.6 } },
-            '这些变量会在创建沙箱时注入它的环境。值只写入、不回显——保存后这里只显示名称。',
+            t('env.what'),
           ),
           // Said plainly rather than discovered: an environment is fixed when a
           // process starts, so a value added now reaches the next sandbox and
@@ -359,7 +502,7 @@ window.__ModuleLoader__.load({
           React.createElement(
             'p',
             { style: { ...secondary, margin: 0, lineHeight: 1.6 } },
-            '改动对当前沙箱不生效，会在它被回收、下次重新创建时生效。',
+            t('env.when'),
           ),
         ),
         // Nothing at all when there is nothing to list. The form below is the
@@ -389,7 +532,7 @@ window.__ModuleLoader__.load({
                   },
                   entry.name,
                 ),
-                React.createElement('span', { style: secondary }, '已设置'),
+                React.createElement('span', { style: secondary }, t('env.set')),
                 React.createElement(
                   'button',
                   {
@@ -399,7 +542,7 @@ window.__ModuleLoader__.load({
                     disabled: busy,
                     onClick: () => { void send('/secrets/delete', { name: entry.name }) },
                   },
-                  '删除',
+                  t('delete'),
                 ),
               )),
             ),
@@ -418,7 +561,7 @@ window.__ModuleLoader__.load({
           React.createElement('input', {
             value,
             onChange: (event) => setValue(event.target.value),
-            placeholder: '值',
+            placeholder: t('env.value'),
             // The one control that holds a secret while it is being typed.
             type: 'password',
             autoComplete: 'new-password',
@@ -427,7 +570,7 @@ window.__ModuleLoader__.load({
           React.createElement(
             'button',
             { type: 'submit', className: BUTTON_CLASS, disabled: busy || name.trim() === '' },
-            '保存',
+            t('save'),
           ),
         ),
         error === '' ? null : React.createElement(
@@ -490,6 +633,7 @@ window.__ModuleLoader__.load({
      * @returns {object} the control.
      */
     const RestartControl = () => {
+      const t = useT()
       const [asking, setAsking] = React.useState(false)
       const [busy, setBusy] = React.useState(false)
       const [error, setError] = React.useState('')
@@ -508,13 +652,13 @@ window.__ModuleLoader__.load({
           const response = await fetch('/sandbox/restart', { method: 'POST', credentials: 'same-origin' })
           if (!response.ok) {
             const body = await response.json().catch(() => ({}))
-            setError(String(body?.error ?? '重启失败。'))
+            setError(fromServer(t, body?.error ?? 'restart'))
             setBusy(false)
             setAsking(false)
             return
           }
         } catch {
-          setError('无法连接到服务端。')
+          setError(t('error.offline'))
           setBusy(false)
           setAsking(false)
           return
@@ -545,7 +689,7 @@ window.__ModuleLoader__.load({
             'data-danger': asking ? 'true' : undefined,
             onClick: () => { if (asking) { void restart() } else { setAsking(true) } },
           },
-          busy ? '正在重启…' : asking ? '确认重启？' : '重启',
+          t(busy ? 'restart.busy' : asking ? 'restart.asking' : 'restart.idle'),
         ),
       )
     }
@@ -626,6 +770,7 @@ window.__ModuleLoader__.load({
      * @returns {object} the element.
      */
     const ProfileDialog = ({ who, onClose }) => {
+      const t = useT()
       const [name, setName] = React.useState(who.displayName)
       const [avatar, setAvatar] = React.useState(who.avatar)
       const [busy, setBusy] = React.useState(false)
@@ -658,14 +803,16 @@ window.__ModuleLoader__.load({
           })
           const payload = await response.json().catch(() => ({}))
           if (!response.ok) {
-            setFailed(payload.error ?? `保存失败（${String(response.status)}）`)
+            setFailed(payload.error === undefined
+              ? t('profile.failed.status', { status: String(response.status) })
+              : fromServer(t, payload.error))
             setBusy(false)
             return
           }
           refreshWhoami()
           onClose()
         } catch {
-          setFailed('保存失败，请稍后再试。')
+          setFailed(t('profile.failed'))
           setBusy(false)
         }
       }
@@ -691,8 +838,8 @@ window.__ModuleLoader__.load({
           React.createElement('style', null, DIALOG_CSS),
           React.createElement(
             'div',
-            { className: `${U}-dialog`, role: 'dialog', 'aria-modal': 'true', 'aria-label': '修改个人资料' },
-            React.createElement('div', { className: `${U}-dialog-title` }, '个人资料'),
+            { className: `${U}-dialog`, role: 'dialog', 'aria-modal': 'true', 'aria-label': t('profile.dialog') },
+            React.createElement('div', { className: `${U}-dialog-title` }, t('profile.title')),
             React.createElement(
               'div',
               { className: `${U}-dialog-row` },
@@ -701,7 +848,7 @@ window.__ModuleLoader__.load({
                 {
                   type: 'button',
                   className: `${U}-dialog-avatar`,
-                  title: '更换头像',
+                  title: t('profile.avatar'),
                   onClick: () => picker.current?.click(),
                 },
                 avatar === ''
@@ -717,7 +864,7 @@ window.__ModuleLoader__.load({
                   const file = event.target.files?.[0]
                   event.target.value = ''
                   if (file === undefined) return
-                  asAvatar(file).then(setAvatar, () => setFailed('这张图片读不出来，请换一张。'))
+                  asAvatar(file).then(setAvatar, () => setFailed(t('profile.unreadable')))
                 },
               }),
               React.createElement(
@@ -725,18 +872,18 @@ window.__ModuleLoader__.load({
                 { className: `${U}-dialog-avatar-actions` },
                 React.createElement('button', {
                   type: 'button', className: `${U}-dialog-link`, onClick: () => picker.current?.click(),
-                }, '更换头像'),
+                }, t('profile.avatar')),
                 avatar === '' ? null : React.createElement('button', {
                   type: 'button', className: `${U}-dialog-link`, onClick: () => setAvatar(''),
-                }, '移除'),
+                }, t('profile.remove')),
               ),
             ),
             React.createElement('input', {
               ref: field,
               className: `${U}-dialog-input`,
               value: name,
-              placeholder: '昵称',
-              'aria-label': '昵称',
+              placeholder: t('profile.name'),
+              'aria-label': t('profile.name'),
               onChange: (event) => setName(event.target.value),
               onKeyDown: (event) => { if (event.key === 'Enter' && !busy) void save() },
             }),
@@ -746,11 +893,11 @@ window.__ModuleLoader__.load({
               { className: `${U}-dialog-actions` },
               React.createElement('button', {
                 type: 'button', className: `${U}-dialog-button`, onClick: onClose,
-              }, '取消'),
+              }, t('cancel')),
               React.createElement('button', {
                 type: 'button', className: `${U}-dialog-button`, 'data-primary': '', disabled: busy,
                 onClick: () => { void save() },
-              }, busy ? '保存中…' : '保存'),
+              }, t(busy ? 'saving' : 'save')),
             ),
           ),
         ),
@@ -760,6 +907,7 @@ window.__ModuleLoader__.load({
 
     /** The account page: who is signed in, and how to stop being signed in. */
     const AccountSection = () => {
+      const t = useT()
       const who = useWhoami()
       const { username, admin, displayName, avatar } = who
       const [editing, setEditing] = React.useState(false)
@@ -777,7 +925,7 @@ window.__ModuleLoader__.load({
         React.createElement(
           'div',
           { style: { ...row, alignItems: 'center', borderBottom: '1px solid var(--dsw-alias-border-l1)' } },
-          React.createElement('span', { style: key }, '昵称'),
+          React.createElement('span', { style: key }, t('profile.name')),
           React.createElement(
             'span',
             {
@@ -816,13 +964,13 @@ window.__ModuleLoader__.load({
               },
               onClick: () => setEditing(true),
             },
-            '修改',
+            t('profile.edit'),
           ),
         ),
         React.createElement(
           'div',
           { style: { ...row, borderBottom: '1px solid var(--dsw-alias-border-l1)' } },
-          React.createElement('span', { style: key }, '当前用户'),
+          React.createElement('span', { style: key }, t('row.user')),
           React.createElement('span', { style: { fontSize: '14px', color: 'var(--dsw-alias-label-primary)' } }, username === '' ? '—' : username),
         ),
         editing ? React.createElement(ProfileDialog, { who, onClose: () => setEditing(false) }) : null,
@@ -834,11 +982,11 @@ window.__ModuleLoader__.load({
         admin && React.createElement(
           'div',
           { style: { ...row, borderBottom: '1px solid var(--dsw-alias-border-l2, rgb(0 0 0 / 10%))' } },
-          React.createElement('span', { style: key }, '管理'),
+          React.createElement('span', { style: key }, t('row.admin')),
           React.createElement(
             'a',
             { href: '/admin', style: { fontSize: '14px', color: 'inherit' } },
-            '用户管理',
+            t('console'),
           ),
         ),
         React.createElement(
@@ -862,7 +1010,7 @@ window.__ModuleLoader__.load({
               d: 'M6 14H3.5A1.5 1.5 0 0 1 2 12.5v-9A1.5 1.5 0 0 1 3.5 2H6M10.5 11 14 8l-3.5-3M14 8H6',
               stroke: 'currentColor', strokeWidth: 1.3, strokeLinecap: 'round', strokeLinejoin: 'round',
             })),
-            '退出登录',
+            t('sign-out'),
           ),
           React.createElement(
             'p',
@@ -872,7 +1020,7 @@ window.__ModuleLoader__.load({
                 color: 'var(--dsw-alias-label-secondary)',
               },
             },
-            '退出后当前会话立即失效，你的沙箱会被释放。',
+            t('sign-out.what'),
           ),
         ),
       )
@@ -1142,6 +1290,7 @@ window.__ModuleLoader__.load({
      * @returns {object} the row, and the menu while it is open.
      */
     const AccountRow = ({ wide }) => {
+      const t = useT()
       const who = useWhoami()
       const [menu, setMenu] = React.useState(null)
       const [editing, setEditing] = React.useState(false)
@@ -1297,7 +1446,7 @@ window.__ModuleLoader__.load({
           'span',
           { className: `${U}-who` },
           React.createElement('span', { className: `${U}-name`, title: label }, label),
-          React.createElement('span', { className: `${U}-plan` }, PLAN_LABEL),
+          React.createElement('span', { className: `${U}-plan` }, t('plan')),
         ),
         wide && React.createElement(Chevron, {}),
         menu !== null && ReactDom.createPortal(React.createElement(
@@ -1344,7 +1493,7 @@ window.__ModuleLoader__.load({
               'span',
               { className: `${U}-who` },
               React.createElement('span', { className: `${U}-name`, title: label }, label),
-              React.createElement('span', { className: `${U}-plan` }, PLAN_LABEL),
+              React.createElement('span', { className: `${U}-plan` }, t('plan')),
             ),
           ),
           React.createElement('div', { className: `${U}-sep` }),
@@ -1360,7 +1509,7 @@ window.__ModuleLoader__.load({
             'button',
             { type: 'button', role: 'menuitem', className: `${U}-item`, onClick: openSettings },
             React.createElement(Icon, { name: 'settings' }),
-            '设置',
+            t('settings'),
           ),
           // The same dialog the account page opens, for the same reason: the
           // page it used to link to rebuilds the whole shell.
@@ -1371,7 +1520,7 @@ window.__ModuleLoader__.load({
               onClick: () => { setMenu(null); setEditing(true) },
             },
             React.createElement(Icon, { name: 'profile' }),
-            '个人资料',
+            t('profile.title'),
           ),
           // Only the console's own audience is told it exists: `/admin` answers
           // 404 to everyone else, so a link nobody may follow would be a dead
@@ -1380,7 +1529,7 @@ window.__ModuleLoader__.load({
             'a',
             { role: 'menuitem', className: `${U}-item`, href: '/admin' },
             React.createElement(Icon, { name: 'admin' }),
-            '用户管理',
+            t('console'),
           ),
           React.createElement('div', { className: `${U}-sep` }),
           React.createElement(
@@ -1390,7 +1539,7 @@ window.__ModuleLoader__.load({
               onClick: () => { setMenu(null); void signOut() },
             },
             React.createElement(Icon, { name: 'signout' }),
-            '退出登录',
+            t('sign-out'),
           ),
         ), document.body),
         editing ? React.createElement(ProfileDialog, { who, onClose: () => setEditing(false) }) : null,
@@ -1398,19 +1547,26 @@ window.__ModuleLoader__.load({
     }
 
     return {
-      inject: ['slots'],
+      inject: ['slots', 'locale'],
       /**
        * Register the account section.
        * @param {object} ctx - client root context.
        */
       apply(ctx) {
+        plugin = ctx
+
+        ctx.effect(
+          () => ctx.locale.register(NS, DICTIONARY),
+          'tenant-account: dictionaries',
+        )
+
         ctx.effect(
           () => ctx.slots.inject('settings.section', () => ctx.slots.register(
             {
               name: 'settings.section',
               id: 'account',
               order: 900,
-              label: navLabel('M8 8a2.75 2.75 0 1 0 0-5.5A2.75 2.75 0 0 0 8 8zM2.75 14a5.25 5.25 0 0 1 10.5 0', '账户'),
+              label: navLabel('M8 8a2.75 2.75 0 1 0 0-5.5A2.75 2.75 0 0 0 8 8zM2.75 14a5.25 5.25 0 0 1 10.5 0', 'account'),
             },
             AccountSection,
           )),

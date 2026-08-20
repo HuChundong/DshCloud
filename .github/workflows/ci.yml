@@ -71,6 +71,14 @@ jobs:
       - name: Gateway pages
         run: node scripts/check-pages.mjs
 
+      # The shell offers a language switch, and a plugin that ignores it
+      # half-translates the window. This renders nothing — it reads the sources
+      # — and objects to Chinese outside a dictionary, to a key with only one
+      # language, and to a component that calls `t` without binding one, which
+      # no lint rule catches and which throws on first render.
+      - name: Plugin languages
+        run: node scripts/check-plugins.mjs
+
       - name: Panel paths
         run: node scripts/check-panel-paths.mjs
 

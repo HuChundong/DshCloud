@@ -48,6 +48,234 @@ window.__ModuleLoader__.load({
   id: 'dsh-artifact-panel',
   factory: (require) => {
     const React = require('react')
+
+    /**
+     * This plugin's own dictionary namespace; see `dsh-sandbox-host` for why.
+     *
+     * `LOCALE_NS`, not `NS`: this file already had an `NS`, and it is the CSS
+     * class prefix.
+     */
+    const LOCALE_NS = 'hamsterhq.panel'
+
+    /** The plugin context, captured at mount, for the callers that are not components. */
+    let plugin
+
+    /**
+     * Translate, and re-render when the language changes.
+     * @returns {(key: string, params?: object) => string} the translator.
+     */
+    const useT = () => {
+      React.useSyncExternalStore(
+        (notify) => plugin.locale.subscribe(notify),
+        () => plugin.locale.getSnapshot(),
+      )
+      return plugin.locale.bind(LOCALE_NS)
+    }
+
+    /** Translate outside a component. */
+    const say = () => plugin.locale.bind(LOCALE_NS)
+
+    /**
+     * What to show for a problem the server reported: a code, worded here.
+     * See `dsh-tenant-account` for why the server does not word it itself.
+     * @param {(key: string, params?: object) => string} t - the translator.
+     * @param {unknown} problem - whatever the server put in `error`.
+     * @param {string} fallback - the key to use when the code is unknown.
+     * @returns {string} what to show.
+     */
+    const fromServer = (t, problem, fallback, values) => {
+      const code = typeof problem === 'string' ? problem : problem?.code
+      if (typeof code !== 'string') return t(fallback, values)
+      const key = `error.${code}`
+      const said = t(key, problem?.params)
+      return said === key ? t(fallback, values) : said
+    }
+
+    /** Everything this plugin says, in both languages. */
+    const DICTIONARY = {
+      zh: {
+        'terminal.n': '终端 {n}',
+        terminal: '终端',
+
+        'tool.files': '文件',
+        'tool.files.note': '浏览这台沙箱里的工作区',
+        'tool.terminal': '终端',
+        'tool.terminal.note': '在沙箱里开一个 shell',
+        'tool.canvas': '画布',
+        'tool.canvas.note': '看 agent 正在做的页面',
+
+        'tab.close': '关闭 {name}',
+        'panel.open': '打开工具',
+        'panel.expand': '占满',
+        'panel.restore': '恢复宽度',
+        'panel.collapse': '收起侧边栏',
+        'panel.reveal': '打开侧边栏',
+
+        'empty.title': '打开一个工具',
+        'empty.opened': '已打开',
+        'stub.title': '「{name}」还没有接上',
+        'stub.note': '这一步只有界面，没有数据。',
+
+        more: '更多',
+        'more.of': '{name} 的操作',
+        loading: '读取中…',
+        'tree.empty': '空目录',
+        'tree.nomatch': '没有匹配的文件',
+        'filter.placeholder': '筛选文件…',
+        'filter.label': '筛选文件',
+
+        'preview.preparing': '准备预览…',
+        copy: '复制',
+        copied: '已复制',
+        'copy.text': '复制内容',
+        'copied.text': '已复制内容',
+        'copy.path': '复制路径',
+        'copied.path': '已复制路径',
+
+        expand: '展开{title}',
+        collapse: '收起{title}',
+
+        'terminal.end': '结束',
+        'terminal.end.of': '结束 {name}',
+        'terminal.new': '新建会话',
+        'terminal.list': '会话列表',
+        'terminal.count': '{n} 个会话',
+        'terminal.unreachable': '连不上终端。',
+        'terminal.over': '这个会话已经结束了。关掉这个标签再开一个。',
+
+        preview: '预览',
+        source: '源码',
+        refresh: '刷新',
+        'files.tree': '文件树',
+        'files.aside': '文件',
+        'files.pick': '从右边选一个文件',
+
+        'canvas.looking': '看看有什么…',
+        'canvas.none': '还没有页面',
+        'canvas.none.note': '让 agent 在工作区里写一个 .html，这里会自己出现。',
+        reload: '重新加载',
+
+        'menu.create': '新建文件',
+        'menu.mkdir': '新建文件夹',
+        'menu.rename': '重命名',
+        'menu.delete': '删除',
+
+        'ask.delete': '删除',
+        'ask.rename': '重命名',
+        'ask.mkdir': '新建文件夹',
+        'ask.create': '新建文件',
+        'ask.delete.directory': '确定删除目录「{name}」及其全部内容？此操作不可撤销。',
+        'ask.delete.file': '确定删除文件「{name}」？此操作不可撤销。',
+        'ask.name.folder': '文件夹名称',
+        'ask.name.file': '文件名称',
+        'ask.name.new': '新的名称',
+        'ask.noslash': '名称里不能有 /',
+        'ask.cancel': '取消',
+        'ask.busy': '处理中…',
+        'ask.confirm': '确定',
+
+        'crashed': '侧边栏出错了',
+
+        // Keyed by the codes the gateway sends; anything else falls back to
+        // the plain wording beside it.
+        'error.read': '读取失败（{status}）',
+        'error.act': '操作失败（{status}）',
+        'error.preview': '无法预览这个文件',
+        'error.sandbox.not_ready': '沙箱还没准备好，请稍后再试。',
+        'error.sandbox.silent': '沙箱没有回应。',
+        'error.file.unreadable': '读不到这个文件。',
+      },
+      en: {
+        'terminal.n': 'Terminal {n}',
+        terminal: 'Terminal',
+
+        'tool.files': 'Files',
+        'tool.files.note': 'Browse the workspace on this sandbox',
+        'tool.terminal': 'Terminal',
+        'tool.terminal.note': 'Open a shell in the sandbox',
+        'tool.canvas': 'Canvas',
+        'tool.canvas.note': 'See the page the agent is building',
+
+        'tab.close': 'Close {name}',
+        'panel.open': 'Open a tool',
+        'panel.expand': 'Fill the window',
+        'panel.restore': 'Restore the width',
+        'panel.collapse': 'Collapse the panel',
+        'panel.reveal': 'Open the panel',
+
+        'empty.title': 'Open a tool',
+        'empty.opened': 'open',
+        'stub.title': '“{name}” is not wired up yet',
+        'stub.note': 'This step is the interface only; there is no data behind it.',
+
+        more: 'More',
+        'more.of': 'Actions for {name}',
+        loading: 'Reading…',
+        'tree.empty': 'Empty directory',
+        'tree.nomatch': 'No file matches',
+        'filter.placeholder': 'Filter files…',
+        'filter.label': 'Filter files',
+
+        'preview.preparing': 'Preparing the preview…',
+        copy: 'Copy',
+        copied: 'Copied',
+        'copy.text': 'Copy the contents',
+        'copied.text': 'Contents copied',
+        'copy.path': 'Copy the path',
+        'copied.path': 'Path copied',
+
+        expand: 'Show {title}',
+        collapse: 'Hide {title}',
+
+        'terminal.end': 'End',
+        'terminal.end.of': 'End {name}',
+        'terminal.new': 'New session',
+        'terminal.list': 'Sessions',
+        'terminal.count': '{n} sessions',
+        'terminal.unreachable': 'Could not reach the terminal.',
+        'terminal.over': 'This session has ended. Close the tab and open another.',
+
+        preview: 'Preview',
+        source: 'Source',
+        refresh: 'Refresh',
+        'files.tree': 'File tree',
+        'files.aside': 'Files',
+        'files.pick': 'Choose a file on the right',
+
+        'canvas.looking': 'Looking for one…',
+        'canvas.none': 'No page yet',
+        'canvas.none.note': 'Ask the agent to write a .html in the workspace and it appears here by itself.',
+        reload: 'Reload',
+
+        'menu.create': 'New file',
+        'menu.mkdir': 'New folder',
+        'menu.rename': 'Rename',
+        'menu.delete': 'Delete',
+
+        'ask.delete': 'Delete',
+        'ask.rename': 'Rename',
+        'ask.mkdir': 'New folder',
+        'ask.create': 'New file',
+        'ask.delete.directory': 'Delete the directory “{name}” and everything in it? This cannot be undone.',
+        'ask.delete.file': 'Delete the file “{name}”? This cannot be undone.',
+        'ask.name.folder': 'Folder name',
+        'ask.name.file': 'File name',
+        'ask.name.new': 'New name',
+        'ask.noslash': 'A name cannot contain /',
+        'ask.cancel': 'Cancel',
+        'ask.busy': 'Working…',
+        'ask.confirm': 'OK',
+
+        'crashed': 'The panel hit an error',
+
+        'error.read': 'Could not read it ({status})',
+        'error.act': 'That did not work ({status})',
+        'error.preview': 'This file cannot be previewed',
+        'error.sandbox.not_ready': 'The sandbox is not ready yet. Try again shortly.',
+        'error.sandbox.silent': 'The sandbox did not answer.',
+        'error.file.unreadable': 'That file could not be read.',
+      },
+    }
     const ReactDomClient = require('react-dom/client')
     const h = React.createElement
 
@@ -233,7 +461,7 @@ window.__ModuleLoader__.load({
         addTerminal: () => {
           const id = `t${String(state.nextTerminal)}`
           write({
-            terminals: [...state.terminals, { id, name: `终端 ${String(state.nextTerminal)}` }],
+            terminals: [...state.terminals, { id, name: say()('terminal.n', { n: String(state.nextTerminal) }) }],
             activeTerminal: id,
             nextTerminal: state.nextTerminal + 1,
           })
@@ -1579,9 +1807,9 @@ window.__ModuleLoader__.load({
      * are never listed here.
      */
     const TOOLS = [
-      { id: 'files', label: '文件', note: '浏览这台沙箱里的工作区', path: ICON_FILES },
-      { id: 'terminal', label: '终端', note: '在沙箱里开一个 shell', path: ICON_TERMINAL },
-      { id: 'canvas', label: '画布', note: '看 agent 正在做的页面', path: ICON_BROWSER },
+      { id: 'files', path: ICON_FILES },
+      { id: 'terminal', path: ICON_TERMINAL },
+      { id: 'canvas', path: ICON_BROWSER },
     ]
 
     /**
@@ -1607,7 +1835,7 @@ window.__ModuleLoader__.load({
     const listDir = async (path) => {
       const response = await fetch(`/sandbox/fs/list?path=${encodeURIComponent(path)}`, { credentials: 'same-origin' })
       const payload = await response.json().catch(() => ({}))
-      if (!response.ok) throw new Error(payload.error ?? `读取失败（${String(response.status)}）`)
+      if (!response.ok) throw new Error(fromServer(say(), payload.error, 'error.read', { status: String(response.status) }))
       return payload.entries ?? []
     }
 
@@ -1637,7 +1865,7 @@ window.__ModuleLoader__.load({
     const mintTicket = async () => {
       const response = await fetch('/sandbox/fs/ticket', { credentials: 'same-origin' })
       const payload = await response.json().catch(() => ({}))
-      if (!response.ok) throw new Error(payload.error ?? '无法预览这个文件')
+      if (!response.ok) throw new Error(fromServer(say(), payload.error, 'error.preview'))
       return payload.ticket
     }
 
@@ -1665,7 +1893,7 @@ window.__ModuleLoader__.load({
         body: JSON.stringify(body),
       })
       const payload = await response.json().catch(() => ({}))
-      if (!response.ok) throw new Error(payload.error ?? `操作失败（${String(response.status)}）`)
+      if (!response.ok) throw new Error(fromServer(say(), payload.error, 'error.act', { status: String(response.status) }))
       return payload
     }
 
@@ -1680,7 +1908,7 @@ window.__ModuleLoader__.load({
     const newestPage = async () => {
       const response = await fetch('/sandbox/fs/newest', { credentials: 'same-origin' })
       const payload = await response.json().catch(() => ({}))
-      if (!response.ok) throw new Error(payload.error ?? `读取失败（${String(response.status)}）`)
+      if (!response.ok) throw new Error(fromServer(say(), payload.error, 'error.read', { status: String(response.status) }))
       return payload.path === undefined ? undefined : payload
     }
 
@@ -1703,6 +1931,7 @@ window.__ModuleLoader__.load({
      * @returns {object} the element.
      */
     function TabBar({ tabs, activeId, onSelect, onClose, onNew, onCollapse, onMaximise, maximised }) {
+      const t = useT()
       const strip = React.useRef(null)
 
       // Keep the tab in play in view. Opening a file when the strip is already
@@ -1748,7 +1977,7 @@ window.__ModuleLoader__.load({
           },
         },
         h('span', { className: `${NS}-tab-icon` }, icon(tab.icon ?? ICON_FILE, 14)),
-        h('span', { className: `${NS}-tab-label` }, tab.label),
+        h('span', { className: `${NS}-tab-label` }, tab.label ?? t(`tool.${tab.id}`)),
         // Rendered on every tab, shown by CSS under the pointer. Rendering it
         // only for the active tab was the first attempt and it does not answer
         // the requirement: hovering any other tab found no element to reveal.
@@ -1756,7 +1985,7 @@ window.__ModuleLoader__.load({
         h('span', {
           className: `${NS}-tab-close`,
           role: 'button',
-          'aria-label': `关闭 ${tab.label}`,
+          'aria-label': t('tab.close', { name: tab.label ?? t(`tool.${tab.id}`) }),
           onClick: (event) => {
             event.stopPropagation()
             onClose(tab.id)
@@ -1770,8 +1999,8 @@ window.__ModuleLoader__.load({
         h('button', {
           type: 'button',
           className: `${NS}-icon-button`,
-          title: '打开工具',
-          'aria-label': '打开工具',
+          title: t('panel.open'),
+          'aria-label': t('panel.open'),
           'aria-pressed': activeId === undefined,
           onClick: onNew,
         }, icon(ICON_NEW)),
@@ -1783,8 +2012,8 @@ window.__ModuleLoader__.load({
         h('button', {
           type: 'button',
           className: `${NS}-icon-button`,
-          title: maximised ? '恢复宽度' : '占满',
-          'aria-label': maximised ? '恢复宽度' : '占满',
+          title: t(maximised ? 'panel.restore' : 'panel.expand'),
+          'aria-label': t(maximised ? 'panel.restore' : 'panel.expand'),
           'aria-pressed': maximised,
           onClick: onMaximise,
         }, icon(maximised ? ICON_SHRINK : ICON_EXPAND)),
@@ -1795,8 +2024,8 @@ window.__ModuleLoader__.load({
         h('button', {
           type: 'button',
           className: `${NS}-toggle`,
-          title: '收起侧边栏',
-          'aria-label': '收起侧边栏',
+          title: t('panel.collapse'),
+          'aria-label': t('panel.collapse'),
           onClick: onCollapse,
         }, icon(ICON_PANEL)),
       )
@@ -1808,8 +2037,9 @@ window.__ModuleLoader__.load({
      * @returns {object} the element.
      */
     function EmptyState({ onOpen, open }) {
+      const t = useT()
       return h('div', { className: `${NS}-empty` },
-        h('div', { className: `${NS}-empty-title` }, '打开一个工具'),
+        h('div', { className: `${NS}-empty-title` }, t('empty.title')),
         TOOLS.map((tool) => h('button', {
           key: tool.id,
           type: 'button',
@@ -1818,11 +2048,11 @@ window.__ModuleLoader__.load({
         },
         h('span', { className: `${NS}-choice-icon` }, icon(tool.path, 18)),
         h('span', null,
-          h('span', null, tool.label),
+          h('span', null, t(`tool.${tool.id}`)),
           h('div', { className: `${NS}-choice-note` },
             // Already open reads as a state, not as a disabled control: the
             // click still works, it just focuses what is there.
-            open.some((tab) => tab.id === tool.id) ? '已打开' : tool.note)))),
+            open.some((tab) => tab.id === tool.id) ? t('empty.opened') : t(`tool.${tool.id}.note`))))),
       )
     }
 
@@ -1832,9 +2062,10 @@ window.__ModuleLoader__.load({
      * @returns {object} the element.
      */
     function Placeholder({ tab }) {
+      const t = useT()
       return h('div', { className: `${NS}-placeholder` },
-        h('div', null, `「${tab.label}」还没有接上`),
-        h('div', null, '这一步只有界面，没有数据。'),
+        h('div', null, t('stub.title', { name: tab.label ?? t(`tool.${tab.id}`) })),
+        h('div', null, t('stub.note')),
       )
     }
 
@@ -1852,12 +2083,13 @@ window.__ModuleLoader__.load({
      * @returns {object} the element.
      */
     function RowMenu({ entry }) {
+      const t = useT()
       return h('span', { className: `${NS}-row-menu` },
         h('button', {
           type: 'button',
           className: `${NS}-row-action`,
-          title: '更多',
-          'aria-label': `${entry.name} 的操作`,
+          title: t('more'),
+          'aria-label': t('more.of', { name: entry.name }),
           'aria-haspopup': 'menu',
           onClick: (event) => {
             event.stopPropagation()
@@ -1885,6 +2117,7 @@ window.__ModuleLoader__.load({
      * @returns {object|null} the rows.
      */
     function Branch({ path, depth, onOpen, activePath }) {
+      const t = useT()
       const tree = useTree()
       const node = tree.dirs[path]
 
@@ -1905,7 +2138,7 @@ window.__ModuleLoader__.load({
       const indent = { paddingLeft: `${String(depth * 14 + 12)}px` }
       if (node?.entries === undefined) {
         if (node?.status === 'failed') return h('div', { className: `${NS}-tree-note`, style: indent }, node.message)
-        return h('div', { className: `${NS}-tree-note`, style: indent }, '读取中…')
+        return h('div', { className: `${NS}-tree-note`, style: indent }, t('loading'))
       }
 
       // The filter narrows what is already loaded. Directories are kept
@@ -1918,7 +2151,7 @@ window.__ModuleLoader__.load({
         : node.entries.filter((entry) => entry.directory || entry.name.toLowerCase().includes(needle))
 
       if (matching.length === 0) {
-        return h('div', { className: `${NS}-tree-note`, style: indent }, needle === '' ? '空目录' : '没有匹配的文件')
+        return h('div', { className: `${NS}-tree-note`, style: indent }, t(needle === '' ? 'tree.empty' : 'tree.nomatch'))
       }
 
       // Directories first, then by name, folded case — the order a person
@@ -1996,13 +2229,14 @@ window.__ModuleLoader__.load({
      * @returns {object} the element.
      */
     function FileTree({ onOpen, activePath }) {
+      const t = useT()
       const tree = useTree()
       return h(React.Fragment, null,
         h('div', { className: `${NS}-filter` }, h('input', {
           type: 'search',
           value: tree.filter,
-          placeholder: '筛选文件…',
-          'aria-label': '筛选文件',
+          placeholder: t('filter.placeholder'),
+          'aria-label': t('filter.label'),
           onChange: (event) => treeStore.setFilter(event.target.value),
         })),
         // The empty space below the rows is still the workspace, so pointing
@@ -2082,6 +2316,7 @@ window.__ModuleLoader__.load({
      * @returns {object} the element.
      */
     function FileBody({ path, source, onText }) {
+      const t = useT()
       const kind = viewerFor(path)
       const wants = kind === 'text' || kind === 'markdown'
       const [text, setText] = React.useState({ status: 'loading' })
@@ -2127,7 +2362,7 @@ window.__ModuleLoader__.load({
             const body = await response.text()
             if (!live) return
             if (!response.ok) {
-              let message = `读取失败（${String(response.status)}）`
+              let message = t('error.read', { status: String(response.status) })
               try { message = JSON.parse(body).error ?? message } catch { /* not JSON; keep the status */ }
               setText({ status: 'failed', message })
               return
@@ -2145,7 +2380,7 @@ window.__ModuleLoader__.load({
           h('img', { key: `${path}:${String(revision)}`, className: `${NS}-image`, src: rawUrl(path), alt: basename(path) }))
       }
       if (kind === 'html') {
-        if (ticket.status === 'loading') return h('div', { className: `${NS}-placeholder` }, '准备预览…')
+        if (ticket.status === 'loading') return h('div', { className: `${NS}-placeholder` }, t('preview.preparing'))
         if (ticket.status === 'failed') return h('div', { className: `${NS}-placeholder` }, ticket.message)
         // `sandbox` without `allow-same-origin`, so the previewed page gets an
         // opaque origin and cannot read the session it was fetched with. The
@@ -2164,7 +2399,7 @@ window.__ModuleLoader__.load({
           title: basename(path),
         })
       }
-      if (text.status === 'loading') return h('div', { className: `${NS}-placeholder` }, '读取中…')
+      if (text.status === 'loading') return h('div', { className: `${NS}-placeholder` }, t('loading'))
       if (text.status === 'failed') return h('div', { className: `${NS}-placeholder` }, text.message)
 
       // Markdown, rendered, unless its source was asked for.
@@ -2173,15 +2408,15 @@ window.__ModuleLoader__.load({
           text: text.body,
           // The component is cordis-free and takes its copy through props;
           // omitting these leaves a code block's copy button unlabelled.
-          codeLabels: { copyLabel: '复制', copiedLabel: '已复制' },
+          codeLabels: { copyLabel: t('copy'), copiedLabel: t('copied') },
         }))
       }
       if (primitives.CodeBlock !== undefined) {
         return h('div', { className: `${NS}-code` }, h(primitives.CodeBlock, {
           code: text.body,
           lang: kind === 'markdown' ? 'markdown' : grammarFor(path),
-          copyLabel: '复制',
-          copiedLabel: '已复制',
+          copyLabel: t('copy'),
+          copiedLabel: t('copied'),
         }))
       }
       // No primitives in this shell: the file is still readable, just plain.
@@ -2278,8 +2513,8 @@ window.__ModuleLoader__.load({
         type: 'button',
         className: `${NS}-icon-button`,
         'aria-pressed': !closed,
-        title: closed ? `展开${title}` : `收起${title}`,
-        'aria-label': closed ? `展开${title}` : `收起${title}`,
+        title: t(closed ? 'expand' : 'collapse', { title }),
+        'aria-label': t(closed ? 'expand' : 'collapse', { title }),
         onClick: () => store.fold(kind),
       }, icon(ICON_ASIDE))
     }
@@ -2301,6 +2536,7 @@ window.__ModuleLoader__.load({
      * @returns {object} the element.
      */
     function TerminalPane() {
+      const t = useT()
       const { terminals, activeTerminal } = useStore()
 
       // One shell to begin with: opening the terminal tab is a request for a
@@ -2338,8 +2574,8 @@ window.__ModuleLoader__.load({
         h('button', {
           type: 'button',
           className: `${NS}-row-action`,
-          title: '结束',
-          'aria-label': `结束 ${entry.name}`,
+          title: t('terminal.end'),
+          'aria-label': t('terminal.end.of', { name: entry.name }),
           onClick: (event) => { event.stopPropagation(); store.closeTerminal(entry.id) },
         }, icon(ICON_CLOSE, 12)))))
 
@@ -2351,18 +2587,18 @@ window.__ModuleLoader__.load({
         // right. A terminal's "where" is which session is on screen.
         h('div', { className: `${NS}-crumbs` },
           h('div', { className: `${NS}-crumb-path` },
-            h('span', { className: `${NS}-crumb-name` }, showing?.name ?? '终端')),
+            h('span', { className: `${NS}-crumb-name` }, showing?.name ?? t('terminal'))),
           h('button', {
             type: 'button',
             className: `${NS}-icon-button`,
-            title: '新建会话',
-            'aria-label': '新建会话',
+            title: t('terminal.new'),
+            'aria-label': t('terminal.new'),
             onClick: () => { store.addTerminal() },
           }, icon(ICON_NEW, 15)),
-          h(FoldButton, { kind: 'terminal', title: '会话列表' })),
+          h(FoldButton, { kind: 'terminal', title: t('terminal.list') })),
         h('div', { className: `${NS}-split` },
           h('div', { className: `${NS}-split-main` }, screens),
-          h(Aside, { kind: 'terminal', title: `${String(terminals.length)} 个会话` },
+          h(Aside, { kind: 'terminal', title: t('terminal.count', { n: String(terminals.length) }) },
             h('div', { className: `${NS}-scroll` }, rows))))
     }
 
@@ -2379,6 +2615,7 @@ window.__ModuleLoader__.load({
      * @returns {object} the element.
      */
     function WorkspacePane({ path, onOpen }) {
+      const t = useT()
       const [source, setSource] = React.useState(false)
       const [copied, setCopied] = React.useState(undefined)
       // The file's own text, when it has one, so the row above it can offer to
@@ -2413,26 +2650,26 @@ window.__ModuleLoader__.load({
             h('button', {
               type: 'button', className: `${NS}-segment`, 'aria-pressed': !source,
               onClick: () => setSource(false),
-            }, '预览'),
+            }, t('preview')),
             h('button', {
               type: 'button', className: `${NS}-segment`, 'aria-pressed': source,
               onClick: () => setSource(true),
-            }, '源码')) : null,
+            }, t('source'))) : null,
           // Both actions live here, on the row that names the file — the view
           // below is the file, not a card with its own controls.
           text === undefined ? null : h('button', {
             type: 'button',
             className: `${NS}-icon-button`,
-            title: copied === 'text' ? '已复制内容' : '复制内容',
-            'aria-label': '复制内容',
+            title: t(copied === 'text' ? 'copied.text' : 'copy.text'),
+            'aria-label': t('copy.text'),
             onClick: () => copy('text', text),
           }, icon(ICON_COPY_TEXT, 15)),
           h('button', {
             type: 'button',
             className: `${NS}-icon-button`,
             disabled: path === undefined,
-            title: copied === 'path' ? '已复制路径' : '复制路径',
-            'aria-label': '复制路径',
+            title: t(copied === 'path' ? 'copied.path' : 'copy.path'),
+            'aria-label': t('copy.path'),
             onClick: () => copy('path', path),
           }, icon(ICON_COPY, 15)),
           // Look again, by hand.
@@ -2445,17 +2682,17 @@ window.__ModuleLoader__.load({
           h('button', {
             type: 'button',
             className: `${NS}-icon-button`,
-            title: '刷新',
-            'aria-label': '刷新',
+            title: t('refresh'),
+            'aria-label': t('refresh'),
             onClick: () => { workspaceWatch.refresh() },
           }, icon(ICON_REFRESH, 15)),
-          h(FoldButton, { kind: 'files', title: '文件树' })),
+          h(FoldButton, { kind: 'files', title: t('files.tree') })),
         h('div', { className: `${NS}-split` },
           h('div', { className: `${NS}-split-main` },
             path === undefined
-              ? h('div', { className: `${NS}-placeholder` }, '从右边选一个文件')
+              ? h('div', { className: `${NS}-placeholder` }, t('files.pick'))
               : h(FileBody, { key: `${path}:${String(source)}`, path, source, onText: setText })),
-          h(Aside, { kind: 'files', title: '文件' },
+          h(Aside, { kind: 'files', title: t('files.aside') },
             h(FileTree, { onOpen, activePath: path }))),
       )
     }
@@ -2483,6 +2720,7 @@ window.__ModuleLoader__.load({
      * @returns {object} the element.
      */
     function Canvas() {
+      const t = useT()
       const [page, setPage] = React.useState({ status: 'loading' })
       const [ticket, setTicket] = React.useState(undefined)
 
@@ -2514,14 +2752,14 @@ window.__ModuleLoader__.load({
         return () => { live = false }
       }, [])
 
-      if (page.status === 'loading') return h('div', { className: `${NS}-placeholder` }, '看看有什么…')
+      if (page.status === 'loading') return h('div', { className: `${NS}-placeholder` }, t('canvas.looking'))
       if (page.status === 'failed') return h('div', { className: `${NS}-placeholder` }, page.message)
       if (page.status === 'empty') {
         return h('div', { className: `${NS}-placeholder` },
-          h('div', null, '还没有页面'),
-          h('div', null, '让 agent 在工作区里写一个 .html，这里会自己出现。'))
+          h('div', null, t('canvas.none')),
+          h('div', null, t('canvas.none.note')))
       }
-      if (ticket === undefined) return h('div', { className: `${NS}-placeholder` }, '准备预览…')
+      if (ticket === undefined) return h('div', { className: `${NS}-placeholder` }, t('preview.preparing'))
 
       return h('div', { className: `${NS}-file` },
         h('div', { className: `${NS}-crumbs` },
@@ -2530,8 +2768,8 @@ window.__ModuleLoader__.load({
           h('button', {
             type: 'button',
             className: `${NS}-icon-button`,
-            title: '重新加载',
-            'aria-label': '重新加载',
+            title: t('reload'),
+            'aria-label': t('reload'),
             // Bumping the modified stamp remounts the frame below, which is a
             // fresh fetch: the route answers `no-store`.
             onClick: () => setPage((current) => ({ ...current, modified: Date.now() / 1000 })),
@@ -2562,6 +2800,7 @@ window.__ModuleLoader__.load({
      * @returns {object|null} the menu, or null when nothing is pointing at anything.
      */
     function RowActions() {
+      const t = useT()
       const { menu } = useTree()
       const box = React.useRef(null)
       const [place, setPlace] = React.useState(undefined)
@@ -2615,14 +2854,14 @@ window.__ModuleLoader__.load({
         className: `${NS}-menu`,
         style: { left: `${String(place?.left ?? menu.x)}px`, top: `${String(place?.top ?? menu.y)}px` },
       },
-      item('新建文件', () => treeStore.ask({ kind: 'create', into })),
-      item('新建文件夹', () => treeStore.ask({ kind: 'mkdir', into })),
+      item(t('menu.create'), () => treeStore.ask({ kind: 'create', into })),
+      item(t('menu.mkdir'), () => treeStore.ask({ kind: 'mkdir', into })),
       // The rest is about a particular thing, so it is there only when the
       // pointer was on one.
       entry === undefined ? null : h(React.Fragment, null,
         h('div', { className: `${NS}-menu-sep` }),
-        item('重命名', () => treeStore.ask({ kind: 'rename', entry })),
-        item('删除', () => treeStore.ask({ kind: 'delete', entry }), true)))
+        item(t('menu.rename'), () => treeStore.ask({ kind: 'rename', entry })),
+        item(t('menu.delete'), () => treeStore.ask({ kind: 'delete', entry }), true)))
     }
 
     /**
@@ -2638,6 +2877,7 @@ window.__ModuleLoader__.load({
      * @returns {object|null} the dialog, or null when nothing is being asked.
      */
     function AskDialog() {
+      const t = useT()
       const { ask } = useTree()
       const [value, setValue] = React.useState('')
       const [busy, setBusy] = React.useState(false)
@@ -2696,26 +2936,26 @@ window.__ModuleLoader__.load({
       return h('div', { className: `${NS}-mask`, onPointerDown: (event) => { if (event.target === event.currentTarget) treeStore.answered() } },
         h('div', { className: `${NS}-dialog`, role: 'dialog', 'aria-modal': 'true' },
           h('div', { className: `${NS}-dialog-title` },
-            kind === 'delete' ? '删除' : kind === 'rename' ? '重命名' : kind === 'mkdir' ? '新建文件夹' : '新建文件'),
+            t(`ask.${kind}`)),
           h('div', { className: `${NS}-dialog-body` },
             kind === 'delete'
-              ? `确定删除${entry.directory ? `目录「${entry.name}」及其全部内容` : `文件「${entry.name}」`}？此操作不可撤销。`
+              ? t(entry.directory ? 'ask.delete.directory' : 'ask.delete.file', { name: entry.name })
               : h('input', {
                 ref: field,
                 className: `${NS}-dialog-input`,
                 value,
-                placeholder: kind === 'mkdir' ? '文件夹名称' : kind === 'create' ? '文件名称' : '新的名称',
-                'aria-label': kind === 'mkdir' ? '文件夹名称' : kind === 'create' ? '文件名称' : '新的名称',
+                placeholder: t(kind === 'mkdir' ? 'ask.name.folder' : kind === 'create' ? 'ask.name.file' : 'ask.name.new'),
+                'aria-label': t(kind === 'mkdir' ? 'ask.name.folder' : kind === 'create' ? 'ask.name.file' : 'ask.name.new'),
                 onChange: (event) => setValue(event.target.value),
                 onKeyDown: (event) => { if (event.key === 'Enter' && !bad && !busy) void run() },
               })),
           // A name, not a path: a rename that could carry a separator would be
           // a move, and a move to somewhere unnamed is how a file disappears
           // from the tree it was renamed in.
-          named && value.includes('/') ? h('div', { className: `${NS}-dialog-note` }, '名称里不能有 /') : null,
+          named && value.includes('/') ? h('div', { className: `${NS}-dialog-note` }, t('ask.noslash')) : null,
           failed === undefined ? null : h('div', { className: `${NS}-dialog-note`, 'data-danger': '' }, failed),
           h('div', { className: `${NS}-dialog-actions` },
-            h('button', { type: 'button', className: `${NS}-dialog-button`, onClick: () => treeStore.answered() }, '取消'),
+            h('button', { type: 'button', className: `${NS}-dialog-button`, onClick: () => treeStore.answered() }, t('ask.cancel')),
             h('button', {
               type: 'button',
               className: `${NS}-dialog-button`,
@@ -2723,7 +2963,7 @@ window.__ModuleLoader__.load({
               'data-danger': kind === 'delete' ? '' : undefined,
               disabled: busy || bad,
               onClick: () => { void run() },
-            }, busy ? '处理中…' : kind === 'delete' ? '删除' : '确定'))))
+            }, t(busy ? 'ask.busy' : kind === 'delete' ? 'ask.delete' : 'ask.confirm')))))
     }
 
     /**
@@ -2742,6 +2982,7 @@ window.__ModuleLoader__.load({
      * @returns {object} the element.
      */
     function Console() {
+      const t = useT()
       const host = React.useRef(null)
       const [state, setState] = React.useState({ status: 'opening' })
 
@@ -2824,7 +3065,7 @@ window.__ModuleLoader__.load({
           if (message.type === 'exit') setState({ status: 'closed' })
         })
         socket.addEventListener('close', () => { setState((current) => (current.status === 'failed' ? current : { status: 'closed' })) })
-        socket.addEventListener('error', () => { setState({ status: 'failed', message: '连不上终端。' }) })
+        socket.addEventListener('error', () => { setState({ status: 'failed', message: say()('terminal.unreachable') }) })
 
         // The pty has to be told the size, or a full-screen program draws to
         // the wrong one. Observed rather than listened for on the window: the
@@ -2849,7 +3090,7 @@ window.__ModuleLoader__.load({
         state.status === 'open' || state.status === 'opening'
           ? null
           : h('div', { className: `${NS}-console-note` },
-            state.status === 'failed' ? state.message : '这个会话已经结束了。关掉这个标签再开一个。'),
+            state.status === 'failed' ? state.message : t('terminal.over')),
       )
     }
 
@@ -2870,6 +3111,7 @@ window.__ModuleLoader__.load({
      * @returns {object} the element.
      */
     function Toggle() {
+      const t = useT()
       const { open } = useStore()
       const ref = React.useRef(null)
 
@@ -2903,8 +3145,8 @@ window.__ModuleLoader__.load({
         open ? null : h('button', {
           type: 'button',
           className: `${NS}-toggle`,
-          title: '打开侧边栏',
-          'aria-label': '打开侧边栏',
+          title: t('panel.reveal'),
+          'aria-label': t('panel.reveal'),
           onClick: () => store.write({ open: true }),
         }, icon(ICON_PANEL)))
     }
@@ -2946,7 +3188,7 @@ window.__ModuleLoader__.load({
       render() {
         if (this.state.message === undefined) return this.props.children
         return h('div', { className: `${NS}-crash` },
-          h('strong', null, '侧边栏出错了'),
+          h('strong', null, t('crashed')),
           h('span', null, this.state.message))
       }
     }
@@ -2965,6 +3207,7 @@ window.__ModuleLoader__.load({
      * @returns {object} the element.
      */
     function Panel() {
+      const t = useT()
       const state = useStore()
       const { open, header } = state
       const { tabs, activeId } = state.groups[state.session] ?? EMPTY_GROUP
@@ -3075,8 +3318,8 @@ window.__ModuleLoader__.load({
       const corner = header || open ? null : h('button', {
         type: 'button',
         className: `${NS}-opener`,
-        title: '打开侧边栏',
-        'aria-label': '打开侧边栏',
+        title: t('panel.reveal'),
+        'aria-label': t('panel.reveal'),
         onClick: () => store.write({ open: true }),
       }, icon(ICON_PANEL))
 
@@ -3104,7 +3347,7 @@ window.__ModuleLoader__.load({
         }),
         h('div', { className: `${NS}-body` },
           active === undefined
-            ? h(EmptyState, { open: tabs, onOpen: (tool) => openTab({ id: tool.id, label: tool.label, icon: tool.path }) })
+            ? h(EmptyState, { open: tabs, onOpen: (tool) => openTab({ id: tool.id, icon: tool.path }) })
             // A tab is either one of the tools or one file. The file's path is
             // its id, which is what makes opening the same file twice open one
             // tab.
@@ -3121,13 +3364,21 @@ window.__ModuleLoader__.load({
     }
 
     return {
-      inject: ['slots', 'workspaces', 'sessions'],
+      inject: ['slots', 'workspaces', 'sessions', 'locale'],
 
       /**
        * Mount the browser half.
        * @param {object} ctx - the client context, carrying the slot registry.
        */
       apply(ctx) {
+        plugin = ctx
+
+        // Before any seat renders, or a seat renders its keys.
+        ctx.effect(
+          () => ctx.locale.register(LOCALE_NS, DICTIONARY),
+          'artifact-panel: dictionaries',
+        )
+
         // The styles go in once, beside the panel rather than inside it, so
         // the rule that pushes `#root` survives the panel being closed.
         ctx.effect(() => {

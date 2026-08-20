@@ -247,6 +247,9 @@ export const MESSAGES = {
   'capacity.full':    { zh: '当前在线沙箱已达上限，请稍后再试。', en: 'Every sandbox is in use right now. Try again shortly.' },
   'account.disabled': { zh: '该账号已被停用，请联系管理员。', en: 'This account has been disabled. Contact the operator.' },
   'delete.confirm':   { zh: '请输入你的完整邮箱地址以确认注销。', en: 'Type your full email address to confirm closing the account.' },
+  'name.required':    { zh: '请填写昵称，最多 {max} 个字符。', en: 'Enter a name, at most {max} characters.' },
+  'secret.name.invalid':  { zh: '名称只能由字母、数字和下划线组成，且不能以数字开头。', en: 'A name may hold only letters, digits and underscores, and may not begin with a digit.' },
+  'secret.name.reserved': { zh: '{name} 由部署本身设置，不能覆盖。', en: '{name} is set by the deployment itself and cannot be overridden.' },
   'avatar.large':     { zh: '头像太大了，请换一张。', en: 'That picture is too large. Choose a smaller one.' },
   'avatar.format':    { zh: '头像格式不受支持，请重新选择图片。', en: 'That image format is not supported. Choose another picture.' },
 }
@@ -263,7 +266,11 @@ export const MESSAGES = {
  * @returns {string} the markup, empty when there is nothing to say.
  */
 export function toast(error, notice) {
-  const said = (key) => escapeHtml(MESSAGES[key]?.zh ?? key)
+  const said = (problem) => {
+    const code = typeof problem === 'string' ? problem : problem?.code
+    const template = MESSAGES[code]?.zh ?? code ?? ''
+    return escapeHtml(fill(template, typeof problem === 'string' ? undefined : problem?.params))
+  }
   if (error !== undefined) return `<div class="toast error" role="alert" data-t="msg">${said(error)}</div>`
   if (notice !== undefined) return `<div class="toast" role="status" data-t="msg">${said(notice)}</div>`
   return ''
@@ -280,9 +287,27 @@ export function toast(error, notice) {
  * @returns {Record<string, {en: string, zh: string}>} the entry, or nothing.
  */
 export function toastEntry(error, notice) {
-  const key = error ?? notice
-  if (key === undefined) return {}
-  return { msg: MESSAGES[key] ?? { zh: key, en: key } }
+  const problem = error ?? notice
+  if (problem === undefined) return {}
+  const code = typeof problem === 'string' ? problem : problem?.code
+  const params = typeof problem === 'string' ? undefined : problem?.params
+  const entry = MESSAGES[code] ?? { zh: code, en: code }
+  return { msg: { zh: fill(entry.zh, params), en: fill(entry.en, params) } }
+}
+
+/**
+ * Put values into a message's holes.
+ *
+ * The same `{name}` spelling the shell's own locale service uses, so a string
+ * reads the same wherever it is written.
+ *
+ * @param {string} template - the message, possibly with holes.
+ * @param {Record<string, unknown>} [params] - what fills them.
+ * @returns {string} the filled message.
+ */
+function fill(template, params) {
+  if (params === undefined) return template
+  return template.replaceAll(/\{(\w+)\}/g, (whole, name) => (name in params ? String(params[name]) : whole))
 }
 
 /**

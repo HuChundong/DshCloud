@@ -212,7 +212,7 @@ export async function handlePanel(req, res, deps) {
     ({ handle } = await resolve())
   } catch (error) {
     console.error(`gateway: the panel could not reach ${caller.email}'s sandbox: ${error.message}`)
-    json(res, 502, { error: '沙箱还没准备好，请稍后再试。' })
+    json(res, 502, { error: { code: 'sandbox.not_ready' } })
     return true
   }
 
@@ -222,7 +222,7 @@ export async function handlePanel(req, res, deps) {
       const resolved = requireInsideRoot(bytesPath)
       const { status, body } = await readFile(handle, resolved)
       if (status >= 400) {
-        json(res, status === 404 ? 404 : 502, { error: '读不到这个文件。' })
+        json(res, status === 404 ? 404 : 502, { error: { code: 'file.unreadable' } })
         return true
       }
       res.writeHead(200, {
@@ -341,7 +341,7 @@ export async function handlePanel(req, res, deps) {
     // The message goes to the deployment's log, not to the browser: it names
     // sandbox ids and envd internals.
     console.error(`gateway: the panel failed for ${caller.email}: ${error.message}`)
-    json(res, 502, { error: '沙箱没有回应。' })
+    json(res, 502, { error: { code: 'sandbox.silent' } })
     return true
   }
 }

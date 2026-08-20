@@ -508,7 +508,7 @@ async function handleRequest(req, res) {
       // tenant still gets a new machine.
       console.error(`gateway: restarting ${caller.email}'s sandbox failed: ${error.message}`)
       res.writeHead(502, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify({ error: '重启失败，请稍后再试。' }))
+      res.end(JSON.stringify({ error: { code: 'restart.failed' } }))
       return
     }
     console.log(`gateway: ${caller.email} restarted their sandbox`)
@@ -551,7 +551,7 @@ async function handleRequest(req, res) {
     // the store. Nothing here should ever approach this.
     const body = await readBody(req, 64 * 1024)
     if (body === undefined) {
-      answer(413, { error: '内容过长。' })
+      answer(413, { error: { code: 'body.too_long' } })
       return
     }
     /** @type {{name?: unknown, value?: unknown}} */
@@ -559,7 +559,7 @@ async function handleRequest(req, res) {
     try {
       payload = JSON.parse(body.toString('utf8'))
     } catch {
-      answer(400, { error: '请求格式不正确。' })
+      answer(400, { error: { code: 'body.malformed' } })
       return
     }
     const name = String(payload?.name ?? '')
@@ -577,11 +577,11 @@ async function handleRequest(req, res) {
     }
     const outcome = await secrets.set(caller.email, name, String(payload?.value ?? ''))
     if (outcome === 'full') {
-      answer(409, { error: '变量数量已达上限。' })
+      answer(409, { error: { code: 'secrets.full' } })
       return
     }
     if (outcome === 'too-long') {
-      answer(413, { error: '值过长。' })
+      answer(413, { error: { code: 'secrets.value_too_long' } })
       return
     }
     console.log(`gateway: ${caller.email} set sandbox secret ${name}`)

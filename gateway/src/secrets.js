@@ -74,11 +74,14 @@ const NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/
  * @returns {string | undefined} the reason, or undefined when acceptable.
  */
 export function nameProblem(name) {
+  // A code and the values that fill it, not a sentence. Wording it here would
+  // mean choosing a language, and the language is a preference in the caller's
+  // browser that this has no way of knowing and no business knowing.
   if (!NAME_PATTERN.test(name)) {
-    return '名称只能由字母、数字和下划线组成，且不能以数字开头。'
+    return { code: 'secret.name.invalid' }
   }
   if (RESERVED.has(name)) {
-    return `${name} 由部署本身设置，不能覆盖。`
+    return { code: 'secret.name.reserved', params: { name } }
   }
   return undefined
 }
