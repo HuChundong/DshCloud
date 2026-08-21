@@ -25,6 +25,81 @@ window.__ModuleLoader__.load({
     const React = require('react')
     const ReactDom = require('react-dom')
 
+    /**
+     * The shell's own icon set.
+     *
+     * `?? {}` and a `try`, because the module table answers `undefined` for an
+     * id it does not carry and every use below is a property read — which on
+     * `undefined` is a TypeError during render, and a render error takes the
+     * seat down. A missing glyph should cost the glyph, not the composer.
+     */
+    let primitives = {}
+    try {
+      primitives = require('@deepseek-ai/dsh-client-ui-primitives') ?? {}
+    } catch (error) {
+      console.warn('[dsh-sandbox-host] ui-primitives did not load; rows render without glyphs', error)
+    }
+
+    /**
+     * The one glyph this plugin draws itself.
+     *
+     * The nav's other row and the composer's clip are the harness's own,
+     * required above. A sandbox is not in that set — `ArchiveOutline20` is a
+     * lidded box and means archive — so this comes from
+     * `packages/dsh-icons`, drawn to the same rules: a 16 grid, a 1.3 stroke
+     * expanded to a filled outline, `currentColor`.
+     *
+     * Copied rather than imported, and that is not a preference. This file is
+     * loaded raw by the shell's module loader — `require` here is the shell's
+     * table, not Node's — so there is no build step to resolve a sibling
+     * package through. `scripts/check-icons.mjs` holds these bytes to
+     * `dsh-icons` so the copy cannot drift from the original in silence.
+     */
+    const SANDBOX_GLYPH = {
+      viewBox: '0 0 24 24',
+      paths: [
+        'M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z',
+        'm3.3 7 8.7 5 8.7-5',
+        'M12 22V12',
+      ],
+      stroke: { width: 2, linecap: 'round', linejoin: 'round' },
+    }
+
+    /** Which glyph each nav row wears, by the name the call sites use. */
+    const GLYPHS = {
+      configuration: primitives.IconListPenOutline16,
+      sandbox: SANDBOX_GLYPH,
+    }
+
+    /**
+     * One glyph, whichever half it comes from.
+     *
+     * @param {object} props - `name`, and an optional `size`.
+     * @returns {object | null} the icon, or null when nothing carries that name.
+     */
+    const Glyph = ({ name, size = 16 }) => {
+      const glyph = GLYPHS[name]
+      if (glyph === undefined) return null
+      if (typeof glyph === 'function') return React.createElement(glyph, { size })
+      // Painted the way it was drawn, and sized by its own box: the harness's
+      // glyphs are filled outlines on a 16 grid, the extracted half is strokes
+      // on a 24. Filling a stroke turns a drawing into a blot, and a 24-box
+      // glyph forced through a 16 viewBox is a quarter of a drawing.
+      const paint = glyph.stroke === undefined
+        ? { fill: 'currentColor', fillRule: 'evenodd' }
+        : {
+            fill: 'none',
+            stroke: 'currentColor',
+            strokeWidth: glyph.stroke.width,
+            strokeLinecap: glyph.stroke.linecap,
+            strokeLinejoin: glyph.stroke.linejoin,
+          }
+      return React.createElement('svg', {
+        width: size, height: size, viewBox: glyph.viewBox, fill: 'none',
+        style: { flex: 'none' }, 'aria-hidden': true,
+      }, ...glyph.paths.map((d, at) => React.createElement('path', { key: at, d, transform: glyph.transform, ...paint })))
+    }
+
     // ---------------------------------------------------------------- wire --
 
     /** The channel the host half owns. One path segment; see its module note. */
@@ -76,7 +151,7 @@ window.__ModuleLoader__.load({
      * text, which is exactly the kind of handle that stops working the moment
      * the text is translated.
      */
-    const NavLabel = ({ d, section }) => {
+    const NavLabel = ({ name, section }) => {
       const t = useT()
       return React.createElement(
         'span',
@@ -85,19 +160,13 @@ window.__ModuleLoader__.load({
           'data-dsh-section': section,
           style: { display: 'inline-flex', alignItems: 'center', gap: '8px' },
         },
-        React.createElement('svg', {
-          width: 16, height: 16, viewBox: '0 0 16 16', fill: 'none',
-          style: { flex: 'none' }, 'aria-hidden': true,
-        }, React.createElement('path', {
-          d, stroke: 'currentColor', strokeWidth: 1.3,
-          strokeLinecap: 'round', strokeLinejoin: 'round',
-        })),
+        React.createElement(Glyph, { name }),
         t(section),
       )
     }
 
     /** The registration's `label`: an element, and this one keeps rendering. */
-    const navLabel = (d, section) => React.createElement(NavLabel, { d, section })
+    const navLabel = (name, section) => React.createElement(NavLabel, { name, section })
 
 
     /**
@@ -630,13 +699,9 @@ window.__ModuleLoader__.load({
     const Style = () => React.createElement('style', null, STYLE)
 
     /** A paperclip, at the size the composer's own chrome uses. */
-    const Clip = ({ size = 16 }) => React.createElement('svg', {
-      width: size, height: size, viewBox: '0 0 16 16', fill: 'none', 'aria-hidden': true,
-      className: `${P}-icon`,
-    }, React.createElement('path', {
-      d: 'M10.5 5 6 9.5a1.5 1.5 0 0 0 2.1 2.1l4.9-4.9a3 3 0 1 0-4.2-4.2L3.6 7.2a4.5 4.5 0 0 0 6.4 6.4l4-4',
-      stroke: 'currentColor', strokeWidth: 1.3, strokeLinecap: 'round', strokeLinejoin: 'round',
-    }))
+    const Clip = ({ size = 16 }) => (primitives.IconPaperclipOutline16 === undefined
+      ? null
+      : React.createElement(primitives.IconPaperclipOutline16, { size, className: `${P}-icon` }))
 
     // ------------------------------------------------------------ the cards --
 
@@ -1578,7 +1643,7 @@ window.__ModuleLoader__.load({
               name: 'settings.section',
               id: 'configuration',
               order: 890,
-              label: navLabel('M9 1.75H4.5a1 1 0 0 0-1 1v10.5a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V5.25zM9 1.75v3.5h3.5M5.75 8.5h4.5M5.75 11h3', 'configuration'),
+              label: navLabel('configuration', 'configuration'),
             },
             ConfigurationSection,
           )),
@@ -1598,7 +1663,7 @@ window.__ModuleLoader__.load({
               // "things are kept in this" where the page says "this is a machine",
               // and every other glyph in that column is a rounded rectangle, so the
               // one shape that is not is also the easiest to pick out.
-              label: navLabel('M8 1.75 14 5v6l-6 3.25L2 11V5zM2 5l6 3.25L14 5M8 8.25v6', 'sandbox'),
+              label: navLabel('sandbox', 'sandbox'),
             },
             SandboxSection,
           )),

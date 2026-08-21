@@ -21,6 +21,22 @@ window.__ModuleLoader__.load({
     const React = require('react')
     const ReactDom = require('react-dom')
 
+    /**
+     * The shell's own icon set.
+     *
+     * `?? {}` and a `try`, because the module table answers `undefined` for an
+     * id it does not carry and every use below is a property read — which on
+     * `undefined` is a TypeError during render, and a render error takes the
+     * whole row down. A missing glyph should cost the glyph, not the account
+     * menu.
+     */
+    let primitives = {}
+    try {
+      primitives = require('@deepseek-ai/dsh-client-ui-primitives') ?? {}
+    } catch (error) {
+      console.warn('[dsh-tenant-account] ui-primitives did not load; rows render without glyphs', error)
+    }
+
     /** Class the rule below is scoped to; nothing else in the page uses it. */
     const BUTTON_CLASS = 'dsh-tenant-account-button'
 
@@ -134,24 +150,98 @@ window.__ModuleLoader__.load({
      * — and when it was handed a KEY instead of a word, it showed the key.
      * That is what put a literal `account` in the settings nav.
      */
-    const NavLabel = ({ d, section }) => {
+    /**
+     * The two glyphs this plugin draws itself.
+     *
+     * Everything else on these rows is the harness's own, required above.
+     * These two are not in that set — it has no door and no shield — so they
+     * come from `packages/dsh-icons`, which draws them to the same rules: a 16
+     * grid, a 1.3 stroke expanded to a filled outline, `currentColor`.
+     *
+     * Copied rather than imported, and that is not a preference. This file is
+     * loaded raw by the shell's module loader — `require` here is the shell's
+     * table, not Node's — so there is no build step to resolve a sibling
+     * package through. `scripts/check-icons.mjs` holds these bytes to
+     * `dsh-icons` so the copy cannot drift from the original in silence.
+     */
+    const DRAWN = {
+      signout: {
+        viewBox: '0 0 24 24',
+        paths: [
+          'm16 17 5-5-5-5',
+          'M21 12H9',
+          'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4',
+        ],
+        stroke: { width: 2, linecap: 'round', linejoin: 'round' },
+      },
+      admin: {
+        viewBox: '0 0 24 24',
+        paths: [
+          'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2',
+          'M16 3.128a4 4 0 0 1 0 7.744',
+          'M22 21v-2a4 4 0 0 0-3-3.87',
+          'M5 7a4 4 0 1 0 8 0a4 4 0 1 0 -8 0',
+        ],
+        stroke: { width: 2, linecap: 'round', linejoin: 'round' },
+      },
+    }
+
+
+
+
+
+    /** Which glyph each row wears, by the name the call sites use. */
+    const GLYPHS = {
+      settings: primitives.IconSettingsOutline16,
+      profile: primitives.IconUserOutline16,
+      account: primitives.IconUserOutline16,
+      admin: DRAWN.admin,
+      signout: DRAWN.signout,
+    }
+
+    /**
+     * One glyph, whichever half it comes from.
+     *
+     * @param {object} props - `name`, and an optional `size`.
+     * @returns {object | null} the icon, or null when nothing carries that name.
+     */
+    const Glyph = ({ name, size = 16 }) => {
+      const glyph = GLYPHS[name]
+      if (glyph === undefined) return null
+      if (typeof glyph === 'function') {
+        return React.createElement(glyph, { size, className: `${NS}-glyph` })
+      }
+      // Painted the way it was drawn, and sized by its own box: the harness's
+      // glyphs are filled outlines on a 16 grid, the extracted half is strokes
+      // on a 24. Filling a stroke turns a drawing into a blot, and a 24-box
+      // glyph forced through a 16 viewBox is a quarter of a drawing.
+      const paint = glyph.stroke === undefined
+        ? { fill: 'currentColor', fillRule: 'evenodd' }
+        : {
+            fill: 'none',
+            stroke: 'currentColor',
+            strokeWidth: glyph.stroke.width,
+            strokeLinecap: glyph.stroke.linecap,
+            strokeLinejoin: glyph.stroke.linejoin,
+          }
+      return React.createElement('svg', {
+        width: size, height: size, viewBox: glyph.viewBox, fill: 'none',
+        style: { flex: 'none' }, 'aria-hidden': true,
+      }, ...glyph.paths.map((d, at) => React.createElement('path', { key: at, d, transform: glyph.transform, ...paint })))
+    }
+
+    const NavLabel = ({ name, section }) => {
       const t = useT()
       return React.createElement(
         'span',
         { className: NAV_GLYPH, style: { display: 'inline-flex', alignItems: 'center', gap: '8px' } },
-        React.createElement('svg', {
-          width: 16, height: 16, viewBox: '0 0 16 16', fill: 'none',
-          style: { flex: 'none' }, 'aria-hidden': true,
-        }, React.createElement('path', {
-          d, stroke: 'currentColor', strokeWidth: 1.3,
-          strokeLinecap: 'round', strokeLinejoin: 'round',
-        })),
+        React.createElement(Glyph, { name }),
         t(section),
       )
     }
 
     /** The registration's `label`: an element, and this one keeps rendering. */
-    const navLabel = (d, section) => React.createElement(NavLabel, { d, section })
+    const navLabel = (name, section) => React.createElement(NavLabel, { name, section })
 
     /**
      * What the caller is before their own answer has arrived.
@@ -1116,12 +1206,7 @@ window.__ModuleLoader__.load({
             // for here, which left the page's only destructive control looking
             // like every other button on it.
             { type: 'button', onClick: signOut, className: BUTTON_CLASS, 'data-danger': 'true' },
-            React.createElement('svg', {
-              width: 16, height: 16, viewBox: '0 0 16 16', fill: 'none', 'aria-hidden': true,
-            }, React.createElement('path', {
-              d: 'M6 14H3.5A1.5 1.5 0 0 1 2 12.5v-9A1.5 1.5 0 0 1 3.5 2H6M10.5 11 14 8l-3.5-3M14 8H6',
-              stroke: 'currentColor', strokeWidth: 1.3, strokeLinecap: 'round', strokeLinejoin: 'round',
-            })),
+            React.createElement(Glyph, { name: 'signout' }),
             t('sign-out'),
           ),
           React.createElement(
@@ -1431,43 +1516,9 @@ window.__ModuleLoader__.load({
      * @param {object} props - `size` in pixels.
      * @returns {object} the icon.
      */
-    const Chevron = ({ size = 14 }) => React.createElement(
-      'svg',
-      {
-        className: `${U}-chev`, width: size, height: size,
-        viewBox: '0 0 16 16', fill: 'none', 'aria-hidden': true,
-      },
-      React.createElement('path', {
-        d: 'M4 10l4-4 4 4',
-        stroke: 'currentColor', strokeWidth: 1.5,
-        strokeLinecap: 'round', strokeLinejoin: 'round',
-      }),
-    )
-
-    /**
-     * One 16px glyph, by name. Inline because the shell exports no icon set and
-     * four paths are cheaper than a dependency that would have to be bundled.
-     *
-     * @param {object} props - `name`, one of the keys below.
-     * @returns {object | null} the icon, or null for an unknown name.
-     */
-    const Icon = ({ name }) => {
-      const paths = {
-        settings: 'M8 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM13.3 9.5l1.2.7-1.5 2.6-1.3-.6a5.5 5.5 0 0 1-1.2.7L10.3 14h-3l-.2-1.4a5.5 5.5 0 0 1-1.2-.7l-1.3.6-1.5-2.6 1.2-.7a5.6 5.6 0 0 1 0-1.4l-1.2-.7 1.5-2.6 1.3.6a5.5 5.5 0 0 1 1.2-.7L7.3 2h3l.2 1.4c.4.2.8.4 1.2.7l1.3-.6 1.5 2.6-1.2.7a5.6 5.6 0 0 1 0 1.4z',
-        profile: 'M8 8a2.75 2.75 0 1 0 0-5.5A2.75 2.75 0 0 0 8 8zM2.75 14a5.25 5.25 0 0 1 10.5 0',
-        admin: 'M8 1.75 13 4v4c0 3-2.1 5.4-5 6.25C5.1 13.4 3 11 3 8V4z',
-        signout: 'M6 14H3.5A1.5 1.5 0 0 1 2 12.5v-9A1.5 1.5 0 0 1 3.5 2H6M10.5 11 14 8l-3.5-3M14 8H6',
-      }
-      const d = paths[name]
-      if (d === undefined) return null
-      return React.createElement('svg', {
-        width: 16, height: 16, viewBox: '0 0 16 16', fill: 'none',
-        style: { flex: 'none' }, 'aria-hidden': true,
-      }, React.createElement('path', {
-        d, stroke: 'currentColor', strokeWidth: 1.3,
-        strokeLinecap: 'round', strokeLinejoin: 'round',
-      }))
-    }
+    const Chevron = ({ size = 14 }) => (primitives.IconChevronUpOutline14 === undefined
+      ? null
+      : React.createElement(primitives.IconChevronUpOutline14, { size, className: `${U}-chev` }))
 
     /**
      * The tenant, at the sidebar's foot, with everything about them behind it.
@@ -1706,7 +1757,7 @@ window.__ModuleLoader__.load({
           React.createElement(
             'button',
             { type: 'button', role: 'menuitem', className: `${U}-item`, onClick: openSettings },
-            React.createElement(Icon, { name: 'settings' }),
+            React.createElement(Glyph, { name: 'settings' }),
             t('settings'),
           ),
           // The same dialog the account page opens, for the same reason: the
@@ -1717,7 +1768,7 @@ window.__ModuleLoader__.load({
               type: 'button', role: 'menuitem', className: `${U}-item`,
               onClick: () => { setMenu(null); setEditing(true) },
             },
-            React.createElement(Icon, { name: 'profile' }),
+            React.createElement(Glyph, { name: 'profile' }),
             t('profile.title'),
           ),
           // Only the console's own audience is told it exists: `/admin` answers
@@ -1726,7 +1777,7 @@ window.__ModuleLoader__.load({
           who.admin && React.createElement(
             'a',
             { role: 'menuitem', className: `${U}-item`, href: '/admin' },
-            React.createElement(Icon, { name: 'admin' }),
+            React.createElement(Glyph, { name: 'admin' }),
             t('console'),
           ),
           React.createElement('div', { className: `${U}-sep` }),
@@ -1736,7 +1787,7 @@ window.__ModuleLoader__.load({
               type: 'button', role: 'menuitem', className: `${U}-item`, 'data-danger': 'true',
               onClick: () => { setMenu(null); void signOut() },
             },
-            React.createElement(Icon, { name: 'signout' }),
+            React.createElement(Glyph, { name: 'signout' }),
             t('sign-out'),
           ),
         ), document.body),
@@ -1764,7 +1815,7 @@ window.__ModuleLoader__.load({
               name: 'settings.section',
               id: 'account',
               order: 900,
-              label: navLabel('M8 8a2.75 2.75 0 1 0 0-5.5A2.75 2.75 0 0 0 8 8zM2.75 14a5.25 5.25 0 0 1 10.5 0', 'account'),
+              label: navLabel('account', 'account'),
             },
             AccountSection,
           )),

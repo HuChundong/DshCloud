@@ -7,6 +7,7 @@
   "scripts": {
     "lint": "oxlint",
     "check:docs": "node scripts/check-docs.mjs",
+    "check:icons": "node scripts/check-icons.mjs",
     "check:images": "scripts/check-images.sh",
     "check:assets": "node scripts/check-assets.mjs",
     "check:pages": "node scripts/check-pages.mjs",

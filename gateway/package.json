@@ -6,6 +6,7 @@
   "description": "The authenticating front door: sessions, accounts, and one sandbox per tenant.",
   "main": "src/server.js",
   "dependencies": {
+    "dsh-icons": "file:../packages/dsh-icons",
     "dsh-tunnel-protocol": "file:../packages/tunnel-protocol",
     "jose": "^6.1.0",
     "pg": "^8.16.0",

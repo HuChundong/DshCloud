@@ -10,7 +10,15 @@
  * Everything here is a string. Both pages are server-rendered documents with no
  * build step — that is what lets them work when the frontend bundle has not
  * loaded and may be why it has not — so composition is concatenation.
+ *
+ * The icons come from `dsh-icons` for the same reason they do everywhere else:
+ * these pages cannot ask the shell's module table for the harness's own set the
+ * way a plugin can, because there is no shell here and nothing to hold a React
+ * component. `svg()` hands back markup, which is the one thing concatenation
+ * can use.
  */
+
+import { svg } from 'dsh-icons'
 
 /**
  * Escape text for interpolation into HTML element content or a quoted attribute.
@@ -488,8 +496,8 @@ export const THEME_TOGGLE = `<style>
   })()
 </script>
 <button type="button" class="theme" id="theme" data-ta="theme.label" aria-label="切换深色/浅色">
-  <svg class="sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
-  <svg class="moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+  ${svg('light', { className: 'sun' })}
+  ${svg('dark', { className: 'moon' })}
 </button>
 <script>
   document.getElementById('theme').addEventListener('click', function () {

@@ -21,6 +21,7 @@
 
 import { BRAND_CSS, CONSOLE_NOTICES, FONT_PRELOAD, PALETTE_CSS, THEME_TOGGLE, TOAST_CSS, WORDMARK, escapeHtml, langToggle, toast, toastEntry } from './page-chrome.js'
 import { asset } from './page-assets.js'
+import { cssUrl } from 'dsh-icons'
 import { PLANS } from './plans.js'
 import { describeKey } from './settings.js'
 
@@ -218,9 +219,10 @@ ${TOAST_CSS}
     font-size: .8125rem;
     cursor: pointer;
     /* The chevron, drawn rather than fetched: this page reaches no other host.
-       Its stroke is stated because a data: URI cannot see currentColor, and
-       the value is --muted's, which reads on both grounds. */
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23808184' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4.5 6.5 8 10l3.5-3.5'/%3E%3C/svg%3E");
+       Its ink is stated because a data: URI is a document of its own and
+       currentColor inside one resolves against nothing; the value is --muted's,
+       which reads on both grounds. */
+    background-image: ${cssUrl('chevron-down', '#808184', 16)};
     background-repeat: no-repeat;
     background-position: right .45rem center;
     background-size: 14px 14px;

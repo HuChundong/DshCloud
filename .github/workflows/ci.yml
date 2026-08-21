@@ -88,6 +88,15 @@ jobs:
       - name: Asset caching
         run: node scripts/check-assets.mjs
 
+      # The interface is drawn by the harness and by this repository at once, so
+      # the set has to be one set: mirrored from the pinned release where the
+      # harness has a glyph, drawn to its rules where it does not, and copied
+      # only into the two client halves the shell loads as raw source. This
+      # fails a DSH_VERSION bump that did not come back through the generator,
+      # and a copy that stopped matching what it was copied from.
+      - name: Icons
+        run: node scripts/check-icons.mjs
+
       - name: Plugins load
         run: |
           npm --prefix packages/dsh-artifact-panel ci --no-audit --no-fund

@@ -82,6 +82,54 @@ Four rules, each of which has broken:
 None of these fail the build. All of them fail on the first `import`, which is
 what `scripts/check-images.sh` exists to catch.
 
+## Icons come from the harness
+
+**Do not draw an icon that `@deepseek-ai/dsh-client-ui-primitives` already
+carries.** It has 70, MIT, drawn from the same figma source as the rest of the
+interface, and every browser half of every plugin can `require` it from the
+shell's module table exactly the way it requires React. The panel was already
+requiring that module for `MarkdownText` and `CodeBlock` while hand-drawing
+nineteen Lucide glyphs beside it, and the result was three icon styles in one
+window: the harness's filled 16-grid outlines, a 24-grid set at stroke 2, and a
+16-grid set at stroke 1.4.
+
+What the harness has no drawing for lives in `packages/dsh-icons`, and it is
+**taken, not drawn**. Sixteen glyphs, extracted from Lucide by `extract.mjs`
+and stamped with the version they came from. Drawing them here was tried and
+the result was the thing this rule exists to prevent: ten icons made beside
+everything else this deployment does, sitting next to seventy a designer made.
+
+Lucide because of the two measures that decide whether a glyph belongs beside
+another. Its line weighs 2/24 of its box against the harness's 1.3/16 — two per
+cent apart, which is why a 24-grid set can stand in a 16-grid interface with
+nothing rescaled. And it is stroked rather than solid, which is the harness's
+own construction expressed the other way round; `extract.mjs` refuses a glyph
+whose weight drifts more than a tenth from upstream's.
+
+Two traps, both of which cost a rebuild to find. Lucide draws with the whole
+primitive vocabulary — a head is a `<circle>`, a frame is a `<rect>` — so an
+extractor that reads `d` attributes drops parts of a drawing **without saying
+so**: `users` arrived as a body with no head and nothing failed. And a name
+that matches is not a meaning that matches, in both directions: `copy` and
+`copy-text` are two buttons side by side and must not become one glyph, while
+the harness's own `IconCodeOutline16` draws a hash. Read the drawing, not the
+name.
+
+Two surfaces cannot require the harness set, and they are the reason that
+package exists rather than being only a handful of paths. The gateway's pages
+are Node writing HTML into template literals and the landing page is a static
+document; neither has a module table or a React runtime, so both take markup
+from `dsh-icons` instead. The glyphs they borrow from the harness are mirrored
+into `mirrored.js` by `mirror.mjs`, stamped with the release they came from,
+and `check-icons.mjs` fails a `DSH_VERSION` bump that did not come back through
+the generator.
+
+Two client halves — `dsh-tenant-account` and `dsh-sandbox-host` — carry three
+drawn glyphs inline. That is not a preference: the shell's module loader reads
+those files as source with `require` bound to its own table, so there is no
+build step to resolve a sibling package through. `check-icons.mjs` holds those
+bytes to the original.
+
 ## Directories mean something
 
 ```
@@ -116,13 +164,14 @@ The rules that are not obvious from the listing:
 
 ## What to run before pushing
 
-CI runs all four. Run them locally when the change touches what they cover,
+CI runs all five. Run them locally when the change touches what they cover,
 rather than all of them every time:
 
 ```sh
 npx oxlint                     # JavaScript
 node scripts/check-docs.mjs    # links, bilingual pairing, section alignment
 node scripts/check-uploads.mjs # the upload store, from the tree alone
+node scripts/check-icons.mjs   # one icon set, and its copies
 scripts/check-images.sh        # after a build: what resolves, and what loads
 ```
 

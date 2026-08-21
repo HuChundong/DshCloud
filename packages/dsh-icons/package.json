@@ -1,0 +1,16 @@
+{
+  "name": "dsh-icons",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "One icon set for the surfaces that cannot ask the shell for one: the gateway's pages, the landing page, and the glyphs the harness set does not carry.",
+  "exports": {
+    ".": "./index.js",
+    "./package.json": "./package.json",
+    "./extracted": "./extracted.js",
+    "./mirrored": "./mirrored.js"
+  },
+  "scripts": {
+    "mirror": "node mirror.mjs"
+  }
+}

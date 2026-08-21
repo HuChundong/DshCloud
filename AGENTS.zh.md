@@ -60,6 +60,42 @@ harness 上才成立的改动，不是这个项目能交付的改动。
 这四条**都不会让构建失败**，它们全都在第一次 `import` 时失败。`scripts/check-images.sh`
 存在的意义就是抓这个。
 
+## 图标来自 harness
+
+**不要画 `@deepseek-ai/dsh-client-ui-primitives` 已经有的图标。** 它有 70 个，
+MIT，和界面其余部分出自同一份 figma 源；每个插件的浏览器半边都可以从 shell 的
+模块表里 `require` 它，方式和 require React 完全一样。面板此前已经在为
+`MarkdownText` 和 `CodeBlock` require 这个模块，却在旁边手画了十九个 Lucide
+图标——结果是一个窗口里三种图标风格：harness 的 16 网格填充轮廓、24 网格
+stroke 2 的一套，以及 16 网格 stroke 1.4 的另一套。
+
+harness 没有画的那些放在 `packages/dsh-icons`，而且是**提取来的，不是画的**。
+一共十六个，由 `extract.mjs` 从 Lucide 提取并盖上来源版本号。自己画这条路走过，
+结果正是这条规矩要防的事：十个在做别的事情之余顺手画出来的图标，挨着七十个设计
+师画的。
+
+选 Lucide，是因为决定「一个字形能不能挨着另一个」的两条尺度：它的线宽占框
+2/24，harness 是 1.3/16，相差两个百分点——这就是 24 网格的集合能站进 16 网格界面
+而不做任何缩放的依据；而且它是描边而非实心，正是 harness「描边扩成填充」的同一
+种构造反过来说。`extract.mjs` 会拒绝线宽偏离上游超过十分之一的字形。
+
+两个坑，都要重建一次才发现。Lucide 用的是整套图元——头是 `<circle>`、画框是
+`<rect>`——所以只读 `d` 属性的提取器会**一声不吭地**丢掉一部分drawing：`users`
+提出来是有身子没头，而且什么都没报错。另外，名字对上不等于含义对上，两个方向都
+会出错：`copy` 和 `copy-text` 是并排两个按钮，绝不能变成同一个图；而 harness 自
+己那个叫 `IconCodeOutline16` 的，画的是一个井号。**看图，别看名字。**
+
+有两个界面无法 require harness 的图标集，这也正是那个包存在的理由，而不只是几
+条路径数据。gateway 的页面是 Node 把 HTML 写进模板字符串，落地页是一份静态文档；
+两者都没有模块表、没有 React 运行时，所以都从 `dsh-icons` 取标记。它们从 harness
+借的字形由 `mirror.mjs` 镜像进 `mirrored.js`，并盖上来源版本号；`check-icons.mjs`
+会让一次没有重新走生成器的 `DSH_VERSION` 升级失败。
+
+有两个 client 半边——`dsh-tenant-account` 和 `dsh-sandbox-host`——内联了三个自绘
+字形。这不是偏好：shell 的模块加载器把这些文件当源码读，`require` 绑的是它自己的
+表，所以没有任何构建步骤可以用来解析兄弟包。`check-icons.mjs` 会把那些字节钉在
+原件上。
+
 ## 目录是有含义的
 
 ```
@@ -89,12 +125,13 @@ listing 里看不出来的那几条规则：
 
 ## 推送前该跑什么
 
-CI 四个都跑。改动触及哪一块就在本地跑哪一个，而不是每次全跑：
+CI 五个都跑。改动触及哪一块就在本地跑哪一个，而不是每次全跑：
 
 ```sh
 npx oxlint                     # JavaScript
 node scripts/check-docs.mjs    # 链接、中英配对、章节对齐
 node scripts/check-uploads.mjs # 上传存储，只需要代码树
+node scripts/check-icons.mjs   # 一套图标，以及它的副本
 scripts/check-images.sh        # 构建之后：什么能解析、什么能加载
 ```
 

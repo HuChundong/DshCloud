@@ -14,11 +14,50 @@
 import { defineConfig } from 'vite'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
+import { svg } from 'dsh-icons'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const repository = path.resolve(here, '../..')
 
+/**
+ * The icons, written into the document at build time.
+ *
+ * The page is served to a browser as a static file, so its glyphs have to be in
+ * the markup — there is no module table here to ask for a React component the
+ * way a plugin does, and no runtime worth booting to insert nine paths. But the
+ * paths themselves must not live in `index.html`: the same glyphs are on the
+ * gateway's pages, and two hand-kept copies of an icon is exactly the drift
+ * this repository already went and removed once.
+ *
+ * So the document names the icon and this puts it there. `<i data-icon="plus">`
+ * is a placeholder with no rendering of its own; by the time anything is served
+ * it is the `<svg>` `dsh-icons` produced. It runs in `vite build` and in the dev
+ * server alike, because `transformIndexHtml` is the same hook for both.
+ *
+ * A name with no glyph behind it fails the build rather than disappearing from
+ * the page, which is the one failure mode a placeholder like this has.
+ */
+const icons = {
+  name: 'dsh-icons',
+  transformIndexHtml: {
+    order: 'pre',
+    handler: (html) => html.replaceAll(
+      /<i data-icon="([\w-]+)"([^>]*)><\/i>/g,
+      (_, name, rest) => {
+        const className = rest.match(/class="([^"]*)"/)?.[1]
+        const size = rest.match(/data-size="(\d+)"/)?.[1]
+        return svg(name, {
+          ...(className === undefined ? {} : { className }),
+          ...(size === undefined ? {} : { size: Number(size) }),
+        })
+      },
+    ),
+  },
+}
+
 export default defineConfig({
+  plugins: [icons],
+
   // Relative, because the page is served from more than one root: the site root
   // on GitHub Pages and `/` inside the web image. Absolute URLs would name a
   // path that is only right in one of them. This is the same rule the page
