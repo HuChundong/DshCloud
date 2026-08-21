@@ -94,7 +94,15 @@ try {
   save('/index.html', index.body)
 
   const html = index.body.toString('utf8')
-  const manifest = /window\.__DSH_BOOT__\s*=\s*(\{.*?\})<\/script>/s.exec(html)
+  // Two spellings, because the host changed how it writes this and both are
+  // the same fact. Through 0.1.0-rc.8 it assigned `window.__DSH_BOOT__`
+  // directly; 0.1.1-rc.1 renders every injected global through one table as
+  // `globalThis["__DSH_BOOT__"]`. Matching both keeps this able to harvest an
+  // older shell, which is what a version bump wants to be reversible against.
+  //
+  // Anchored on `</script>` in either case: the injected row is one element
+  // holding one assignment, so the first close after the value is its own.
+  const manifest = /(?:window\.__DSH_BOOT__|globalThis\[(?:"|')__DSH_BOOT__(?:"|')\])\s*=\s*(\{.*?\})<\/script>/s.exec(html)
   if (manifest === null) throw new Error('harvest-shell: no boot manifest in the served index.html')
   const graph = JSON.parse(manifest[1].replaceAll('\\u003c', '<'))
 

@@ -24,7 +24,7 @@
 # DSH_VERSION` to bring this default into its own scope — which is the only way
 # to read it after a FROM, and which is what was missing when the footer went
 # blank.
-ARG DSH_VERSION=0.1.0-rc.8
+ARG DSH_VERSION=0.1.1-rc.1
 
 # ------------------------------------------------------------------- deps ----
 FROM node:24-slim AS deps
@@ -161,6 +161,11 @@ ARG NPM_REGISTRY=
 RUN if [ -n "$NPM_REGISTRY" ]; then npm config set registry "$NPM_REGISTRY"; fi
 
 WORKDIR /panel
+# `/dsh-icons`, because the panel declares it as `file:../dsh-icons` relative to
+# this WORKDIR. It carries the glyphs the harness set has no drawing for; the
+# rest of the panel's icons are the shell's own and arrive through the module
+# table at runtime, so nothing of them is installed here.
+COPY packages/dsh-icons /dsh-icons
 COPY packages/dsh-artifact-panel/package.json ./
 RUN npm install --no-audit --no-fund
 COPY packages/dsh-artifact-panel/build.mjs ./
@@ -545,6 +550,10 @@ ARG NPM_REGISTRY=
 RUN if [ -n "$NPM_REGISTRY" ]; then npm config set registry "$NPM_REGISTRY"; fi
 # Manifest first: the dependency install is then cached against it and does not
 # re-run because a screenshot changed.
+# `/src/packages/dsh-icons`, because the page declares it as
+# `file:../../packages/dsh-icons` relative to this WORKDIR. Its build writes the
+# icons into the document, so the set has to be here before `npm ci`.
+COPY packages/dsh-icons /src/packages/dsh-icons
 COPY web/landing/package.json web/landing/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY gateway/assets /src/gateway/assets
@@ -631,6 +640,11 @@ WORKDIR /app
 # `file:../packages/tunnel-protocol` relative to this WORKDIR. One copy of the
 # frame protocol, depended on by both ends rather than duplicated into each.
 COPY packages/tunnel-protocol /packages/tunnel-protocol
+# And `/packages/dsh-icons`, declared the same way. It is path data and a string
+# helper with no dependencies of its own — the gateway's pages cannot ask a
+# module table for the harness's components the way a plugin can, because there
+# is no shell here to ask.
+COPY packages/dsh-icons /packages/dsh-icons
 COPY gateway/package.json ./
 RUN npm install --omit=dev --no-audit --no-fund && rm -rf /root/.npm
 COPY gateway ./gateway
