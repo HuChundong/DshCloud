@@ -135,6 +135,11 @@ services:
       # without verification but only delivers to the Resend account's owner.
       EMAIL_FROM: ${EMAIL_FROM:-onboarding@resend.dev}
       EMAIL_PRODUCT_NAME: ${EMAIL_PRODUCT_NAME:-DSH}
+      # Where a message is handed over. Empty everywhere that serves real
+      # people, which is what makes the default — Resend — the only postman
+      # they have. Set it to the development mailbox below and mail arrives on
+      # this machine instead; nothing else about signing in changes.
+      EMAIL_API_URL: ${EMAIL_API_URL:-}
       REFRESH_TTL_SECONDS: ${REFRESH_TTL_SECONDS:-2592000}
       # Whether an invite is needed to register. `open` lets anyone who can
       # receive mail in, which is what a deployment on a reachable address
@@ -185,6 +190,31 @@ services:
         TZ: ${DEPLOYMENT_TZ:-UTC}
     image: hamsterhq-sandbox:latest
     profiles: [build]
+    networks: [hamsterhq-net]
+
+  # A place for a sign-in code to land while developing.
+  #
+  # Behind a profile, so it takes `--profile dev` to exist at all: a mailbox
+  # that prints verification codes has to be something an operator started on
+  # purpose, never something that comes up with the deployment.
+  #
+  # No build and no image of its own — the file is mounted into a stock node.
+  # It has no dependencies, and keeping it out of the built images is what
+  # makes it impossible to ship one by accident.
+  mailbox:
+    image: node:24-alpine
+    command: node /srv/mailbox.mjs
+    volumes:
+      - ./dev/mailbox.mjs:/srv/mailbox.mjs:ro
+    environment:
+      PORT: 8025
+    ports:
+      # Loopback, not every interface. The rest of this file publishes broadly
+      # because a deployment is meant to be reached; this one is meant to be
+      # reached by the person sitting at the machine.
+      - "127.0.0.1:8025:8025"
+    restart: unless-stopped
+    profiles: [dev]
     networks: [hamsterhq-net]
 
 volumes:

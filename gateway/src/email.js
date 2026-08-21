@@ -12,8 +12,22 @@
 
 import process from 'node:process'
 
-/** Where Resend takes messages. */
-const API_URL = 'https://api.resend.com/emails'
+/**
+ * Where messages are handed over.
+ *
+ * Resend by default, and a development mailbox when one is named. The two are
+ * the same shape — a `POST` of one JSON document describing one message — so
+ * pointing this elsewhere changes the postman and nothing else: the code is
+ * still minted, still mailed, still typed in, still expires, still cools down.
+ * That is the whole point of doing it here rather than anywhere upstream. A
+ * sign-in path that behaves differently in development is a sign-in path
+ * nobody has actually tested.
+ *
+ * Absent in every deployment that serves real people, because nothing sets it
+ * there. It is not a flag that turns something off; it is an address, and the
+ * only addresses worth putting in it are ones that exist on the machine.
+ */
+const API_URL = process.env.EMAIL_API_URL ?? 'https://api.resend.com/emails'
 
 /** The API credential. Absent, the deployment cannot sign anybody in. */
 const API_KEY = process.env.RESEND_API_KEY ?? ''
