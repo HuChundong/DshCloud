@@ -15,6 +15,24 @@ absolute_redirect off;
 
 # ---- session-bearing surface: proxied, never served from disk ----
 
+# Every one of these overwrites `X-Forwarded-For`, and that is a rule rather
+# than a habit.
+#
+# The gateway reads the LAST hop of that header as the caller, which is right
+# only because exactly one proxy sits in front and appends the peer it actually
+# received the connection from. Where a location did NOT set the header, the
+# client's own value went upstream untouched — so the last hop was whatever the
+# caller had written there. `/login` was one of those, and the send limit that
+# allows twenty codes an hour is keyed on exactly that value: a header changed
+# per request was a fresh bucket per request, and the limit did not exist.
+#
+# It has to be repeated in each block rather than set once above them, because
+# `proxy_set_header` does not merge across levels — a location that declares
+# any header of its own inherits none of the outer ones. Setting it at the
+# server level would therefore have applied to nothing here, since every
+# location sets `Host`. `scripts/check-forwarded.mjs` compares this file
+# against itself so a route added later cannot quietly be the next `/login`.
+
 # The agent plane. Long reads: a prompt holds its response open while the
 # model works, and the default 60s would cut it.
 location /api/ {
@@ -53,30 +71,31 @@ location /files/ {
 # `X-Forwarded-Proto` decides whether the gateway marks its token cookies
 # `Secure`. It is trustworthy only because nothing but this nginx can reach the
 # gateway's port.
-location = /login   { proxy_pass http://gateway; proxy_set_header Host $host; proxy_set_header X-Forwarded-Proto $scheme; }
-location = /logout  { proxy_pass http://gateway; proxy_set_header Host $host; proxy_set_header X-Forwarded-Proto $scheme; }
-location /login-assets/ { proxy_pass http://gateway; proxy_set_header Host $host; }
-location = /whoami  { proxy_pass http://gateway; proxy_set_header Host $host; proxy_set_header X-Forwarded-Proto $scheme; }
+location = /login   { proxy_pass http://gateway; proxy_set_header Host $host; proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; proxy_set_header X-Forwarded-Proto $scheme; }
+location = /logout  { proxy_pass http://gateway; proxy_set_header Host $host; proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; proxy_set_header X-Forwarded-Proto $scheme; }
+location /login-assets/ { proxy_pass http://gateway; proxy_set_header Host $host; proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; }
+location = /whoami  { proxy_pass http://gateway; proxy_set_header Host $host; proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; proxy_set_header X-Forwarded-Proto $scheme; }
 # The deployment's terms, data notice and safe-use policy. Anonymous: they are
 # what someone reads before agreeing to them on the sign-in form, which is
 # before they have an account. A prefix, because there are three of them and
 # `/policy` itself redirects to the first.
-location /policy { proxy_pass http://gateway; proxy_set_header Host $host; }
+location /policy { proxy_pass http://gateway; proxy_set_header Host $host; proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; }
 
 # The tenant's own name and picture, and closing the account. A prefix rather
 # than the exact match this was: `/profile/delete` is a second path on the same
 # handler, and an exact match sent it to `try_files` and a 404 — with a curl
 # aimed straight at the gateway passing, which is the confusing kind of broken.
-location /profile { proxy_pass http://gateway; proxy_set_header Host $host; proxy_set_header X-Forwarded-Proto $scheme; }
+location /profile { proxy_pass http://gateway; proxy_set_header Host $host; proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; proxy_set_header X-Forwarded-Proto $scheme; }
 # The tenant's own sandbox environment. A prefix rather than an exact match:
 # `/secrets` lists and writes, `/secrets/delete` removes.
-location /secrets { proxy_pass http://gateway; proxy_set_header Host $host; proxy_set_header X-Forwarded-Proto $scheme; }
+location /secrets { proxy_pass http://gateway; proxy_set_header Host $host; proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; proxy_set_header X-Forwarded-Proto $scheme; }
 # Throwing away this tenant's own machine. Removing a container is slower than
 # a request usually is, so it gets the long read timeout rather than the 60s
 # default — a timeout here would report failure for something that worked.
 location = /sandbox/restart {
   proxy_pass http://gateway;
   proxy_set_header Host $host;
+  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
   proxy_set_header X-Forwarded-Proto $scheme;
   proxy_read_timeout 5m;
 }
@@ -92,6 +111,7 @@ location ~ ^/sandbox/(stats|watch)$ {
   proxy_pass http://gateway;
   proxy_http_version 1.1;
   proxy_set_header Host $host;
+  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
   proxy_set_header X-Forwarded-Proto $scheme;
   proxy_read_timeout 1h;
   proxy_send_timeout 1h;
@@ -107,6 +127,7 @@ location = /sandbox/pty {
   proxy_pass http://gateway;
   proxy_http_version 1.1;
   proxy_set_header Host $host;
+  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
   proxy_set_header X-Forwarded-Proto $scheme;
   proxy_set_header Upgrade $http_upgrade;
   proxy_set_header Connection $connection_upgrade;
@@ -127,6 +148,7 @@ location = /sandbox/pty {
 location /sandbox/fs/ {
   proxy_pass http://gateway;
   proxy_set_header Host $host;
+  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
   proxy_set_header X-Forwarded-Proto $scheme;
 }
 
@@ -146,6 +168,7 @@ location /sandbox/fs/ {
 location /sandbox/preview/ {
   proxy_pass http://gateway;
   proxy_set_header Host $host;
+  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
   proxy_set_header X-Forwarded-Proto $scheme;
   proxy_read_timeout 1h;
   proxy_send_timeout 1h;
@@ -155,6 +178,7 @@ location /sandbox/preview/ {
 location /sandbox/raw/ {
   proxy_pass http://gateway;
   proxy_set_header Host $host;
+  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
   proxy_set_header X-Forwarded-Proto $scheme;
   proxy_read_timeout 1h;
   proxy_send_timeout 1h;
@@ -167,6 +191,7 @@ location /sandbox/raw/ {
 location /admin {
   proxy_pass http://gateway;
   proxy_set_header Host $host;
+  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
   proxy_set_header X-Forwarded-Proto $scheme;
 }
 
@@ -180,6 +205,7 @@ location = /_auth {
   proxy_pass_request_body off;
   proxy_set_header Content-Length "";
   proxy_set_header Host $host;
+  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
   proxy_set_header X-Forwarded-Proto $scheme;
   # A subrequest carries its own URI, not the one being gated. The gateway needs
   # the original to tell the application shell apart from the plugin bundles

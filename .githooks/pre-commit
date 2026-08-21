@@ -29,5 +29,7 @@ node scripts/check-pages.mjs >/dev/null
 node scripts/check-landing.mjs >/dev/null
 node scripts/check-assets.mjs >/dev/null
 node scripts/check-docs.mjs >/dev/null
+node scripts/check-forwarded.mjs >/dev/null
+node scripts/check-panel-paths.mjs >/dev/null
 
 echo "pre-commit: parses, loads, and says both languages"
