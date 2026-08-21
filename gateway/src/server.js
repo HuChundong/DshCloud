@@ -46,7 +46,7 @@ import { DIAL_IN_TIMEOUT_MS, SandboxManager } from './sandboxes.js'
 import { Secrets, nameProblem } from './secrets.js'
 import { SendLimit } from './send-limit.js'
 import { Settings } from './settings.js'
-import { REPORT_PATH, receiveReport } from './stats.js'
+import { REPORT_PATH, knowsLiveness, livenessChanged, receiveReport } from './stats.js'
 import { handleSignIn } from './sign-in.js'
 import { Tokens, signedOutCookies } from './tokens.js'
 import { TunnelServer } from './tunnel-server.js'
@@ -197,7 +197,14 @@ const consoleDeps = {
   version: DSH_VERSION,
 }
 
-const tunnels = new TunnelServer((sandboxId, token) => sandboxes.authorize(sandboxId, token))
+const tunnels = new TunnelServer(
+  (sandboxId, token) => sandboxes.authorize(sandboxId, token),
+  // Whether a sandbox is up is known here the instant it changes, so the
+  // status bar is told from here rather than left to infer it from how
+  // recently the sandbox last reported.
+  (sandboxId) => { livenessChanged(sandboxId) },
+)
+knowsLiveness((sandboxId) => tunnels.has(sandboxId))
 const browserSockets = new WebSocketServer({ noServer: true })
 
 /**

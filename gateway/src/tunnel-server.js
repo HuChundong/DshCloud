@@ -260,8 +260,18 @@ export class TunnelServer {
   /**
    * @param {(sandboxId: string, token: string) => boolean} authorize - decides whether a dial-in is a sandbox this gateway started.
    */
-  constructor(authorize) {
+  constructor(authorize, onLiveness = () => {}) {
     this.authorize = authorize
+    /**
+     * Told whenever a sandbox connects or goes.
+     *
+     * Whether a sandbox is up is something this knows the moment it changes,
+     * and it is the only truthful answer to that question — anything derived
+     * from how recently the sandbox last said something is a guess with a
+     * delay in it. The status bar asks for the truth, so it is handed it from
+     * here rather than inferred somewhere else.
+     */
+    this.onLiveness = onLiveness
     /** @type {Map<string, SandboxTunnel>} */
     this.tunnels = new Map()
     /** @type {Map<string, Array<() => void>>} */
@@ -361,6 +371,7 @@ export class TunnelServer {
       // unreachable either way, so failing them now beats leaking them.
       this.tunnels.get(sandboxId)?.destroy()
       this.tunnels.set(sandboxId, tunnel)
+      this.onLiveness(sandboxId, true)
       console.log(`gateway: sandbox ${sandboxId} connected`)
       for (const wake of this.waiters.get(sandboxId) ?? []) wake()
       this.waiters.delete(sandboxId)
@@ -386,7 +397,10 @@ export class TunnelServer {
       })
       ws.on('close', () => {
         tunnel.destroy()
-        if (this.tunnels.get(sandboxId) === tunnel) this.tunnels.delete(sandboxId)
+        if (this.tunnels.get(sandboxId) === tunnel) {
+          this.tunnels.delete(sandboxId)
+          this.onLiveness(sandboxId, false)
+        }
         console.log(`gateway: sandbox ${sandboxId} disconnected`)
       })
       ws.on('error', (error) => { console.error(`gateway: sandbox ${sandboxId}: ${error.message}`) })

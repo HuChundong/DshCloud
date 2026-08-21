@@ -17,14 +17,6 @@
  */
 
 
-/**
- * How long a stream may say nothing before it is treated as dead.
- *
- * The sampler inside the sandbox reports every five seconds, so silence for
- * several times that is not a quiet machine — it is a machine that stopped
- * answering, which is a status a person needs to see.
- */
-const SILENCE_MS = 20000
 
 /**
  * How long a stream waits before trying to attach again.
@@ -59,6 +51,52 @@ function shape(raw) {
 }
 
 /**
+ * Whether a sandbox is up, answered by whoever actually knows.
+ *
+ * Set once at start-up from the tunnel registry. Two separate questions live in
+ * one payload and this is the difference between them: whether the machine is
+ * THERE is a fact the gateway holds and can answer instantly, while what it is
+ * DOING is a measurement that travels and may be a few seconds old. Deriving
+ * the first from the second — treating a recent report as proof of life — is
+ * how a reclaimed sandbox goes on looking healthy until a timer says otherwise.
+ *
+ * @type {(sandboxId: string) => boolean}
+ */
+let isLive = () => false
+
+/**
+ * Say who knows whether a sandbox is up, and hear about it when that changes.
+ *
+ * @param {(sandboxId: string) => boolean} predicate - answers whether a sandbox is connected.
+ */
+export function knowsLiveness(predicate) {
+  isLive = predicate
+}
+
+/**
+ * A sandbox has connected, or gone. Tell whoever is looking, at once.
+ *
+ * @param {string} sandboxId - the sandbox whose state changed.
+ */
+export function livenessChanged(sandboxId) {
+  const entry = reported.get(sandboxId)
+  if (entry === undefined) return
+  publish(sandboxId, entry)
+}
+
+/**
+ * Hand everyone the state as it is now, with whatever figures are to hand.
+ *
+ * @param {string} sandboxId - the sandbox.
+ * @param {object} entry - its record.
+ */
+function publish(sandboxId, entry) {
+  const reading = { ok: isLive(sandboxId), stats: entry.stats }
+  entry.last = reading
+  for (const reader of entry.readers) reader(reading)
+}
+
+/**
  * What each sandbox has reported, and who is listening for it.
  *
  * Keyed by the gateway's id for the sandbox rather than the runtime's handle,
@@ -74,7 +112,7 @@ function record(sandboxId) {
   let entry = reported.get(sandboxId)
   if (entry !== undefined) entry.expires = undefined
   if (entry === undefined) {
-    entry = { last: undefined, readers: new Set(), changers: new Set(), timer: undefined, coalescing: false }
+    entry = { stats: undefined, last: undefined, readers: new Set(), changers: new Set(), timer: undefined, coalescing: false }
     reported.set(sandboxId, entry)
   }
   return entry
@@ -114,19 +152,11 @@ export function receiveReport(sandboxId, report) {
   // Refusing loudly is how a flood becomes expensive for the wrong side.
   if (!spend(sandboxId)) return { watchers: 1, slow: true }
 
-  if (report.metrics !== undefined) {
-    const reading = { ok: true, stats: { id: sandboxId, ...shape(report.metrics) } }
-    entry.last = reading
-    for (const reader of entry.readers) reader(reading)
-    // Rearmed on every report: a sandbox that stops reporting is a sandbox
-    // that stopped answering, and to a person that IS the status.
-    if (entry.timer !== undefined) clearTimeout(entry.timer)
-    entry.timer = setTimeout(() => {
-      const current = reported.get(sandboxId)
-      if (current === undefined) return
-      current.last = { ok: false }
-      for (const reader of current.readers) reader(current.last)
-    }, SILENCE_MS)
+  // Figures, and nothing about whether the machine is up: that is the tunnel's
+  // to say, and it says it the moment it changes rather than a report later.
+  if (report.metrics !== undefined && report.metrics !== null) {
+    entry.stats = { id: sandboxId, ...shape(report.metrics) }
+    publish(sandboxId, entry)
   }
 
   // Third guard: changes are coalesced. The panel's answer to any change is to
@@ -182,10 +212,15 @@ function spend(sandboxId) {
 function watchSandbox(sandboxId, onReading) {
   const entry = record(sandboxId)
   entry.readers.add(onReading)
-  // A subscriber that arrives mid-flight is handed the last reading rather
-  // than waiting out an interval for the next one.
-  if (entry.last !== undefined) onReading(entry.last)
-  else onReading({ ok: false })
+  // Answered now, from what the gateway already knows. A reload used to come
+  // back to nothing and wait out the reporting interval before it learned
+  // whether the machine was even there — for a fact this process was holding
+  // the whole time.
+  //
+  // The figures beside it may be a few seconds old, and that is the honest
+  // shape of the thing: the state is current, the measurements are as recent
+  // as the last one that arrived.
+  onReading({ ok: isLive(sandboxId), stats: entry.stats })
   return () => {
     const current = reported.get(sandboxId)
     if (current === undefined) return
