@@ -43,6 +43,7 @@
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import terminalCss from '@xterm/xterm/css/xterm.css'
+import { forgetPath } from './tabs.js'
 
 window.__ModuleLoader__.load({
   id: 'dsh-artifact-panel',
@@ -455,6 +456,29 @@ window.__ModuleLoader__.load({
             groups: { ...state.groups, [state.session]: Object.freeze({ tabs: next, activeId: focus }) },
             ...next.length === 0 ? { open: false } : {},
           })
+        },
+        /**
+         * Drop every tab that is showing something no longer there.
+         *
+         * A tab is a claim that a file is worth looking at, and a deleted file
+         * makes that claim false. Left alone the tab stays on the bar with its
+         * name and its icon, and what is under it is an error where the file
+         * used to be — the panel insisting on something the workspace has
+         * already moved on from.
+         *
+         * Which tabs those are is decided in `tabs.js`, where it can be asked
+         * about directly. What is here is the part that cannot: one write for
+         * every group at once, because separate writes paint a frame each, and
+         * if the last tab in this session goes, a frame of an open panel with
+         * nothing in it.
+         *
+         * @param {string} path - what was removed.
+         */
+        forget: (path) => {
+          const { groups, changed } = forgetPath(state.groups, path)
+          if (!changed) return
+          const here = groups[state.session] ?? EMPTY_GROUP
+          write({ groups, ...here.tabs.length === 0 ? { open: false } : {} })
         },
         select: (id) => { writeGroup({ ...group(), activeId: id }) },
         /** Start another shell, and show it. */
@@ -1875,6 +1899,32 @@ window.__ModuleLoader__.load({
     }
 
     /**
+     * Whether a path is still there.
+     *
+     * Bytes are not asked for — the two viewers that need this are an image
+     * and an HTML page, both of which have already handed their URL to the
+     * browser, and downloading a file a second time to find out whether it
+     * exists would cost more than what it answers.
+     *
+     * A 404 is the sandbox saying no such path, and nothing else answers 404
+     * here: a sandbox that cannot be reached at all is a 502, so this cannot
+     * mistake a deployment being down for a file being deleted.
+     *
+     * @param {string} path - an absolute path inside the workspace.
+     * @returns {Promise<boolean>} false only when the sandbox says it is gone.
+     */
+    const stillThere = async (path) => {
+      try {
+        const response = await fetch(`/sandbox/fs/stat?path=${encodeURIComponent(path)}`, { credentials: 'same-origin' })
+        return response.status !== 404
+      } catch {
+        // A network that failed says nothing about the file, and a tab is not
+        // closed on a question that went unanswered.
+        return true
+      }
+    }
+
+    /**
      * The URL one file's bytes are served at.
      *
      * Path-encoded rather than a query parameter, and the gateway decodes it
@@ -2392,6 +2442,23 @@ window.__ModuleLoader__.load({
         if (change.stale === true || change.path === path) setRevision((n) => n + 1)
       }), [path])
 
+      /**
+       * The two viewers that would not otherwise notice.
+       *
+       * Text and markdown fetch their own bytes and hear a 404 for
+       * themselves. An image and an HTML page hand a URL to the browser and
+       * never learn what came back — a deleted image becomes a broken-image
+       * glyph and a deleted page becomes the gateway's own 404 rendered
+       * inside the frame, both of them under a tab still bearing the file's
+       * name.
+       */
+      React.useEffect(() => {
+        if (kind !== 'image' && kind !== 'html') return undefined
+        let live = true
+        stillThere(path).then((there) => { if (live && !there) store.forget(path) })
+        return () => { live = false }
+      }, [path, kind, revision])
+
       React.useEffect(() => {
         if (kind !== 'html') return undefined
         let live = true
@@ -2415,6 +2482,10 @@ window.__ModuleLoader__.load({
             const body = await response.text()
             if (!live) return
             if (!response.ok) {
+              // Gone, rather than unreadable. The tab is about a file, and
+              // there is no longer one — so it closes instead of standing
+              // there explaining that what it is named after is missing.
+              if (response.status === 404) { store.forget(path); return }
               let message = t('error.read', { status: String(response.status) })
               try { message = JSON.parse(body).error ?? message } catch { /* not JSON; keep the status */ }
               setText({ status: 'failed', message })
@@ -2969,7 +3040,15 @@ window.__ModuleLoader__.load({
         setBusy(true)
         setFailed(undefined)
         try {
-          if (kind === 'delete') await command('remove', { path: entry.path })
+          if (kind === 'delete') {
+            await command('remove', { path: entry.path })
+            // Straight away, rather than waiting for the viewer to ask for a
+            // file and be told it is not there. This is the one case where
+            // exactly what went is already known, so nothing has to be
+            // discovered — and a tab that is only closed once its contents
+            // fail shows the failure first.
+            store.forget(entry.path)
+          }
           else if (kind === 'rename') await command('move', { from: entry.path, to: `${parent}/${value.trim()}` })
           else if (kind === 'mkdir') await command('mkdir', { path: `${into}/${value.trim()}` })
           else await command('create', { path: `${into}/${value.trim()}` })

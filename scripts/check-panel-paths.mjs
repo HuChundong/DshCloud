@@ -29,6 +29,7 @@ import {
   readPreviewUrl,
   readTicket,
 } from '../gateway/src/panel-ticket.js'
+import { forgetPath, shows } from '../packages/dsh-artifact-panel/src/tabs.js'
 import {
   PathRefused,
   RAW_PREFIX,
@@ -272,6 +273,91 @@ t('a preview path is still bounded by the same scope', () => {
   const ticket = mintTicket(SECRET, 'acct-1', NOW)
   const parsed = readPreviewUrl(previewUrl(ticket, `${ROOT}/../root/.dsh`))
   refused(parsed.path, 403)
+})
+
+// ---- what the tab bar looks like once a file is gone ----
+
+// A tab outlives the file it was opened from. Nothing about deleting one goes
+// near the bar, so the tab stays where it was, named after the file, with an
+// error underneath it where the contents used to be — the panel insisting on
+// something the workspace has already moved on from. These are the cases the
+// removal has to get right, and none of them is easy to produce by hand.
+
+const bar = (tabs, activeId) => ({ tabs, activeId })
+const file = (path) => ({ id: path, path, label: path.slice(path.lastIndexOf('/') + 1) })
+const tool = (id) => ({ id })
+
+t('a deleted file closes its tab', () => {
+  const { groups, changed } = forgetPath({ s1: bar([file('/w/a.txt'), file('/w/b.txt')], '/w/b.txt') }, '/w/a.txt')
+  assert.equal(changed, true)
+  assert.deepEqual(groups.s1.tabs.map((tab) => tab.path), ['/w/b.txt'])
+})
+
+t('a deleted directory takes the files open from inside it', () => {
+  const open = bar([file('/w/src/a.js'), file('/w/src/deep/b.js'), file('/w/keep.txt')], '/w/keep.txt')
+  const { groups } = forgetPath({ s1: open }, '/w/src')
+  assert.deepEqual(groups.s1.tabs.map((tab) => tab.path), ['/w/keep.txt'])
+})
+
+// The separator is part of the prefix, or removing a directory would close
+// every sibling whose name begins with the same letters.
+t('a sibling that shares a prefix is left alone', () => {
+  const { groups, changed } = forgetPath({ s1: bar([file('/w/application.js')], '/w/application.js') }, '/w/app')
+  assert.equal(changed, false)
+  assert.deepEqual(groups.s1.tabs.map((tab) => tab.path), ['/w/application.js'])
+})
+
+t('the built-in tools have no path and are never closed', () => {
+  const { changed } = forgetPath({ s1: bar([tool('terminal'), tool('canvas')], 'terminal') }, '/w/a.txt')
+  assert.equal(changed, false)
+})
+
+// Every session, because the file is equally gone in all of them and a dead
+// tab left in one is found later, by someone who was not watching when it went.
+t('a file open in another session is forgotten there too', () => {
+  const { groups } = forgetPath({
+    s1: bar([file('/w/a.txt')], '/w/a.txt'),
+    s2: bar([file('/w/a.txt'), file('/w/b.txt')], '/w/b.txt'),
+  }, '/w/a.txt')
+  assert.deepEqual(groups.s1.tabs, [])
+  assert.deepEqual(groups.s2.tabs.map((tab) => tab.path), ['/w/b.txt'])
+})
+
+t('focus falls to the left when the active tab goes', () => {
+  const { groups } = forgetPath({ s1: bar([file('/w/a'), file('/w/b'), file('/w/c')], '/w/b') }, '/w/b')
+  assert.equal(groups.s1.activeId, '/w/a')
+})
+
+t('and to the new first tab when the active one was first', () => {
+  const { groups } = forgetPath({ s1: bar([file('/w/a'), file('/w/b')], '/w/a') }, '/w/a')
+  assert.equal(groups.s1.activeId, '/w/b')
+})
+
+t('focus does not move when some other tab goes', () => {
+  const { groups } = forgetPath({ s1: bar([file('/w/a'), file('/w/b')], '/w/b') }, '/w/a')
+  assert.equal(groups.s1.activeId, '/w/b')
+})
+
+// Which is what tells the caller to close the panel rather than leave a
+// half-width empty state behind.
+t('the last tab going leaves the group empty', () => {
+  const { groups, changed } = forgetPath({ s1: bar([file('/w/a')], '/w/a') }, '/w/a')
+  assert.equal(changed, true)
+  assert.deepEqual(groups.s1.tabs, [])
+  assert.equal(groups.s1.activeId, undefined)
+})
+
+// No write, no render: a removal that touched nothing must cost nothing.
+t('removing something no tab was showing changes nothing', () => {
+  const before = { s1: bar([file('/w/a')], '/w/a') }
+  const { groups, changed } = forgetPath(before, '/w/z')
+  assert.equal(changed, false)
+  assert.equal(groups.s1, before.s1)
+})
+
+t('a tab whose path is not a string is not a file', () => {
+  assert.equal(shows({ id: 'canvas' }, '/w'), false)
+  assert.equal(shows({ id: 'x', path: 5 }, '/w'), false)
 })
 
 console.log(failures === 0
