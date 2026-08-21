@@ -140,8 +140,15 @@ export function loginPage(state = {}) {
   // Nothing is said about the invite here either. The field says it, and a line
   // repeating what the field above it already asks for is one more thing to
   // read on the way to the same action.
+  //
+  // What it says now includes which tier registering puts someone on, and links
+  // to the page that lists them. That is the whole of what this page says about
+  // subscriptions: a sign-in form's job is to get someone in, and a deployment
+  // that sells nothing yet has nothing to sell them here. The link is where a
+  // visitor who wants more goes; `/plans` rather than `/#plans` because the
+  // front door redirects anyone who already has a session.
   const alt = pending === undefined
-    ? inviteRequired === true ? '' : '<div class="alt"><span data-t="alt.register">首次登录将自动注册</span></div>'
+    ? inviteRequired === true ? '' : '<div class="alt"><span data-t="alt.register">首次登录将自动注册，开通免费版</span><a href="/plans#plans" data-t="alt.plans">查看套餐</a></div>'
     : '<div class="alt"><a href="/login" data-t="alt.another">换个邮箱</a></div>'
   // The dsh release, not a version of the gateway: it is what a tenant would
   // quote when reporting something, and what the notice above is about.
@@ -189,7 +196,11 @@ export function loginPage(state = {}) {
       en: `I have read and agree to ${policyLinks({ separator: ', ', lang: 'en' })}`,
     }
     if (inviteRequired !== true) {
-      table['alt.register'] = { zh: '首次登录将自动注册', en: 'Signing in for the first time registers you' }
+      table['alt.register'] = {
+        zh: '首次登录将自动注册，开通免费版',
+        en: 'Signing in for the first time registers you on the Free plan',
+      }
+      table['alt.plans'] = { zh: '查看套餐', en: 'See the plans' }
     }
   } else {
     table['doc.title'] = { zh: '输入验证码 · HamsterHQ', en: 'Enter the code · HamsterHQ' }

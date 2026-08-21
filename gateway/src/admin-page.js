@@ -19,8 +19,9 @@
  * and its sandbox with it.
  */
 
-import { BRAND_CSS, FONT_PRELOAD, PALETTE_CSS, THEME_TOGGLE, TOAST_CSS, WORDMARK, escapeHtml, langToggle, toast, toastEntry } from './page-chrome.js'
+import { BRAND_CSS, CONSOLE_NOTICES, FONT_PRELOAD, PALETTE_CSS, THEME_TOGGLE, TOAST_CSS, WORDMARK, escapeHtml, langToggle, toast, toastEntry } from './page-chrome.js'
 import { asset } from './page-assets.js'
+import { PLANS } from './plans.js'
 import { describeKey } from './settings.js'
 
 /**
@@ -47,7 +48,7 @@ function when(at) {
  * @param {{inviteRequired: boolean, sandboxLimit: number, source: string, updatedAt: number | undefined, updatedBy: string | undefined}} state.access - the gate in force: who may register, and how many sandboxes may run.
  * @param {number} state.live - how many sandboxes are running right now, which is what the ceiling is measured against.
  * @param {string} state.viewer - the administrator's own address, so the page can refuse to offer them their own delete button.
- * @param {string} [state.notice] - the outcome of the action that led here.
+ * @param {string | {code: string, params?: object}} [state.notice] - the outcome of the action that led here, as a message code rather than a sentence.
  * @param {string} [state.version] - the dsh release this deployment runs.
  * @returns {string} the HTML document.
  */
@@ -69,7 +70,7 @@ export function adminPage(state) {
     ? '<tr><td class="empty" data-t="empty.admins">GATEWAY_ADMINS 里的地址还没有登录过。</td></tr>'
     : admins.map((account) => adminRow(account, viewer)).join('\n')
   const rows = tenants.length === 0
-    ? '<tr><td colspan="5" class="empty" data-t="empty.tenants">还没有人注册。</td></tr>'
+    ? '<tr><td colspan="6" class="empty" data-t="empty.tenants">还没有人注册。</td></tr>'
     : tenants.map((account) => row(account)).join('\n')
 
   // Which credential is in force is state, not explanation: an operator cannot
@@ -97,7 +98,12 @@ export function adminPage(state) {
 
   // Everything the console says: the static strings the row helpers share, plus
   // the one sentence that has a number in it and whatever the banner is saying.
-  const table = { ...S, 'access.note': note, 'doc.title': { zh: '用户管理 · HamsterHQ', en: 'Console · HamsterHQ' }, ...toastEntry(undefined, notice) }
+  // `MESSAGES` as well as this page's own strings, because the toast this page
+  // raises after an action is built in the browser rather than rendered here:
+  // the server answers an action with a CODE, and the code has to be lookup-able
+  // on the page that shows it. Entries nobody names cost a line of JSON each and
+  // are what lets a message be added to that table alone.
+  const table = { ...CONSOLE_NOTICES, ...S, 'access.note': note, 'doc.title': { zh: '用户管理 · HamsterHQ', en: 'Console · HamsterHQ' }, ...toastEntry(undefined, notice) }
 
   const inviteRows = invites.length === 0
     ? '<tr><td colspan="4" class="empty" data-t="empty.invites">还没有邀请码。</td></tr>'
@@ -195,6 +201,35 @@ ${TOAST_CSS}
     cursor: pointer;
   }
   button:hover { border-color: var(--muted); }
+
+  /* The tier picker, sized and coloured as the buttons beside it so the row
+     reads as one strip of controls rather than a form dropped into a table.
+     appearance:none is what stops the platform from painting its own grey
+     box over the theme on the dark page. */
+  .plan { display: inline-flex; align-items: center; gap: .4rem; }
+  .plan select {
+    appearance: none;
+    padding: .35rem 1.6rem .35rem .7rem;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--bg);
+    color: var(--fg);
+    font: inherit;
+    font-size: .8125rem;
+    cursor: pointer;
+    /* The chevron, drawn rather than fetched: this page reaches no other host.
+       Its stroke is stated because a data: URI cannot see currentColor, and
+       the value is --muted's, which reads on both grounds. */
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23808184' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4.5 6.5 8 10l3.5-3.5'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right .45rem center;
+    background-size: 14px 14px;
+  }
+  .plan select:hover { border-color: var(--muted); }
+  /* Hidden by the page's script, which submits on change instead. It is here
+     for the visit with no scripting, where it is the only way to send this. */
+  .plan button[hidden] { display: none; }
+
   button.danger { color: var(--danger); }
   button.danger:hover { border-color: var(--danger); }
 
@@ -348,6 +383,7 @@ ${adminRows}
           <th data-t="th.email">邮箱</th>
           <th class="hide-narrow" data-t="th.created">注册于</th>
           <th class="hide-narrow" data-t="th.seen">最近登录</th>
+          <th data-t="th.plan">套餐</th>
           <th data-t="th.sandbox">沙箱</th>
           <th></th>
         </tr>
@@ -414,6 +450,29 @@ ${inviteRows}
       dialog.dataset.form = form.id
     })
 
+    // The tier picker sends itself, through requestSubmit rather than submit:
+    // only the former fires the submit event, and form.submit() would
+    // navigate straight past the handler above and put the outcome in the
+    // address bar, which is the thing that handler exists to prevent.
+    //
+    // Delegated on the document, not bound per form: the refresh below replaces
+    // the whole of main after every action, so anything bound to a row is bound
+    // to a row that is about to be thrown away.
+    document.addEventListener('change', function (event) {
+      var select = event.target
+      if (!select.matches || !select.matches('.plan select')) return
+      select.form.requestSubmit()
+    })
+
+    // Scripting is on, so the picker's own button is the second way to do what
+    // the change above already did. Hidden here rather than left out of the
+    // markup, because the server cannot know whether this ever runs.
+    function hidePlanButtons(root) {
+      var buttons = root.querySelectorAll('.plan button')
+      for (var i = 0; i < buttons.length; i += 1) buttons[i].hidden = true
+    }
+    hidePlanButtons(document)
+
     dialog.addEventListener('click', function (event) {
       var value = event.target.value
       if (value === undefined) return
@@ -448,7 +507,13 @@ ${inviteRows}
         .then(function (html) {
           var fresh = new DOMParser().parseFromString(html, 'text/html')
           var main = fresh.querySelector('main')
-          if (main) document.querySelector('main').replaceWith(main)
+          if (main) {
+            document.querySelector('main').replaceWith(main)
+            // The replacement arrived as the server writes it: Chinese, with
+            // every picker's button visible. Neither is what this visit is in.
+            window.dshApply()
+            hidePlanButtons(main)
+          }
           announce(notice)
         })
     }
@@ -461,7 +526,13 @@ ${inviteRows}
       if (existing) existing.remove()
       var node = document.createElement('div')
       node.className = 'toast'
-      node.textContent = notice
+      // A code and its subjects, looked up now. The server sends what happened
+      // rather than a sentence about it, so this is where it becomes one — in
+      // the language this reader is in, which is the whole reason the server
+      // does not word it.
+      node.textContent = typeof notice === 'string'
+        ? window.dshText(notice)
+        : window.dshText(notice.code, notice.params)
       document.body.appendChild(node)
       setTimeout(function () { node.remove() }, 4000)
     }
@@ -553,9 +624,42 @@ function row(account) {
         <td><div class="email">${email}</div>${tags === '' ? '' : `<div>${tags}</div>`}</td>
         <td class="hide-narrow sub">${when(account.createdAt)}</td>
         <td class="hide-narrow sub">${when(account.lastSeenAt)}</td>
+        <td>${planPicker(account)}</td>
         <td>${sandbox}</td>
         <td class="actions">${actions}</td>
       </tr>`
+}
+
+/**
+ * The control that moves one tenant between tiers.
+ *
+ * A select rather than a button per tier, which is what the rest of this
+ * column is: three tiers beside the three actions already there would be six
+ * things to aim at in one row, and the list is meant to grow.
+ *
+ * Its own form, like every other action here, and the current tier is the
+ * selected option rather than a separate label — the control states the fact
+ * and changes it, which is one thing to read instead of two that can disagree.
+ *
+ * The submit button is real markup and not decoration: without scripting it is
+ * the only way to send the change, and the page's script hides it and submits
+ * on change instead. That order matters — rendering the button only when
+ * scripting is on is not something server-rendered HTML can know.
+ *
+ * @param {import('./accounts.js').Account} account - the tenant.
+ * @returns {string} the form markup.
+ */
+function planPicker(account) {
+  const id = `f${(formSequence += 1)}`
+  const options = PLANS.map((plan) => {
+    const chosen = plan === account.plan ? ' selected' : ''
+    return `<option value="${plan}"${chosen} data-t="plan.${plan}">${escapeHtml(S[`plan.${plan}`].zh)}</option>`
+  }).join('')
+  return `<form method="post" action="/admin/plan" id="${id}" class="plan">
+        <input type="hidden" name="email" value="${escapeHtml(account.email)}">
+        <select name="plan" data-ta="th.plan" aria-label="套餐">${options}</select>
+        <button type="submit" data-t="save">保存</button>
+      </form>`
 }
 
 /**
@@ -625,10 +729,21 @@ const S = {
   'th.email':    { zh: '邮箱', en: 'Email' },
   'th.created':  { zh: '注册于', en: 'Registered' },
   'th.seen':     { zh: '最近登录', en: 'Last seen' },
+  'th.plan':     { zh: '套餐', en: 'Plan' },
   'th.sandbox':  { zh: '沙箱', en: 'Sandbox' },
   'th.code':     { zh: '邀请码', en: 'Code' },
   'th.minted':   { zh: '生成于', en: 'Created' },
   'th.status':   { zh: '状态', en: 'Status' },
+
+  // The tiers, worded. `plans.js` holds the ids and refuses to hold these:
+  // a name has a language, and which language this page is in is a choice its
+  // reader makes in the browser. The account plugin carries its own copy of the
+  // same three words for the same reason the palette is written out twice — two
+  // documents, no build step between them, and the only thing that can keep
+  // them saying the same thing is that the words here are the words there.
+  'plan.free': { zh: '免费', en: 'Free' },
+  'plan.pro':  { zh: '专业', en: 'Pro' },
+  'plan.team': { zh: '团队', en: 'Team' },
 
   'invites.h':     { zh: '邀请码', en: 'Invite codes' },
   'invites.count': { zh: '生成数量', en: 'How many' },

@@ -153,19 +153,18 @@ window.__ModuleLoader__.load({
     /** The registration's `label`: an element, and this one keeps rendering. */
     const navLabel = (d, section) => React.createElement(NavLabel, { d, section })
 
-    /** What the caller is before their own answer has arrived. */
-    const NOBODY = { username: '', admin: false, displayName: '', avatar: '' }
-
     /**
-     * What this deployment charges, which is nothing.
+     * What the caller is before their own answer has arrived.
      *
-     * Stated rather than fetched, because there is no plan to fetch: no tiers
-     * exist, no entitlement is enforced anywhere, and a request for something
-     * the gateway has no table for would be inventing an answer. It is a
-     * constant so that there is exactly one line to change on the day plans do
-     * exist, and so that nothing downstream is written as though they already
-     * do.
+     * The tier is `free` and not the empty string, unlike every other field
+     * here. The others are absences a reader can see — no name yet, no picture
+     * yet — and the seat renders as blank until they land. A tier has no blank:
+     * the row would have to show either a badge or nothing, and "nothing" is
+     * already what the free tier looks like, so starting there is the one
+     * choice that does not flicker for the people it is right about.
      */
+    const NOBODY = { username: '', admin: false, displayName: '', avatar: '', plan: 'free' }
+
     /**
      * The plugin context, captured at mount, so the pieces that are not
      * components can still reach the locale service.
@@ -214,7 +213,12 @@ window.__ModuleLoader__.load({
     /** Everything this plugin says, in both languages. */
     const DICTIONARY = {
       zh: {
-        plan: '预览版',
+        'plan.row': '套餐',
+        'plan.free': '免费',
+        'plan.pro': '专业',
+        'plan.team': '团队',
+        'plan.view': '查看套餐',
+        'plan.granted': '付费档位尚未开放购买，开通和变更由部署的管理员操作。',
 
         'env.title': '环境变量',
         'env.what': '这些变量会在创建沙箱时注入它的环境。值只写入、不回显——保存后这里只显示名称。',
@@ -265,7 +269,12 @@ window.__ModuleLoader__.load({
         'error.avatar.large': '头像太大了，请换一张。',
       },
       en: {
-        plan: 'Preview',
+        'plan.row': 'Plan',
+        'plan.free': 'Free',
+        'plan.pro': 'Pro',
+        'plan.team': 'Team',
+        'plan.view': 'See the plans',
+        'plan.granted': 'Paid tiers are not on sale yet. An administrator grants and changes them.',
 
         'env.title': 'Environment variables',
         'env.what': 'These are put into the sandbox environment when it is created. Values are written and never read back — after saving, only the names are shown here.',
@@ -372,7 +381,7 @@ window.__ModuleLoader__.load({
 
     /**
      * Subscribe to the caller.
-     * @returns {{username: string, admin: boolean, displayName: string, avatar: string}} the caller, `NOBODY` until the answer lands.
+     * @returns {{username: string, admin: boolean, displayName: string, avatar: string, plan: string}} the caller, `NOBODY` until the answer lands.
      */
     const useWhoami = () => {
       const [who, setWho] = React.useState(NOBODY)
@@ -387,6 +396,11 @@ window.__ModuleLoader__.load({
             // string is what every reader below tests for.
             displayName: typeof body?.displayName === 'string' ? body.displayName : '',
             avatar: typeof body?.avatar === 'string' ? body.avatar : '',
+            // The gateway sends a tier id and nothing else about it; what it
+            // is called is decided below, in the language this browser is in.
+            // An id this build has no word for falls back the same way an
+            // unknown error code does — see `PLAN_NAMES`.
+            plan: typeof body?.plan === 'string' ? body.plan : 'free',
           })
         })
         load()
@@ -951,7 +965,7 @@ window.__ModuleLoader__.load({
     const AccountSection = () => {
       const t = useT()
       const who = useWhoami()
-      const { username, admin, displayName, avatar } = who
+      const { username, admin, displayName, avatar, plan } = who
       const [editing, setEditing] = React.useState(false)
 
       const row = { display: 'flex', alignItems: 'baseline', gap: '12px', padding: '10px 0' }
@@ -1015,6 +1029,62 @@ window.__ModuleLoader__.load({
           React.createElement('span', { style: key }, t('row.user')),
           React.createElement('span', { style: { fontSize: '14px', color: 'var(--dsw-alias-label-primary)' } }, username === '' ? '—' : username),
         ),
+        // The tier, as a row and not as a card. This section is a column of
+        // key-value-action rows; a panel around this one would make it the only
+        // box here, and what it holds is one fact — the same kind of fact as the
+        // address above it.
+        //
+        // The badge is the sidebar's, at the sidebar's size. It is the same
+        // claim about the same account, and a second treatment of it here would
+        // be a second thing to recognise.
+        React.createElement(
+          'div',
+          { style: { ...row, alignItems: 'center' } },
+          React.createElement('span', { style: key }, t('plan.row')),
+          React.createElement(
+            'span',
+            { style: { flex: '1 1 auto', minWidth: 0, display: 'inline-flex', alignItems: 'center' } },
+            React.createElement(PlanBadge, { plan }),
+          ),
+          // A link and not a button: it is a destination, and one outside the
+          // application. `/plans` rather than `/#plans` because `/` sends a
+          // signed-in tenant to `/app` — see `web/site.inc`.
+          //
+          // A new tab, because the alternative is throwing away a conversation
+          // to read a page of four columns and then coming back to a shell that
+          // has to boot again.
+          React.createElement(
+            'a',
+            {
+              href: '/plans#plans',
+              target: '_blank',
+              rel: 'noreferrer',
+              style: {
+                fontSize: '13px', fontFamily: 'var(--dsw-font-family)',
+                color: 'var(--dsw-alias-state-business-primary)',
+              },
+            },
+            t('plan.view'),
+          ),
+        ),
+        // Why the row above has no control on it. The account plugin says this
+        // rather than the plans page, because this is where somebody stands
+        // when they wonder why they cannot change it here.
+        React.createElement(
+          'p',
+          {
+            style: {
+              // The rule belongs under the note rather than under the row: the
+              // two are one entry, and a line between them would separate a
+              // statement from its own footnote.
+              margin: 0, padding: '0 0 12px', paddingLeft: 'calc(5rem + 12px)',
+              borderBottom: '1px solid var(--dsw-alias-border-l1)',
+              fontSize: '12px', lineHeight: '18px',
+              color: 'var(--dsw-alias-label-secondary)',
+            },
+          },
+          t('plan.granted'),
+        ),
         editing ? React.createElement(ProfileDialog, { who, onClose: () => setEditing(false) }) : null,
         // The only way in to the console, and the reason it is here: `/admin`
         // answers 404 to everyone else, so it is not linked anywhere a tenant
@@ -1070,6 +1140,57 @@ window.__ModuleLoader__.load({
 
     /** Classes the rules below are scoped to; nothing else in the page uses them. */
     const U = 'dsh-tenant-account'
+
+    /**
+     * The tiers this build has a word for.
+     *
+     * The gateway sends an id. This decides what it is called, in the language
+     * this browser is in — the same division `fromServer` draws for error
+     * codes, and for the same reason: the server names a thing, it does not
+     * word it.
+     *
+     * An id with no entry falls back to the free tier rather than showing
+     * itself. `pro` in a badge would be a tier the reader cannot look up, and a
+     * shell running against a newer gateway should degrade to something plain
+     * rather than to something raw.
+     */
+    const PLAN_NAMES = ['free', 'pro', 'team']
+
+    /**
+     * What a tier looks like in the seats that show one.
+     *
+     * Three states, and the first is the reason this is not simply a chip:
+     *
+     * - **Free.** No chip at all — the tier's name, in the colour the line
+     *   under a name was already in. Nearly everyone is on it, and a badge
+     *   every account wears is decoration on every account rather than
+     *   information about any of them. It is also exactly what this seat looked
+     *   like before tiers existed, which is what makes the free tier arriving a
+     *   non-event for the people already on it.
+     * - **Pro.** The green a running sandbox wears, by its token and not by a
+     *   value copied out of it: `dsh-brand` leaves the state colours alone on
+     *   purpose, so this is the one strong colour the window already has and
+     *   the badge does not introduce a second.
+     * - **Team.** The primary button's fill and its foreground — the ink-and-
+     *   paper pair this file already presses into a filled button, which turns
+     *   over with the theme because those tokens do.
+     *
+     * Pro is a tint rather than a fill for the reason the console's own tags
+     * are: a colour mixed toward transparent survives both grounds, where a
+     * fill has to be handed a foreground that reads on it in both, and there is
+     * no token that promises one on top of a state colour.
+     *
+     * @param {object} props - the props.
+     * @param {string} props.plan - the tier id as the gateway sent it.
+     * @returns {object} the element.
+     */
+    const PlanBadge = ({ plan }) => {
+      const t = useT()
+      const known = PLAN_NAMES.includes(plan) ? plan : 'free'
+      const name = t(`plan.${known}`)
+      if (known === 'free') return React.createElement('span', { className: `${U}-plan` }, name)
+      return React.createElement('span', { className: `${U}-badge`, 'data-plan': known }, name)
+    }
 
     /**
      * The dialog's styles.
@@ -1168,6 +1289,41 @@ window.__ModuleLoader__.load({
         overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
         font-size: 12px; line-height: 16px;
         color: var(--dsw-alias-label-tertiary, #81858c);
+      }
+      /* The paid tiers' chip.
+          Not drawn from scratch: this is the block beside the wordmark on the
+          deployment's own sign-in page — 4px, .15em by .4em, 700, .08em of
+          tracking — in another colour. Someone who registered an hour ago has
+          already seen this shape, and a second badge vocabulary in the same
+          product would be two things to learn for one idea.
+          Two glyphs of Chinese or three letters of Latin, either way: the
+          tracking is what stops a short word from setting solid, and the chip
+          holds the tier's NAME rather than a Latin abbreviation beside it —
+          "PRO Pro" is what the two-part version reads as in English.
+          inline-flex and flex:none because it sits in a column that
+          ellipsises: a chip is not text to truncate, and a truncated one says
+          a different tier. */
+      .${U}-badge {
+        flex: none; align-self: flex-start;
+        display: inline-flex; align-items: center;
+        padding: .15em .4em;
+        border-radius: 4px;
+        font-size: 10px; font-weight: 700; letter-spacing: .08em; line-height: 1.6;
+        white-space: nowrap;
+      }
+      /* Mixed toward transparent rather than filled, so one declaration reads
+          on the light ground and the dark one. The console's suspension tag is
+          the same move for the same reason. */
+      .${U}-badge[data-plan='pro'] {
+        background: color-mix(in srgb, var(--dsw-alias-state-success-primary, #22c55e) 16%, transparent);
+        color: var(--dsw-alias-state-success-primary, #22c55e);
+      }
+      /* Filled, because this pair is stated as a pair: it is what a primary
+          button in this file is painted with, and it turns over with the
+          theme because those two tokens do. */
+      .${U}-badge[data-plan='team'] {
+        background: var(--dsw-alias-button-primary-fill, #101113);
+        color: var(--dsw-alias-label-primary-foreground, #fff);
       }
       /* Points at the menu: up while it is shut and the menu is above, down
           once it is open. It is the only affordance saying this row opens
@@ -1488,7 +1644,7 @@ window.__ModuleLoader__.load({
           'span',
           { className: `${U}-who` },
           React.createElement('span', { className: `${U}-name`, title: label }, label),
-          React.createElement('span', { className: `${U}-plan` }, t('plan')),
+          React.createElement(PlanBadge, { plan: who.plan }),
         ),
         wide && React.createElement(Chevron, {}),
         menu !== null && ReactDom.createPortal(React.createElement(
@@ -1535,7 +1691,7 @@ window.__ModuleLoader__.load({
               'span',
               { className: `${U}-who` },
               React.createElement('span', { className: `${U}-name`, title: label }, label),
-              React.createElement('span', { className: `${U}-plan` }, t('plan')),
+              React.createElement(PlanBadge, { plan: who.plan }),
             ),
           ),
           React.createElement('div', { className: `${U}-sep` }),

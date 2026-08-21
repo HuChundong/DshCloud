@@ -40,6 +40,7 @@ import { loginPage } from './login-page.js'
 import { ASSET_PREFIX, assetFor } from './page-assets.js'
 import { POLICY_SLUGS, policyPage } from './policy-page.js'
 import { handlePanel } from './panel.js'
+import { DEFAULT_PLAN } from './plans.js'
 import { TERMINAL_PATH, serveTerminal } from './terminal.js'
 import { handleProfile } from './profile.js'
 import { DIAL_IN_TIMEOUT_MS, SandboxManager } from './sandboxes.js'
@@ -454,6 +455,15 @@ async function handleRequest(req, res) {
       admin: caller.admin,
       displayName: account?.displayName ?? null,
       avatar: account?.avatar ?? null,
+      // The tier's id, and only its id. What it is CALLED is a question with a
+      // language in it, and the language is a preference in the browser asking
+      // — the same division this response already draws for error codes.
+      //
+      // `DEFAULT_PLAN` rather than null for the account that could not be read:
+      // the shell has to render something in that seat either way, and the
+      // truthful answer for a tenant whose row is momentarily unavailable is
+      // the tier almost everyone is on, not an empty badge.
+      plan: account?.plan ?? DEFAULT_PLAN,
     }))
     return
   }
