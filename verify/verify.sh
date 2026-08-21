@@ -253,6 +253,16 @@ else
 fi
 
 echo
+echo '=== 0d. Which of the two answers on the status stream is current ==='
+echo '     (state comes from the tunnel, figures from reports; only state must be now)'
+if docker compose cp verify-liveness.mjs gateway:/app/verify-liveness.mjs > /dev/null 2>&1; then
+  docker compose exec -T gateway node /app/verify-liveness.mjs || NODE_FAIL=1
+else
+  echo '  FAIL  could not copy the check into the gateway container'
+  NODE_FAIL=1
+fi
+
+echo
 echo '=== 1. Anonymous requests: private surfaces refused, public assets served ==='
 check 'POST /api/host.describe without a session' 401 "$(api "$JAR_NONE" host.describe)"
 check 'GET / without a session redirects to login' 303 \
