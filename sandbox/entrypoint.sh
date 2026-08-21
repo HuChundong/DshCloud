@@ -105,6 +105,22 @@ cd "$WORKSPACE"
 node "$DSH_BIN" web --patch /app/sandbox/cordis.patch.yml --port 3080 --no-open &
 DSH_PID=$!
 
+# The reporter: what this machine is doing and what changed in the workspace,
+# told to the gateway rather than read out of here by it.
+#
+# Started beside the backend and not by the gateway, which is the whole point.
+# A watch or a sampler started per gateway connection outlives that connection —
+# closing the stream tears down the gateway's end and leaves the process here —
+# so they accumulated, one per reconnect, for the life of the sandbox. This is
+# one process for the life of the sandbox instead, and it decides how often to
+# speak from what the gateway tells it about who is listening.
+#
+# Not waited on: a sandbox whose reporter died should keep serving its tenant,
+# and the gateway's own silence timeout is what notices.
+if [ -x /usr/local/bin/dsh-agent ]; then
+  /usr/local/bin/dsh-agent serve "$WORKSPACE" >/dev/null 2>&1 &
+fi
+
 # The tunnel is a plugin in the composition above, not a second process, so
 # there is one thing to wait on and nothing to keep in step with it.
 wait "$DSH_PID"

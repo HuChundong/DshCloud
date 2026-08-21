@@ -11,25 +11,18 @@
 //! by itself — and the only thing it can notice is a write that fails.
 //!
 //! But a watcher writes only when something changes, and a workspace can be
-//! quiet for hours. The Node version this replaces had exactly that shape: it
-//! checked its writes, and then sat silent in a quiet workspace and never
-//! performed one, so it never learned that the reader had gone. Four of them
-//! were found in a sandbox two minutes old, each watching for a browser that
-//! had reconnected past it.
-//!
-//! So it writes on a timer whether or not anything happened. The heartbeat is
-//! not for the gateway, which ignores it; it is this process asking whether
-//! anyone is still listening, in the only way it can ask.
+//! quiet for hours, so noticing by writing is a poor lifecycle even when it
+//! works. `serve.rs` is where that is answered properly: the loop below hands
+//! its events to a sink and stops when the sink says to, and the service
+//! decides that by whether anyone has asked for the events lately.
 
 use std::collections::HashMap;
 use std::ffi::CString;
 use std::io::Write;
 use std::os::raw::{c_char, c_int, c_void};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
-
-/// How often it speaks when nothing has happened.
-const HEARTBEAT_MS: c_int = 30_000;
 
 /// As many directories as it will hold watches on.
 ///
@@ -96,48 +89,46 @@ fn add_all(fd: c_int, root: &Path, watches: &mut HashMap<c_int, PathBuf>) {
     }
 }
 
-/// Watch `root` and report every change under it, one JSON object per line.
-pub fn watch(root: &str) -> ExitCode {
+/// Watch a tree, handing each change to `sink` as one JSON object.
+///
+/// `sink` returns whether to keep going, which is the only way this loop can be
+/// told to stop: it is otherwise blocked in `poll`. The service uses that to
+/// drop a watcher nobody is asking about; the standalone command uses it to end
+/// when a write to stdout fails.
+///
+/// @param root - the directory to watch, and everything under it.
+/// @param stop - set from another thread to end the loop.
+/// @param sink - given each event; returning false ends the loop.
+pub fn watch_tree(root: &str, stop: &AtomicBool, sink: &mut dyn FnMut(&str) -> bool) {
     // SAFETY: no arguments to get wrong.
     let fd = unsafe { inotify_init1(IN_CLOEXEC | IN_NONBLOCK) };
     if fd < 0 {
-        eprintln!("dsh-agent: inotify_init1 failed");
-        return ExitCode::FAILURE;
+        return;
     }
-
     let root = Path::new(root);
     let mut watches: HashMap<c_int, PathBuf> = HashMap::new();
     add_all(fd, root, &mut watches);
     if watches.is_empty() {
-        eprintln!("dsh-agent: nothing to watch under {}", root.display());
-        return ExitCode::FAILURE;
+        return;
     }
 
     let mut buffer = vec![0_u8; 64 * 1024];
-    loop {
+    while !stop.load(Ordering::Relaxed) {
         let mut fds = PollFd { fd, events: POLLIN, revents: 0 };
+        // A second at a time rather than forever, so `stop` is noticed without
+        // anything having to happen in the tree.
         // SAFETY: one descriptor, and the struct outlives the call.
-        let ready = unsafe { poll(&raw mut fds, 1, HEARTBEAT_MS) };
-        if ready < 0 {
-            return ExitCode::FAILURE;
-        }
-        if ready == 0 {
-            // Nothing happened. Say so anyway — this is the question, not the
-            // answer: a write that fails here is how a watcher in a quiet
-            // workspace learns that its reader is gone.
-            if !say("{\"heartbeat\":true}") {
-                return ExitCode::SUCCESS;
-            }
+        let ready = unsafe { poll(&raw mut fds, 1, 1000) };
+        if ready <= 0 {
             continue;
         }
-
         // SAFETY: the buffer is owned here and its length is passed honestly.
         let n = unsafe { read(fd, buffer.as_mut_ptr().cast::<c_void>(), buffer.len()) };
         if n <= 0 {
             continue;
         }
-        let mut at = 0_usize;
         let n = n as usize;
+        let mut at = 0_usize;
         while at + 16 <= n {
             let wd = i32::from_ne_bytes(buffer[at..at + 4].try_into().unwrap_or_default());
             let mask = u32::from_ne_bytes(buffer[at + 4..at + 8].try_into().unwrap_or_default());
@@ -145,7 +136,6 @@ pub fn watch(root: &str) -> ExitCode {
             let name_bytes = &buffer[at + 16..(at + 16 + len).min(n)];
             let name = String::from_utf8_lossy(name_bytes.split(|b| *b == 0).next().unwrap_or(&[])).into_owned();
             at += 16 + len;
-
             if name.is_empty() {
                 continue;
             }
@@ -159,11 +149,25 @@ pub fn watch(root: &str) -> ExitCode {
             let relative = full.strip_prefix(root).unwrap_or(&full).to_string_lossy().into_owned();
             // The gateway re-reads the directory rather than trusting a kind,
             // so the kind is not sent: what it needs is which path moved.
-            if !say(&format!("{{\"type\":\"change\",\"name\":{}}}", quote(&relative))) {
-                return ExitCode::SUCCESS;
+            if !sink(&format!("{{\"type\":\"change\",\"name\":{}}}", quote(&relative))) {
+                return;
             }
         }
     }
+}
+
+/// Watch `root` and report every change under it, one JSON object per line.
+///
+/// The standalone form, kept for a sandbox reached without the service — it
+/// prints to stdout and ends when a write fails.
+pub fn watch(root: &str) -> ExitCode {
+    let stop = AtomicBool::new(false);
+    let mut alive = true;
+    watch_tree(root, &stop, &mut |event: &str| {
+        alive = say(event);
+        alive
+    });
+    if alive { ExitCode::SUCCESS } else { ExitCode::SUCCESS }
 }
 
 /// One JSON string, escaped enough for a filename.

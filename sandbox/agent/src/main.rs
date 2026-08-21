@@ -25,6 +25,7 @@
 //! the whole of the lifecycle, and it belongs on this side because this is the
 //! side that can observe it.
 
+mod serve;
 mod watch;
 
 use std::io::{ErrorKind, Read, Write};
@@ -43,6 +44,13 @@ const TIMEOUT: Duration = Duration::from_secs(4);
 
 fn main() -> ExitCode {
     match std::env::args().nth(1).as_deref() {
+        Some("serve") => match std::env::args().nth(2) {
+            Some(root) => serve::serve(&root),
+            None => {
+                eprintln!("dsh-agent: serve needs the workspace directory");
+                ExitCode::from(2)
+            }
+        },
         Some("metrics") => metrics(),
         Some("watch") => match std::env::args().nth(2) {
             Some(root) => watch::watch(&root),
@@ -88,7 +96,7 @@ fn metrics() -> ExitCode {
 /// is needed is one request to loopback with no redirects, no TLS, no keep
 /// alive and no chunked encoding — envd answers a small JSON body with a
 /// `Content-Length`. A dependency for that would be larger than this file.
-fn read_metrics() -> Option<String> {
+pub fn read_metrics() -> Option<String> {
     let mut stream = TcpStream::connect(ENVD).ok()?;
     stream.set_read_timeout(Some(TIMEOUT)).ok()?;
     stream.set_write_timeout(Some(TIMEOUT)).ok()?;

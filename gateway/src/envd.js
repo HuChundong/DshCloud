@@ -685,72 +685,6 @@ export async function metrics(handle) {
  * @param {{onEvent: (event: {name: string, type: string}) => void, onEnd: () => void, onError: (error: Error) => void}} sink - where the changes go.
  * @returns {Promise<{close: () => void}>} a handle that ends the watch.
  */
-/**
- * Run a long-lived process in the sandbox and read its stdout a line at a time.
- *
- * The shape both of the panel's background jobs take, and the reason they are
- * jobs at all: the gateway is one machine serving every tenant, while a sandbox
- * is one machine serving one. Work that runs whether or not anything changed —
- * watching a directory, sampling a machine — belongs on the end that is already
- * per-tenant. The gateway then holds a pipe rather than a timer, and its cost
- * stops scaling with how many sandboxes exist.
- *
- * @param {string} handle - the runtime's address for the sandbox.
- * @param {string[]} args - the argv to run, `node` implied as the command.
- * @param {{onLine: (line: string) => void, onEnd: () => void, onError: (error: Error) => void}} sink - where output goes.
- * @returns {Promise<{close: () => void}>} the live process.
- * @throws {Error} when the process cannot be started.
- */
-async function streamLines(handle, cmd, args, sink) {
-  const endpoint = endpointOf(handle)
-  const body = encodeEnvelope({
-    process: { cmd, args, envs: {}, cwd: '/' },
-    // Kept open so the process is not handed EOF on stdin and does not exit.
-    stdin: true,
-  })
-  return await new Promise((resolve, reject) => {
-    const request = http.request({
-      host: endpoint.host,
-      port: endpoint.port,
-      method: 'POST',
-      path: `${PROCESS}/Start`,
-      headers: {
-        ...CONNECT_HEADERS,
-        ...(endpoint.hostHeader === undefined ? {} : { Host: endpoint.hostHeader }),
-        'Content-Length': String(body.length),
-      },
-    }, (response) => {
-      if ((response.statusCode ?? 502) >= 400) {
-        response.resume()
-        reject(new Error(`envd: starting a background job in ${handle} failed (${String(response.statusCode)})`))
-        return
-      }
-      // stdout arrives in chunks that respect nothing; a message is a line.
-      let pending = ''
-      readEnvelopes(response, (flags, message) => {
-        if ((flags & END_STREAM_FLAG) !== 0) {
-          if (message.error !== undefined) sink.onError(new Error(JSON.stringify(message.error)))
-          return
-        }
-        const event = message.event ?? {}
-        if (event.data?.stderr !== undefined) {
-          sink.onError(new Error(Buffer.from(event.data.stderr, 'base64').toString('utf8').trim()))
-          return
-        }
-        if (event.data?.stdout === undefined) return
-        pending += Buffer.from(event.data.stdout, 'base64').toString('utf8')
-        const lines = pending.split('\n')
-        pending = lines.pop() ?? ''
-        for (const line of lines) if (line !== '') sink.onLine(line)
-      })
-      response.on('end', () => { sink.onEnd() })
-      response.on('error', (error) => { sink.onError(error) })
-      resolve({ close: () => { response.destroy(); request.destroy() } })
-    })
-    request.on('error', reject)
-    request.end(body)
-  })
-}
 
 /**
  * The watcher that runs inside the sandbox, as a source string.
@@ -788,45 +722,6 @@ async function streamLines(handle, cmd, args, sink) {
  */
 
 
-/**
- * Hear about changes under a directory.
- *
- * Run as a PROCESS in the sandbox rather than through envd's own `WatchDir`,
- * and the reason is specific: envd refuses to watch a network filesystem, and
- * every CubeSandbox volume is one. It decides by the filesystem's magic number,
- * and a volume arrives over virtiofs whose magic IS `FUSE_SUPER_MAGIC` — so the
- * refusal follows the volume to whatever path it is mounted at, and no change
- * of layout can avoid it.
- *
- * envd cannot be taught otherwise — the amd64 binary arrives prebuilt — and
- * teaching it would be the wrong direction anyway: the work belongs in the
- * sandbox, which is where a process already puts it.
- *
- * One implementation for both runtimes, deliberately. A path that only runs in
- * the simulation is a path whose failure is discovered in production.
- *
- * @param {string} handle - the runtime's address for the sandbox.
- * @param {string} path - the directory to watch.
- * @param {{onEvent: (event: object) => void, onEnd: () => void, onError: (error: Error) => void}} sink - where changes go.
- * @returns {Promise<{close: () => void}>} the live watch.
- * @throws {Error} when the watcher cannot be started.
- */
-export async function watchDir(handle, path, sink) {
-  return await streamLines(handle, AGENT, ['watch', path], {
-    onLine: (line) => {
-      let change
-      try { change = JSON.parse(line) } catch { return }
-      // The heartbeat is the watcher asking whether anyone is still there, not
-      // news about the tree. It is dropped here, and its whole purpose is that
-      // the write which carries it can fail.
-      if (change.heartbeat === true) return
-      if (change.stale === true) { sink.onEvent({ stale: true }); return }
-      sink.onEvent({ name: String(change.name ?? ''), type: String(change.type ?? '') })
-    },
-    onEnd: sink.onEnd,
-    onError: sink.onError,
-  })
-}
 
 /**
  * The sampler that runs inside the sandbox, as a source string.
@@ -836,41 +731,5 @@ export async function watchDir(handle, path, sink) {
  * the measurement but WHO is holding the timer: one per sandbox instead of one
  * per sandbox held by the single machine that has all of them.
  */
-/**
- * The sandbox-side tool the gateway reads readings from.
- *
- * A compiled binary, installed by the image at this path. It replaced a Node
- * script passed with `-e`, which cost 21MB of resident memory to poll a local
- * HTTP endpoint — and which could not be stopped: closing the stream tears
- * down the gateway's end of the connection and never the process at the other
- * end, and that script held itself open with `process.stdin.resume()`. Every
- * gateway restart left one behind for the life of the sandbox; one tenant's
- * machine was found carrying 62 of them.
- *
- * The binary ends itself instead, the moment a write to stdout fails — which
- * is exactly when the gateway has gone. Nothing here has to remember to kill
- * it, which is the only arrangement that survives a gateway that dies without
- * cleaning up. See `sandbox/agent/src/main.rs`.
- */
-const AGENT = '/usr/local/bin/dsh-agent'
 
 
-/**
- * Hear a sandbox's own measurements as it takes them.
- *
- * @param {string} handle - the runtime's address for the sandbox.
- * @param {{onSample: (reading: object) => void, onEnd: () => void, onError: (error: Error) => void}} sink - where readings go.
- * @returns {Promise<{close: () => void}>} the live sampler.
- * @throws {Error} when the sampler cannot be started.
- */
-export async function streamMetrics(handle, sink) {
-  return await streamLines(handle, AGENT, ['metrics'], {
-    onLine: (line) => {
-      let reading
-      try { reading = JSON.parse(line) } catch { return }
-      sink.onSample(reading)
-    },
-    onEnd: sink.onEnd,
-    onError: sink.onError,
-  })
-}

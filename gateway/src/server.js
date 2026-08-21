@@ -46,6 +46,7 @@ import { DIAL_IN_TIMEOUT_MS, SandboxManager } from './sandboxes.js'
 import { Secrets, nameProblem } from './secrets.js'
 import { SendLimit } from './send-limit.js'
 import { Settings } from './settings.js'
+import { REPORT_PATH, receiveReport } from './stats.js'
 import { handleSignIn } from './sign-in.js'
 import { Tokens, signedOutCookies } from './tokens.js'
 import { TunnelServer } from './tunnel-server.js'
@@ -300,6 +301,39 @@ const server = http.createServer((req, res) => {
  */
 async function handleRequest(req, res) {
   const path = new URL(req.url ?? '/', 'http://gateway').pathname
+
+  // What a sandbox has to say about itself.
+  //
+  // First, because it carries no session — it is answered by the credentials
+  // the sandbox dials the tunnel with, and those are the only thing this route
+  // trusts. It trusts them about IDENTITY and nothing else: a tenant is root
+  // inside their own sandbox, so the token is not a secret from them, and
+  // everything past this point is written on the assumption that the sender
+  // may be hostile. See `receiveReport` for the three guards that follow from
+  // that, and for why a refusal here answers rather than hangs up.
+  if (path === REPORT_PATH && req.method === 'POST') {
+    const sandboxId = req.headers['x-sandbox-id']
+    const token = req.headers['x-sandbox-token']
+    if (typeof sandboxId !== 'string' || typeof token !== 'string' || !sandboxes.authorize(sandboxId, token)) {
+      res.writeHead(401)
+      res.end()
+      return
+    }
+    // Read whatever was sent even when it will be ignored: leaving a body
+    // unread is what breaks the connection this wants kept.
+    const body = await readBody(req, 256 * 1024)
+    let report = {}
+    try {
+      report = JSON.parse(body?.toString('utf8') ?? '{}')
+    } catch {
+      // A malformed report is one report lost, not a reason to say anything:
+      // the answer below still tells a healthy sandbox how often to speak.
+    }
+    const answer = receiveReport(sandboxId, report)
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
+    res.end(JSON.stringify(answer))
+    return
+  }
 
   if (path === '/login' && req.method === 'GET') {
     // Never cached: the page carries its own styles inline, so a cached copy

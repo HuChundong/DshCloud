@@ -16,8 +16,6 @@
  * @module stats
  */
 
-import { streamMetrics, watchDir } from './envd.js'
-import { ROOT } from './panel-path.js'
 
 /**
  * How long a stream may say nothing before it is treated as dead.
@@ -36,9 +34,6 @@ const SILENCE_MS = 20000
  * sees the gap as a closed subscription.
  */
 const RETRY_MS = 5000
-
-/** Sandboxes being watched: handle → { stream, watchers, last, id, timer }. */
-const watched = new Map()
 
 /**
  * envd's reading, reshaped into what the status bar draws.
@@ -64,74 +59,175 @@ function shape(raw) {
 }
 
 /**
- * Watch one sandbox's own measurements.
+ * What each sandbox has reported, and who is listening for it.
  *
- * The first watcher starts the sandbox's sampler; the last one to leave stops
- * it. A watcher that arrives while a sandbox is already streaming is handed the
- * last reading at once rather than waiting out an interval for the first one.
+ * Keyed by the gateway's id for the sandbox rather than the runtime's handle,
+ * because the sandbox reports under the only name it knows: its own
+ * `SANDBOX_ID`.
  *
- * @param {string} handle - the runtime's address for the sandbox to watch.
- * @param {string} id - the gateway's id for it, which is what the bar shows.
- * @param {(reading: {ok: boolean, stats?: object}) => void} onReading - called with every sample.
- * @returns {Promise<() => void>} stop watching.
+ * @type {Map<string, {last: object|undefined, readers: Set<Function>, changers: Set<Function>, timer: NodeJS.Timeout|undefined}>}
  */
-async function watchSandbox(handle, id, onReading) {
-  let entry = watched.get(handle)
+const reported = new Map()
+
+/** The record for one sandbox, created on first use. */
+function record(sandboxId) {
+  let entry = reported.get(sandboxId)
   if (entry === undefined) {
-    entry = { stream: undefined, watchers: new Set(), last: undefined, id, timer: undefined }
-    watched.set(handle, entry)
-
-    /** @param {{ok: boolean, stats?: object}} reading - what to hand out. */
-    const publish = (reading) => {
-      const current = watched.get(handle)
-      if (current === undefined) return
-      current.last = reading
-      for (const watcher of current.watchers) watcher(reading)
-    }
-
-    // A stream that goes quiet is a sandbox that stopped answering, and to a
-    // person that IS the status. Rearmed on every reading rather than checked
-    // on a schedule, so a healthy sandbox costs one cleared timeout per sample.
-    const heard = () => {
-      const current = watched.get(handle)
-      if (current === undefined) return
-      if (current.timer !== undefined) clearTimeout(current.timer)
-      current.timer = setTimeout(() => { publish({ ok: false }) }, SILENCE_MS)
-    }
-
-    try {
-      entry.stream = await streamMetrics(handle, {
-        onSample: (raw) => {
-          heard()
-          // The id rides along with the numbers because the page that shows
-          // them also shows it: it is the one thing a tenant has to quote when
-          // reporting that their machine misbehaved.
-          publish({ ok: true, stats: { id, ...shape(raw) } })
-        },
-        onEnd: () => { publish({ ok: false }) },
-        onError: () => { publish({ ok: false }) },
-      })
-      heard()
-    } catch (error) {
-      watched.delete(handle)
-      throw error
-    }
+    entry = { last: undefined, readers: new Set(), changers: new Set(), timer: undefined, coalescing: false }
+    reported.set(sandboxId, entry)
   }
-  entry.watchers.add(onReading)
-  if (entry.last !== undefined) onReading(entry.last)
+  return entry
+}
 
+/**
+ * Take one report from a sandbox and hand it to whoever is listening.
+ *
+ * This is the whole of the gateway's side now. It starts nothing, holds no
+ * process and keeps no timer per sandbox beyond the silence one below — the
+ * work of watching a tree and sampling a machine happens on the end that is
+ * already per-tenant, and arrives here as news.
+ *
+ * @param {string} sandboxId - the gateway's id for the sandbox, from its own environment.
+ * @param {{metrics?: object, changes?: Array<{name: string}>}} report - what it has to say.
+ */
+export function receiveReport(sandboxId, report) {
+  const entry = reported.get(sandboxId)
+
+  // Nobody is listening, so there is nothing to do and nothing to parse. This
+  // is the first of three guards, and the one that matters most: a tenant is
+  // root in their own sandbox, so the credentials it reports with are not a
+  // secret from them, and a forged change event would otherwise make a browser
+  // re-read a directory — one line of theirs turned into a call from this
+  // gateway into their sandbox. No listener, no amplification.
+  //
+  // The answer tells the reporter to slow down rather than to stop, so a
+  // sandbox nobody is watching costs a message a minute instead of one every
+  // five seconds.
+  if (entry === undefined || (entry.readers.size === 0 && entry.changers.size === 0)) {
+    return { watchers: 0 }
+  }
+
+  // Second guard: a bucket per sandbox. Answered rather than dropped, and the
+  // connection is left open — measured, closing it costs three times what
+  // serving the request does, because the next one then pays for a new one.
+  // Refusing loudly is how a flood becomes expensive for the wrong side.
+  if (!spend(sandboxId)) return { watchers: 1, slow: true }
+
+  if (report.metrics !== undefined) {
+    const reading = { ok: true, stats: { id: sandboxId, ...shape(report.metrics) } }
+    entry.last = reading
+    for (const reader of entry.readers) reader(reading)
+    // Rearmed on every report: a sandbox that stops reporting is a sandbox
+    // that stopped answering, and to a person that IS the status.
+    if (entry.timer !== undefined) clearTimeout(entry.timer)
+    entry.timer = setTimeout(() => {
+      const current = reported.get(sandboxId)
+      if (current === undefined) return
+      current.last = { ok: false }
+      for (const reader of current.readers) reader(current.last)
+    }, SILENCE_MS)
+  }
+
+  // Third guard: changes are coalesced. The panel's answer to any change is to
+  // re-read what it is showing, so ten thousand events and one event ask it to
+  // do the same thing — and only the first of them should be able to.
+  if ((report.changes ?? []).length > 0 && entry.changers.size > 0 && entry.coalescing !== true) {
+    entry.coalescing = true
+    setTimeout(() => {
+      const current = reported.get(sandboxId)
+      if (current === undefined) return
+      current.coalescing = false
+      for (const changer of current.changers) changer({ stale: true })
+    }, COALESCE_MS)
+  }
+
+  return { watchers: entry.readers.size + entry.changers.size }
+}
+
+/** How long changes are gathered before the panel is told to look again. */
+const COALESCE_MS = 250
+
+/** How many reports a sandbox may send per second, and how many it may bank. */
+const REPORT_RATE = 4
+const REPORT_BURST = 20
+
+/** Token buckets, one per sandbox. */
+const buckets = new Map()
+
+/**
+ * Whether this sandbox may be heard from right now.
+ *
+ * @param {string} sandboxId - who is reporting.
+ * @returns {boolean} whether to take it.
+ */
+function spend(sandboxId) {
+  const now = Date.now()
+  const bucket = buckets.get(sandboxId) ?? { tokens: REPORT_BURST, at: now }
+  bucket.tokens = Math.min(REPORT_BURST, bucket.tokens + ((now - bucket.at) / 1000) * REPORT_RATE)
+  bucket.at = now
+  buckets.set(sandboxId, bucket)
+  if (bucket.tokens < 1) return false
+  bucket.tokens -= 1
+  return true
+}
+
+/**
+ * Listen to one sandbox's numbers.
+ *
+ * @param {string} sandboxId - the gateway's id for the sandbox.
+ * @param {(reading: {ok: boolean, stats?: object}) => void} onReading - called with every reading.
+ * @returns {() => void} stop listening.
+ */
+function watchSandbox(sandboxId, onReading) {
+  const entry = record(sandboxId)
+  entry.readers.add(onReading)
+  // A subscriber that arrives mid-flight is handed the last reading rather
+  // than waiting out an interval for the next one.
+  if (entry.last !== undefined) onReading(entry.last)
+  else onReading({ ok: false })
   return () => {
-    const current = watched.get(handle)
+    const current = reported.get(sandboxId)
     if (current === undefined) return
-    current.watchers.delete(onReading)
-    if (current.watchers.size > 0) return
-    if (current.timer !== undefined) clearTimeout(current.timer)
-    current.stream?.close()
-    watched.delete(handle)
+    current.readers.delete(onReading)
+    forget(sandboxId, current)
   }
 }
 
+/**
+ * Listen to one sandbox's workspace.
+ *
+ * @param {string} sandboxId - the gateway's id for the sandbox.
+ * @param {(event: object) => void} onEvent - called with each change.
+ * @returns {() => void} stop listening.
+ */
+function watchWorkspace(sandboxId, onEvent) {
+  const entry = record(sandboxId)
+  entry.changers.add(onEvent)
+  return () => {
+    const current = reported.get(sandboxId)
+    if (current === undefined) return
+    current.changers.delete(onEvent)
+    forget(sandboxId, current)
+  }
+}
+
+/** Drop a sandbox's record once nobody is listening to either half of it. */
+function forget(sandboxId, entry) {
+  if (entry.readers.size > 0 || entry.changers.size > 0) return
+  if (entry.timer !== undefined) clearTimeout(entry.timer)
+  reported.delete(sandboxId)
+}
+
 /** The path a browser subscribes on. */
+/**
+ * Where a sandbox reports to.
+ *
+ * Under `/_` like the tunnel's own path, because it belongs to the same
+ * conversation: this is the deployment talking to itself, not part of the
+ * surface a browser sees.
+ */
+export const REPORT_PATH = '/_report'
+
 export const STATS_PATH = '/sandbox/stats'
 
 /**
@@ -256,7 +352,7 @@ export function serveStats(req, res, resolve) {
       send({ ok: false })
       return undefined
     }
-    return await watchSandbox(where.handle, where.sandboxId, (reading) => {
+    return watchSandbox(where.sandboxId, (reading) => {
       send(reading)
       // A sandbox that stops answering may simply have been replaced, so the
       // next attempt starts over at `resolve` rather than asking this id again.
@@ -279,74 +375,6 @@ export function serveStats(req, res, resolve) {
    the tenant has open, and torn down when the last one leaves.
                                                                              */
 
-/** Sandboxes being watched: id → { handle, watchers }. */
-const watching = new Map()
-
-/**
- * Hear about changes under a sandbox's workspace.
- *
- * @param {string} handle - the runtime's address for the sandbox to watch.
- * @param {(event: {name: string, type: string}) => void} onEvent - called with each change.
- * @returns {Promise<() => void>} stop watching.
- */
-async function watchWorkspace(handle, onEvent) {
-  let entry = watching.get(handle)
-  if (entry === undefined) {
-    entry = { handle: undefined, watchers: new Set() }
-    watching.set(handle, entry)
-    /**
-     * Tell every watcher the workspace is no longer being watched.
-     *
-     * Said rather than swallowed, and this is the important half. envd refuses
-     * to watch a network filesystem — `cannot watch path on network
-     * filesystem` — and a tenant's workspace is exactly that wherever it is a
-     * volume, which is to say in production. The refusal arrives AFTER the
-     * stream is established, so the call succeeds and the watch is dead a
-     * moment later.
-     *
-     * Left unsaid, that is the worst of both: the panel believes it will be
-     * told about changes and is never told, so a directory the tenant just
-     * made never appears; and the browser, seeing its stream close, reconnects
-     * to open another watch that will fail the same way, for as long as the
-     * tab is open.
-     *
-     * @param {string} reason - what ended it.
-     */
-    const stopped = (reason) => {
-      const current = watching.get(handle)
-      watching.delete(handle)
-      // Closed, not merely forgotten. Dropping the record leaves the process at
-      // the other end of it running: a watch that ends — and under a volume it
-      // ends almost at once, because envd refuses a network filesystem — used
-      // to leave one behind, the browser would reconnect, and the next would
-      // join it. Four were found in a sandbox two minutes old.
-      current?.handle?.close()
-      for (const watcher of current?.watchers ?? []) watcher({ watching: false, reason })
-    }
-    try {
-      entry.handle = await watchDir(handle, ROOT, {
-        onEvent: (event) => {
-          for (const watcher of watching.get(handle)?.watchers ?? []) watcher(event)
-        },
-        onEnd: () => { stopped('ended') },
-        onError: (error) => { stopped(error.message) },
-      })
-    } catch (error) {
-      watching.delete(handle)
-      throw error
-    }
-  }
-  entry.watchers.add(onEvent)
-
-  return () => {
-    const current = watching.get(handle)
-    if (current === undefined) return
-    current.watchers.delete(onEvent)
-    if (current.watchers.size > 0) return
-    current.handle?.close()
-    watching.delete(handle)
-  }
-}
 
 /** The path a browser subscribes on. */
 export const WATCH_PATH = '/sandbox/watch'
@@ -369,5 +397,5 @@ export function serveWatch(req, res, resolve) {
   // of closing it. The stream stays open precisely so the browser does not
   // reconnect: there is nothing to come back to, and the panel's answer is to
   // go back to asking, which it can only do if it is told.
-  serveStream(req, res, async (send) => await watchWorkspace((await resolve()).handle, send))
+  serveStream(req, res, async (send) => watchWorkspace((await resolve()).sandboxId, send))
 }
