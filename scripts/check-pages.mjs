@@ -217,9 +217,19 @@ for (const { name, group, html } of await pages()) {
 //
 // `doc.title` is the tab, which no element names; `theme.label` belongs to a
 // control that may not be on every page.
+//
+// The console's notices are named by neither an element nor a literal in its
+// script: the server answers an action with a CODE, and the browser looks that
+// code up when it raises the toast. So the set itself is the naming, read from
+// the same export the page ships — which keeps this rule sharp for every other
+// key rather than blunting it with a page-wide exemption.
+const { CONSOLE_NOTICES } = await import('../gateway/src/page-chrome.js')
+const BY_CODE = new Set(Object.keys(CONSOLE_NOTICES))
+
 for (const [group, { named, keys }] of reachable) {
   for (const key of keys) {
     if (key === 'doc.title' || key === 'theme.label') continue
+    if (group === 'admin' && BY_CODE.has(key)) continue
     if (!named.has(key)) problems.push(`${group}: ${key} is in the table and nothing names it`)
   }
 }

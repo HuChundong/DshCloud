@@ -11,6 +11,7 @@ const T = {
   'nav.chip':     { en: 'Open source · MIT',   zh: '开源 · MIT' },
   'nav.work':     { en: 'Work',                zh: '能力' },
   'nav.sandbox':  { en: 'The sandbox',         zh: '沙箱' },
+  'nav.plans':    { en: 'Plans',               zh: '套餐' },
   'nav.run':      { en: 'Get started',         zh: '开始' },
   'nav.cta':      { en: 'Explore the uncharted', zh: '探索未至之境' },
 
@@ -27,9 +28,13 @@ const T = {
   'app.mem':      { en: 'MEM',                 zh: '内存' },
   'app.disk':     { en: 'DISK',                zh: '磁盘' },
   'app.name':     { en: 'hammy',               zh: 'hammy' },
-  'app.plan':     { en: 'Preview',             zh: '预览版' },
+  // The mock-up shows a signed-in workspace, so it has to show a tier that
+  // exists — and the honest one is the tier a visitor who presses the button
+  // beside it actually lands on. `预览版` was neither: it was this deployment
+  // saying it had no tiers, on a page that now lists three.
+  'app.plan':     { en: 'Free',                zh: '免费' },
   'app.greet':    { en: 'What are we building today?', zh: '今天想构建点什么？' },
-  'app.free':     { en: 'Preview',             zh: '预览版' },
+  'app.free':     { en: 'Free',                zh: '免费' },
   'app.ask':      { en: 'Describe what you want to build', zh: '描述你想要构建的内容' },
   'app.send':     { en: 'Send',                zh: '发送' },
   'app.access':   { en: 'Full access',         zh: '完全权限' },
@@ -64,6 +69,45 @@ const T = {
   'value.c3b':    { en: 'Keeps working even when your computer is off.', zh: '电脑关了也还在干活。' },
   'value.c4h':    { en: 'Models, ready to go',  zh: '模型开箱即用' },
   'value.c4b':    { en: 'Configured already. Or bring your own key.', zh: '默认就配好了，也可以换成自己的 Key。' },
+
+  'plans.h2':     { en: 'Choose a plan',       zh: '选择你的套餐' },
+  'plans.lede':   { en: 'Every account starts on the free plan. The paid tiers are opening; running it yourself is free forever.',
+                    zh: '每个账号都从免费版开始。付费档位正在开放中，自己部署的那一档永远开源免费。' },
+  'plans.pick':   { en: 'Recommended',         zh: '推荐' },
+  // One string for all three tiers that have one: what they include is the same
+  // undecided thing, and three copies of it would be three places to edit on
+  // the day it is decided.
+  'plans.tbd':    { en: 'What each tier includes is still being decided. This is where it goes.',
+                    zh: '各档位包含哪些能力还在定，这一格留给它。' },
+  'plans.soon':   { en: 'Not open yet',        zh: '即将开放' },
+
+  'plans.free.h':     { en: 'Free',            zh: '免费' },
+  'plans.free.b':     { en: 'Registering is all it takes.', zh: '注册就有，先试试。' },
+  'plans.free.price': { en: '¥0',              zh: '¥0' },
+  'plans.free.note':  { en: 'Free, always',    zh: '一直免费' },
+  'plans.free.cta':   { en: 'Get started',     zh: '开始使用' },
+
+  'plans.pro.h':      { en: 'Pro',             zh: '专业' },
+  'plans.pro.b':      { en: 'For the people who are in here every day.', zh: '给每天都在用的人。' },
+  'plans.pro.price':  { en: 'Coming soon',     zh: '敬请期待' },
+  'plans.pro.note':   { en: 'Price to be announced', zh: '定价待定' },
+
+  'plans.team.h':     { en: 'Team',            zh: '团队' },
+  'plans.team.b':     { en: 'A group of people, a sandbox each.', zh: '一群人，各自一台沙箱。' },
+  'plans.team.price': { en: 'Coming soon',     zh: '敬请期待' },
+  'plans.team.note':  { en: 'Per seat',        zh: '按席位计' },
+
+  'plans.self.h':     { en: 'Run it yourself', zh: '自部署' },
+  'plans.self.b':     { en: 'On your own cloud, on your own terms.', zh: '部署到你自己的云上，规矩你定。' },
+  'plans.self.price': { en: 'Free and open',   zh: '开源免费' },
+  'plans.self.note':  { en: 'MIT licence',     zh: 'MIT 协议' },
+  'plans.self.a':     { en: 'No account here, and no bill.', zh: '不用在这儿开账号，也没有账单。' },
+  'plans.self.b2':    { en: 'As many sandboxes as your hardware holds.', zh: '沙箱开几个，取决于你的机器。' },
+  'plans.self.c':     { en: 'Yours to run, and yours to keep running.', zh: '你自己跑，也你自己运维。' },
+  'plans.self.cta':   { en: 'How to deploy',   zh: '怎么部署' },
+
+  'plans.foot':   { en: 'The paid tiers are not on sale yet: nothing on this page takes payment. An administrator grants and changes them, and the WeChat account in the footer is where to ask.',
+                    zh: '付费档位尚未开放购买，这个页面不收款。开通和变更由部署的管理员操作，有需要可以通过页脚的公众号联系我们。' },
 
   'run.h2':       { en: 'Choose how to run DSH', zh: '选择 DSH 的运行方式' },
   'run.lede':     { en: 'Use the hosted service, or deploy it to your own cloud.', zh: '直接使用托管版，或部署到自己的云上。' },

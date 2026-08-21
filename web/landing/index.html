@@ -91,6 +91,7 @@
       <nav>
         <a href="#work" data-t="nav.work">Work</a>
         <a href="#sandbox" data-t="nav.sandbox">The sandbox</a>
+        <a href="#plans" data-t="nav.plans">Plans</a>
         <a href="#run" data-t="nav.run">Get started</a>
       </nav>
       <a class="btn btn-ghost btn-sm" href="https://github.com/HuChundong/HamsterHQ">
@@ -291,6 +292,93 @@
       </div>
     </div>
 
+  </div>
+</section>
+
+<!--
+  The tiers. Four columns, and the fourth is not one: self-hosting is a way to
+  run this rather than something an account can be on, so its column hands off
+  to the section below rather than repeating it. That is also why this band sits
+  immediately above `#run` — the two are one argument, read in order.
+
+  No prices. Nothing here takes money yet, and a number under a tier nobody can
+  buy is a claim the deployment cannot keep. The slot is drawn at its full size
+  so the layout is final; what goes in it is a decision, not a placeholder to
+  forget.
+
+  Same for what each tier includes: `plans.tbd` marks the space visibly rather
+  than filling it with features nothing enforces.
+-->
+<section class="band" id="plans">
+  <div class="rail">
+    <h2 data-t="plans.h2">Choose a plan</h2>
+    <p class="lede" data-t="plans.lede">Every account starts on the free plan. The paid tiers are opening; running it yourself is free forever.</p>
+
+    <div class="quad plans">
+      <div class="card plan">
+        <p class="en">Free</p>
+        <h3 data-t="plans.free.h">Free</h3>
+        <p class="body" data-t="plans.free.b">Registering is all it takes.</p>
+        <div class="price">
+          <b data-t="plans.free.price">¥0</b>
+          <span data-t="plans.free.note">Free, always</span>
+        </div>
+        <div class="tbd">
+          <p class="en">Entitlements — TBD</p>
+          <p data-t="plans.tbd">What each tier includes is still being decided. This is where it goes.</p>
+        </div>
+        <div class="tail"><a class="btn btn-primary" href="/login" data-t="plans.free.cta">Get started</a></div>
+      </div>
+
+      <div class="card plan featured">
+        <span class="pick" data-t="plans.pick">Recommended</span>
+        <p class="en">Pro</p>
+        <h3 data-t="plans.pro.h">Pro</h3>
+        <p class="body" data-t="plans.pro.b">For the people who are in here every day.</p>
+        <div class="price">
+          <b data-t="plans.pro.price">Coming soon</b>
+          <span data-t="plans.pro.note">Price to be announced</span>
+        </div>
+        <div class="tbd">
+          <p class="en">Entitlements — TBD</p>
+          <p data-t="plans.tbd">What each tier includes is still being decided. This is where it goes.</p>
+        </div>
+        <div class="tail"><span class="btn btn-ghost" aria-disabled="true" data-t="plans.soon">Not open yet</span></div>
+      </div>
+
+      <div class="card plan">
+        <p class="en">Team</p>
+        <h3 data-t="plans.team.h">Team</h3>
+        <p class="body" data-t="plans.team.b">A group of people, a sandbox each.</p>
+        <div class="price">
+          <b data-t="plans.team.price">Coming soon</b>
+          <span data-t="plans.team.note">Per seat</span>
+        </div>
+        <div class="tbd">
+          <p class="en">Entitlements — TBD</p>
+          <p data-t="plans.tbd">What each tier includes is still being decided. This is where it goes.</p>
+        </div>
+        <div class="tail"><span class="btn btn-ghost" aria-disabled="true" data-t="plans.soon">Not open yet</span></div>
+      </div>
+
+      <div class="card plan">
+        <p class="en">Self-hosted · MIT</p>
+        <h3 data-t="plans.self.h">Run it yourself</h3>
+        <p class="body" data-t="plans.self.b">On your own cloud, on your own terms.</p>
+        <div class="price">
+          <b data-t="plans.self.price">Free and open</b>
+          <span data-t="plans.self.note">MIT licence</span>
+        </div>
+        <ul>
+          <li data-t="plans.self.a">No account here, and no bill.</li>
+          <li data-t="plans.self.b2">As many sandboxes as your hardware holds.</li>
+          <li data-t="plans.self.c">Yours to run, and yours to keep running.</li>
+        </ul>
+        <div class="tail"><a class="btn btn-ghost" href="#run" data-t="plans.self.cta">How to deploy</a></div>
+      </div>
+    </div>
+
+    <p class="fine" data-t="plans.foot">The paid tiers are not on sale yet: nothing on this page takes payment. An administrator grants and changes them, and the WeChat account in the footer is where to ask.</p>
   </div>
 </section>
 

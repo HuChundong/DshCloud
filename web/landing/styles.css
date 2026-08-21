@@ -586,6 +586,92 @@ a.work:hover .work-preview img { transform: scale(1.035); filter: saturate(1) co
 .work-meta h3 { margin-bottom: 8px; }
 .work-meta p { color: var(--text-3); font-size: 14.5px; line-height: 1.55; }
 
+/* ---------- the tiers ---------- */
+
+/* Built on `.card`, not beside it: a plan is one of this page's cards with
+   three things added — a price slot, the space its contents will fill, and one
+   action at the foot. Anything a plan card does that the cards above it do
+   differently would read as a second design on one page. */
+.plans .plan { display: flex; flex-direction: column; position: relative; }
+/* The action sits on the floor of the card whatever is above it, so four
+   columns of unequal copy still line their buttons up. */
+.plans .plan .tail { margin-top: auto; }
+.plans .plan .btn { width: 100%; justify-content: center; box-sizing: border-box; }
+
+/* Ruled above and below rather than boxed: the price is a line in the card's
+   own column, and a panel around it would make it a second card. */
+.plans .plan .price {
+  display: flex; flex-direction: column; gap: 2px;
+  margin-top: 4px; padding: 18px 0;
+  border-top: 1px solid var(--border-soft);
+  border-bottom: 1px solid var(--border-soft);
+}
+.plans .plan .price b {
+  font-family: var(--display); font-weight: 600; font-size: 24px;
+  letter-spacing: -.03em; line-height: 1.2;
+}
+.plans .plan .price span { font-size: 13px; color: var(--text-4); }
+
+/* The space each tier's contents will take, drawn at that size and visibly
+   empty. A dashed rule is the one border on this page that says "not finished"
+   rather than "here is a thing", which is exactly the claim being made. Its
+   min-height is the self-hosted column's list, so the four cards agree on where
+   their buttons sit before anything is written in the other three. */
+.plans .plan .tbd {
+  margin: 20px 0 26px; padding: 16px;
+  border: 1px dashed var(--border); border-radius: var(--radius-media);
+  min-height: 104px; box-sizing: border-box;
+}
+.plans .plan .tbd .en { margin: 0 0 6px; color: var(--text-4); letter-spacing: .1em; font-size: 10px; }
+.plans .plan .tbd p:last-child { font-size: 13px; color: var(--text-4); line-height: 1.55; margin: 0; }
+
+/* The self-hosted column's list, which is the only one with contents today. It
+   is `.pair`'s list — same dash, same measure — because it is the same kind of
+   list on the same page. */
+.plans ul { list-style: none; padding: 0; margin: 20px 0 26px; min-height: 104px; }
+.plans li {
+  position: relative; padding-left: 20px; margin-bottom: 10px;
+  color: var(--text-3); font-size: 15px;
+}
+.plans li::before {
+  content: ""; position: absolute; left: 2px; top: .7em;
+  width: 8px; height: 1px; background: var(--accent);
+}
+
+/* One column lifted, by the same three values the sign-in card is lifted by:
+   a stronger hairline, the page's own background instead of the sunken tint,
+   and the shadow. No coloured border and no scale — this is a card standing
+   slightly forward, not a different species of card. */
+.plans .plan.featured {
+  border-color: var(--border-strong);
+  background: var(--bg);
+  box-shadow: var(--lift);
+}
+.plans .plan .pick {
+  position: absolute; top: 24px; right: 24px;
+  padding: .15em .4em; border-radius: 4px;
+  background: var(--accent); color: var(--on-accent);
+  font-size: 10px; font-weight: 700; letter-spacing: .08em; line-height: 1.6;
+}
+
+/* A button-shaped thing that is not a button, because there is nothing behind
+   it yet. It keeps the shape so the row of four reads as a row of four, and
+   loses the contrast and the cursor so nobody presses it twice wondering. */
+.btn[aria-disabled="true"] {
+  color: var(--text-4);
+  cursor: default;
+}
+.btn[aria-disabled="true"]:hover {
+  background: var(--surface-2); border-color: var(--border); color: var(--text-4);
+}
+
+/* The same note the account page carries, in the same words, at the size this
+   page sets its small print. */
+.fine {
+  margin: 32px 0 0; max-width: 44em;
+  font-size: 13px; line-height: 1.7; color: var(--text-4);
+}
+
 /* ---------- how you run it ---------- */
 
 .pair { display: grid; gap: clamp(16px, 2vw, 22px); margin-top: clamp(40px, 5vw, 56px); }

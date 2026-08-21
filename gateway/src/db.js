@@ -67,6 +67,16 @@ ALTER TABLE accounts ADD COLUMN IF NOT EXISTS avatar text;
 ALTER TABLE accounts ADD COLUMN IF NOT EXISTS agreed_at timestamptz;
 ALTER TABLE accounts ADD COLUMN IF NOT EXISTS agreed_policy text;
 
+-- Which tier this account is on. The set of them is in plans.js; this column
+-- is a text id and not an enum, so adding a tier is one line there rather than
+-- a migration here.
+--
+-- NOT NULL with a default, which is what makes the backfill free: every account
+-- that existed before this column did is on the free tier, and no reader has to
+-- decide what a null means. Nothing in the gateway enforces a difference
+-- between the tiers yet — this records what someone is on, and that is all.
+ALTER TABLE accounts ADD COLUMN IF NOT EXISTS plan text NOT NULL DEFAULT 'free';
+
 -- Cascades from the account: a deleted account must not leave a token that
 -- still renews, and the database is a better place to guarantee that than a
 -- sequence of calls that can be interrupted halfway.

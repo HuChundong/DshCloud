@@ -38,7 +38,12 @@ const check = (label, ok, detail) => {
 }
 
 for (const scheme of ['light', 'dark']) {
-  const context = await browser.newContext({ colorScheme: scheme, ignoreHTTPSErrors: true })
+  // The locale is stated, not inherited. These pages pick their language from
+  // `dsh-lang` in storage and fall back to the browser's own, and a fresh
+  // context has no storage — so without this the language under test is
+  // whatever locale the machine running the suite happens to have, and the
+  // assertions below were reading Chinese out of an English page.
+  const context = await browser.newContext({ colorScheme: scheme, locale: 'zh-CN', ignoreHTTPSErrors: true })
   await context.addCookies(cookies)
   const page = await context.newPage()
   let native = 0
@@ -70,6 +75,19 @@ for (const scheme of ['light', 'dark']) {
   await page.keyboard.press('Escape')
   await page.waitForTimeout(400)
   check('escape cancels too', await page.locator('dialog[open]').count() === 0)
+
+  // The sentence is looked up when the dialog opens rather than rendered with
+  // the page, so that someone who switched language after the page loaded is
+  // asked in the language they switched to. Nothing else can check that: the
+  // string never appears in the served markup, only the key does.
+  await page.locator('.lang button[data-lang="en"]').click()
+  await page.waitForTimeout(200)
+  await remove.click()
+  await page.waitForSelector('dialog[open]', { timeout: 5_000 })
+  const asked = await page.locator('dialog[open] p').innerText()
+  check('and asks in the language chosen since the page loaded', asked.startsWith('Delete '), asked.slice(0, 34))
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(400)
 
   await context.close()
 }

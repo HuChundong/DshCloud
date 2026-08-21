@@ -294,6 +294,46 @@ export const TOAST_CSS = `
 `
 
 /**
+ * What the console says after an action.
+ *
+ * Apart from the rest because the console has to ship the whole set to the
+ * browser: its actions are answered with a code and the toast is built there,
+ * so every one of these has to be lookup-able on a page where no element names
+ * it. `scripts/check-pages.mjs` reads this same export to know that, which is
+ * what keeps "a key nothing names" a real finding on that page rather than a
+ * rule with a hole in it.
+ *
+ * These were finished Chinese sentences passed straight through as notices,
+ * which the fallback in `toast` then showed as themselves — so every string on
+ * that page turned over with the toggle except the one reporting what had just
+ * happened. They also rode home in a query parameter, which meant prose in the
+ * address bar.
+ *
+ * The ceiling is four entries rather than one with two holes because both of
+ * its variable parts are WORDS, and a word substituted in here would be a word
+ * in whichever language this process picked.
+ */
+export const CONSOLE_NOTICES = {
+  'invites.minted':     { zh: '已生成 {count} 个邀请码。', en: 'Generated {count} invite code(s).' },
+  'invite.discarded':   { zh: '邀请码 {code} 已删除。', en: 'Invite code {code} deleted.' },
+  'invite.unknown':     { zh: '该邀请码不存在。', en: 'No such invite code.' },
+  'model.incomplete':   { zh: '接口地址和密钥都不能为空。', en: 'The endpoint and the key are both required.' },
+  'model.saved':        { zh: '已保存。已在运行的沙箱不受影响，新建的会用它。', en: 'Saved. Sandboxes already running are unaffected; new ones will use it.' },
+  'access.bad.limit':   { zh: '沙箱上限要填一个不小于 0 的整数（0 表示不限）。', en: 'The ceiling must be a whole number of 0 or more (0 means no limit).' },
+  'access.invite.capped':   { zh: '已保存：注册需要邀请码，沙箱上限 {limit}。', en: 'Saved: registration needs an invite code, ceiling {limit}.' },
+  'access.invite.uncapped': { zh: '已保存：注册需要邀请码，沙箱数量不限。', en: 'Saved: registration needs an invite code, no ceiling.' },
+  'access.open.capped':     { zh: '已保存：注册已开放，沙箱上限 {limit}。', en: 'Saved: registration is open, ceiling {limit}.' },
+  'access.open.uncapped':   { zh: '已保存：注册已开放，沙箱数量不限。', en: 'Saved: registration is open, no ceiling.' },
+  'self.refused':       { zh: '不能对当前登录的账号执行该操作。', en: 'That cannot be done to the account you are signed in as.' },
+  'account.suspended':  { zh: '{email} 已停用。', en: '{email} is now disabled.' },
+  'account.restored':   { zh: '{email} 已恢复。', en: '{email} is enabled again.' },
+  'account.erased':     { zh: '{email} 已删除。', en: '{email} has been deleted.' },
+  'sandbox.reclaimed':  { zh: '{email} 的沙箱已回收，下次请求会重建一个。', en: 'The sandbox for {email} was reclaimed; the next request builds a new one.' },
+  'plan.moved':         { zh: '{email} 的套餐已更新。', en: 'The plan for {email} has been updated.' },
+  'plan.unknown':       { zh: '没有这个套餐。', en: 'No such plan.' },
+}
+
+/**
  * Everything the gateway's pages say back to a person, in both languages.
  *
  * Here rather than at the place that decides to say it, because these are page
@@ -319,6 +359,8 @@ export const MESSAGES = {
   'secret.name.reserved': { zh: '{name} 由部署本身设置，不能覆盖。', en: '{name} is set by the deployment itself and cannot be overridden.' },
   'avatar.large':     { zh: '头像太大了，请换一张。', en: 'That picture is too large. Choose a smaller one.' },
   'avatar.format':    { zh: '头像格式不受支持，请重新选择图片。', en: 'That image format is not supported. Choose another picture.' },
+
+  ...CONSOLE_NOTICES,
 }
 
 /**
@@ -555,10 +597,33 @@ export function langToggle(table) {
     // They cannot carry a data-t attribute because they do not exist until
     // something happens, so the page asks for them by the same key instead.
     var current = 'zh'
-    window.dshText = function (key) {
+    window.dshText = function (key, params) {
       var entry = T[key]
-      return entry === undefined ? key : entry[current]
+      var said = entry === undefined ? key : entry[current]
+      if (params) {
+        for (var name in params) {
+          if (Object.prototype.hasOwnProperty.call(params, name)) {
+            said = said.split('{' + name + '}').join(String(params[name]))
+          }
+        }
+      }
+      return said
     }
+    // For a page that replaces markup after it has loaded.
+    //
+    // The applier runs on load and on the toggle, which was the whole story while
+    // every page here was rendered once and then only read. The console is not:
+    // every action re-reads /admin and swaps the whole of main for what the
+    // server sent, and what the server sends is Chinese with a key beside it.
+    // A reader who had chosen English got their table back in Chinese after
+    // every suspend, reclaim and delete — the toggle still said EN, because the
+    // toggle is outside main and was never replaced.
+    //
+    // Re-running is enough, and re-running everything rather than the new
+    // subtree is deliberate: applying is idempotent, the pages are small, and a
+    // version that took a root would have to be told the right one by every
+    // caller that swaps markup.
+    window.dshApply = function () { apply(current) }
     var stored = null
     try { stored = localStorage.getItem('dsh-lang') } catch (error) { /* as above */ }
     // No stored choice falls back to the browser's own, which for this

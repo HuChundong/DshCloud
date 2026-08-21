@@ -165,6 +165,12 @@ in `web/landing/fonts/`, latin subsets, 72 KB together; they are
 [SIL Open Font Licence](https://openfontlicense.org) and redistributing them
 beside this MIT source is what that licence is for.
 
+The same document is served again at `/plans`, without asking who is calling.
+`/` cannot be that address: it sends anyone holding a session to `/app`, which
+is right for a front door and wrong for the one section of it a signed-in
+tenant has a reason to open — what the tiers are, which is what Settings ›
+Account links to.
+
 It is built by [Vite](https://vite.dev): `index.html`, `styles.css` and
 `main.js`, with every asset emitted under a name carrying its own content hash
 and every reference to it rewritten from the parsed document. That is what lets

@@ -16,6 +16,7 @@ import { adminPage } from './admin-page.js'
 import { normalizeEmail } from './accounts.js'
 import { eraseAccount } from './erase.js'
 import { normalizeInvite } from './invites.js'
+import { isPlan } from './plans.js'
 
 /**
  * What the console needs from the rest of the gateway.
@@ -58,7 +59,7 @@ export async function handleConsole(path, req, res, deps) {
 
   if (path === '/admin' && req.method === 'GET') {
     const done = new URL(req.url ?? '/', 'http://gateway').searchParams.get('done') ?? undefined
-    await renderConsole(account, res, done, deps)
+    await renderConsole(account, res, readNotice(done), deps)
     return
   }
 
@@ -75,7 +76,7 @@ export async function handleConsole(path, req, res, deps) {
   if (path === '/admin/invites') {
     const minted = await deps.invites.mint(Number(form.get('count') ?? 1), account.email)
     console.log(`gateway: ${account.email} minted ${minted.length} invite(s)`)
-    backToConsole(res, `已生成 ${minted.length} 个邀请码。`, req)
+    backToConsole(res, { code: 'invites.minted', params: { count: minted.length } }, req)
     return
   }
   if (path === '/admin/model') {
@@ -87,12 +88,12 @@ export async function handleConsole(path, req, res, deps) {
     // corrected the endpoint beside it.
     const apiKey = (form.get('apiKey') ?? '').trim() === '' ? current.apiKey : form.get('apiKey').trim()
     if (baseUrl === '' || apiKey === '') {
-      backToConsole(res, '接口地址和密钥都不能为空。', req)
+      backToConsole(res, 'model.incomplete', req)
       return
     }
     await deps.settings.setModelCredential(baseUrl, apiKey, account.email)
     console.log(`gateway: ${account.email} updated the model credential`)
-    backToConsole(res, '已保存。已在运行的沙箱不受影响，新建的会用它。', req)
+    backToConsole(res, 'model.saved', req)
     return
   }
   if (path === '/admin/access') {
@@ -102,19 +103,25 @@ export async function handleConsole(path, req, res, deps) {
     const wantsInvite = form.get('inviteRequired') !== null
     const typed = Number.parseInt(form.get('sandboxLimit') ?? '', 10)
     if (form.get('sandboxLimit') !== null && form.get('sandboxLimit').trim() !== '' && (!Number.isInteger(typed) || typed < 0)) {
-      backToConsole(res, '沙箱上限要填一个不小于 0 的整数（0 表示不限）。', req)
+      backToConsole(res, 'access.bad.limit', req)
       return
     }
     const limit = Number.isInteger(typed) && typed > 0 ? typed : 0
     await deps.settings.setAccess(wantsInvite, limit, account.email)
     console.log(`gateway: ${account.email} set registration to ${wantsInvite ? 'invite-only' : 'open'}, sandbox limit ${limit === 0 ? 'unlimited' : limit}`)
-    backToConsole(res, `已保存：${wantsInvite ? '注册需要邀请码' : '注册已开放'}，沙箱上限 ${limit === 0 ? '不限' : limit}。`, req)
+    // Four codes rather than one sentence with two holes: both of the parts
+    // that vary are words, and a word chosen here would be a word in whichever
+    // language this process picked rather than the one the reader is in.
+    backToConsole(res, {
+      code: `access.${wantsInvite ? 'invite' : 'open'}.${limit === 0 ? 'uncapped' : 'capped'}`,
+      params: { limit },
+    }, req)
     return
   }
   if (path === '/admin/invites/discard') {
     const code = normalizeInvite(form.get('code') ?? '')
     const discarded = await deps.invites.discard(code)
-    backToConsole(res, discarded ? `邀请码 ${code} 已删除。` : '该邀请码不存在。', req)
+    backToConsole(res, discarded ? { code: 'invite.discarded', params: { code } } : 'invite.unknown', req)
     return
   }
 
@@ -122,7 +129,7 @@ export async function handleConsole(path, req, res, deps) {
   // An administrator acting on their own account can lock the deployment out of
   // its own console, so the page does not offer it and this refuses it.
   if (email === account.email) {
-    backToConsole(res, '不能对当前登录的账号执行该操作。', req)
+    backToConsole(res, 'self.refused', req)
     return
   }
 
@@ -138,14 +145,33 @@ export async function handleConsole(path, req, res, deps) {
         await deps.tokens.revokeAll(email)
         await deps.sandboxes.release(email).catch(() => {})
       }
-      notice = `${email} 已${updated?.disabled === true ? '停用' : '恢复'}。`
+      notice = { code: updated?.disabled === true ? 'account.suspended' : 'account.restored', params: { email } }
+      break
+    }
+    case '/admin/plan': {
+      const wanted = form.get('plan') ?? ''
+      // Refused rather than normalized. Everywhere else a tier that is not a
+      // tier becomes the default, because everywhere else something has to be
+      // shown; here somebody is asking for a specific one, and silently giving
+      // them a different one is the failure mode that makes an administrator
+      // trust a console they should not.
+      if (!isPlan(wanted)) {
+        backToConsole(res, 'plan.unknown', req)
+        return
+      }
+      const moved = await deps.accounts.setPlan(email, wanted)
+      if (moved === undefined) break
+      // The tier is not named in the sentence. Its id is not a word in either
+      // language, and the picker in the row the reader is looking at already
+      // shows the new one — the page is re-read after every action.
+      notice = { code: 'plan.moved', params: { email } }
       break
     }
     case '/admin/release': {
       await deps.sandboxes.release(email).catch((error) => {
         console.error(`gateway: releasing ${email} failed: ${error.message}`)
       })
-      notice = `${email} 的沙箱已回收，下次请求会重建一个。`
+      notice = { code: 'sandbox.reclaimed', params: { email } }
       break
     }
     case '/admin/delete': {
@@ -154,7 +180,7 @@ export async function handleConsole(path, req, res, deps) {
       // two ways to delete an account that took different things away would be
       // two different promises about what deletion means.
       if (doomed !== undefined) await eraseAccount(deps, doomed)
-      notice = `${email} 已删除。`
+      notice = { code: 'account.erased', params: { email } }
       break
     }
     default: {
@@ -163,8 +189,33 @@ export async function handleConsole(path, req, res, deps) {
       return
     }
   }
-  console.log(`gateway: ${account.email} — ${notice ?? `no such account ${email}`}`)
+  // The code, not the sentence: the sentence has a language now, and a log line
+  // that picked one would be picking it for whoever reads the logs.
+  console.log(`gateway: ${account.email} — ${notice === undefined ? `no such account ${email}` : `${notice.code} ${email}`}`)
   backToConsole(res, notice, req)
+}
+
+/**
+ * Read back what `backToConsole` put in the query.
+ *
+ * Anything that is not the JSON this wrote is passed through as a plain code,
+ * which is what a bare one looks like and also what someone typing in the
+ * address bar produces. Neither reaches the reader as itself: an unknown code
+ * falls through `MESSAGES` to be shown verbatim, and it is escaped on the way
+ * out — so the worst a hand-edited query can do is put its own text on the
+ * page, which is what it could already do by editing the page.
+ *
+ * @param {string} [done] - the query parameter as it arrived.
+ * @returns {string | {code: string, params?: object} | undefined} the notice.
+ */
+function readNotice(done) {
+  if (done === undefined || !done.startsWith('{')) return done
+  try {
+    const parsed = JSON.parse(done)
+    return typeof parsed?.code === 'string' ? parsed : undefined
+  } catch {
+    return undefined
+  }
 }
 
 /**
@@ -176,8 +227,15 @@ export async function handleConsole(path, req, res, deps) {
  * a query parameter, which is the only part of it that has to survive a
  * redirect; it is rendered as escaped text by the page that reads it.
  *
+ * What rides is a MESSAGE CODE and not a sentence. It used to be a finished
+ * Chinese sentence, which put prose in the address bar and — more to the
+ * point — reached a reader who had chosen English as Chinese, because a
+ * notice that is already worded has nothing left for the language toggle to
+ * do. One with holes in it travels as JSON, which is not pretty in a URL and
+ * is only ever seen there by a visit with no scripting.
+ *
  * @param {import('node:http').ServerResponse} res - the response.
- * @param {string} [notice] - what happened, to show once on arrival.
+ * @param {string | {code: string, params?: object}} [notice] - what happened, to show once on arrival.
  */
 function backToConsole(res, notice, req) {
   // Answered in place when the page asked in place. An action is a request,
@@ -192,7 +250,8 @@ function backToConsole(res, notice, req) {
     res.end(JSON.stringify({ notice: notice ?? null }))
     return
   }
-  const query = notice === undefined ? '' : `?done=${encodeURIComponent(notice)}`
+  const said = typeof notice === 'object' ? JSON.stringify(notice) : notice
+  const query = said === undefined ? '' : `?done=${encodeURIComponent(said)}`
   res.writeHead(303, { Location: `/admin${query}` })
   res.end()
 }

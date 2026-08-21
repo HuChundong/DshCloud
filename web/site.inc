@@ -363,6 +363,29 @@ location /brand/ {
 location = /welcome  { return 301 /; }
 location /welcome/   { return 301 /; }
 
+# The front door again, at an address a signed-in tenant can reach.
+#
+# `/` is not one: it asks the gateway who is calling and sends anyone with a
+# session to `/app`, which is right for the front door and wrong for the one
+# section of it a tenant has a reason to open — what the tiers are. A link to
+# `/#plans` from inside the application lands on the application.
+#
+# So the same document, unauthenticated, at its own name. No `auth_request`
+# here on purpose: the page says the same thing to everyone, and asking would
+# only reintroduce the redirect this exists to avoid.
+#
+# `= /plans` and not `/plans/`: with no trailing slash the document's relative
+# references — `./landing/…` — resolve against `/`, which is where they are
+# served from. A trailing slash would resolve them against `/plans/` and every
+# asset on the page would 404.
+# Byte for byte what `@front_door` serves, headers included: two addresses for
+# one document, and a difference between them would be a difference nobody
+# asked for.
+location = /plans {
+  root /usr/share/nginx/front-door;
+  try_files /index.html =404;
+}
+
 # Everything the front door names — its stylesheet, its script, its fonts and
 # every picture on it — each under a name carrying its own content hash.
 # `vite build` writes them into this one directory and rewrites every reference

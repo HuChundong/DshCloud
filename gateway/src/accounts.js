@@ -14,6 +14,8 @@
 import { randomUUID } from 'node:crypto'
 import process from 'node:process'
 
+import { normalizePlan } from './plans.js'
+
 /**
  * Addresses that administer this deployment, named by the operator rather than
  * assigned by registration order — "the first person to sign up is in charge"
@@ -40,6 +42,7 @@ const ADMIN_EMAILS = new Set(
  * @property {boolean} disabled - whether an administrator has suspended it.
  * @property {number} createdAt - epoch milliseconds of registration.
  * @property {number} lastSeenAt - epoch milliseconds of the most recent sign-in.
+ * @property {string} plan - which tier they are on; always one `plans.js` names, never undefined.
  * @property {string | undefined} displayName - what the tenant asked to be called; undefined until they have said.
  * @property {string | undefined} avatar - their avatar as a `data:` URI; undefined for the default.
  * @property {number | undefined} agreedAt - epoch milliseconds of the most recent acceptance of the policies.
@@ -106,6 +109,11 @@ function toAccount(row) {
     disabled: row.disabled,
     createdAt: row.created_at.getTime(),
     lastSeenAt: row.last_seen_at.getTime(),
+    // Through `normalizePlan` rather than straight off the row: the column is
+    // free text, so a tier this build does not know about — written by a newer
+    // gateway, or by hand — becomes the default here instead of travelling on
+    // to a browser that would have to rule it out again.
+    plan: normalizePlan(row.plan),
     // Undefined for a row that has none and for a row that was not asked for
     // them — `list` below leaves the avatar out on purpose. Every caller that
     // needs one reads a single account, where both columns are always present.
@@ -229,6 +237,35 @@ export class Accounts {
   }
 
   /**
+   * Move an account to another tier.
+   *
+   * The only way a tier changes in this deployment. Nothing here takes money,
+   * so there is no checkout to grant one and no webhook to revoke one — an
+   * administrator says so from the console, and this records it.
+   *
+   * The tier is normalized on the way in as well as on the way out, so a value
+   * that is not a tier cannot be written at all rather than being written and
+   * then quietly read back as the default: a column that disagrees with every
+   * reader of it is worse than one that refused the write.
+   *
+   * Nothing is revoked and nothing is released. Moving between tiers changes no
+   * capability today — that is `docs/design.md`'s next question, not this
+   * one — so a move that reached into a running sandbox would be enforcing a
+   * difference that does not exist.
+   *
+   * @param {string} email - the normalized address.
+   * @param {string} plan - the tier to move them to.
+   * @returns {Promise<Account | undefined>} the updated account, or undefined when there is none.
+   */
+  async setPlan(email, plan) {
+    const { rows } = await this.pool.query(
+      'UPDATE accounts SET plan = $2 WHERE email = $1 RETURNING *',
+      [email, normalizePlan(plan)],
+    )
+    return rows.length === 0 ? undefined : toAccount(rows[0])
+  }
+
+  /**
    * Erase an account.
    *
    * Its refresh tokens go with it, by cascade rather than by a second call that
@@ -251,7 +288,7 @@ export class Accounts {
     // the console does not show: `SELECT *` would pull every tenant's image
     // into memory to render a table of addresses.
     const { rows } = await this.pool.query(
-      `SELECT id, email, disabled, created_at, last_seen_at, display_name
+      `SELECT id, email, disabled, created_at, last_seen_at, display_name, plan
          FROM accounts ORDER BY created_at DESC`,
     )
     return rows.map(toAccount)
