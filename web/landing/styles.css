@@ -437,7 +437,10 @@ h1 { font-size: clamp(34px, 4vw, 52px); line-height: 1.14; letter-spacing: -.04e
 .app-item.nested { margin-left: 14px; }
 .app-side .fill { flex: 1; }
 
-.app-foot { display: grid; gap: 12px; padding-top: 12px; border-top: 1px solid var(--border-soft); }
+/* No rule above it. The mock-up is a drawing of the shell, and the shell puts
+   nothing between its list of sessions and the sandbox at the foot — a line
+   here is this page inventing a division the product does not have. */
+.app-foot { display: grid; gap: 12px; padding-top: 12px; }
 .app-sandbox { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .app-sandbox .state { font-size: 12px; color: var(--text-3); display: grid; gap: 1px; }
 .app-sandbox .state b { font-weight: 500; color: var(--text-4); font-size: 11px; }
@@ -475,10 +478,6 @@ h1 { font-size: clamp(34px, 4vw, 52px); line-height: 1.14; letter-spacing: -.04e
 .app-greet { display: flex; align-items: center; justify-content: center; gap: 11px; margin-bottom: clamp(18px, 3vw, 30px); }
 .app-greet img { width: 27px; height: 27px; }
 .app-greet .said { font-family: var(--display); font-weight: 600; font-size: clamp(19px, 2.2vw, 25px); letter-spacing: -.03em; }
-.app-greet .plan {
-  font-size: 11px; padding: 3px 9px; border-radius: var(--radius-pill);
-  color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent);
-}
 
 /*
   A real form. The textarea carries no `name`, so submitting it sends nothing —
@@ -593,9 +592,34 @@ a.work:hover .work-preview img { transform: scale(1.035); filter: saturate(1) co
    action at the foot. Anything a plan card does that the cards above it do
    differently would read as a second design on one page. */
 .plans .plan { display: flex; flex-direction: column; position: relative; }
-/* The action sits on the floor of the card whatever is above it, so four
-   columns of unequal copy still line their buttons up. */
+/* The action sits on the floor of the card whatever is above it. Kept for the
+   browsers the rule below does not reach, where the buttons are the one row
+   worth lining up if only one can be. */
 .plans .plan .tail { margin-top: auto; }
+
+/* The four columns share their rows rather than each sizing its own.
+ *
+ * The copy is not the same length in four tiers and cannot be made to be —
+ * `Run it yourself` says more about itself than `Free` does, and it says it in
+ * two languages whose lines break in different places. Sized per card, that
+ * turns into four cards whose prices sit at four heights, and the row reads as
+ * four separate things rather than one comparison.
+ *
+ * Subgrid makes each row as tall as the tallest card's version of it, so every
+ * card's eyebrow, name, description, price, contents and action sit on the
+ * same line across the row, whatever wraps. Six, because that is what a plan
+ * card is made of; the `Recommended` flag is absolutely positioned and takes
+ * no row.
+ *
+ * Only where there are columns to align. In one column there is nothing to
+ * agree with, and behind @supports because a browser without subgrid must get
+ * the flex card above rather than a card whose children have all landed in row
+ * one. */
+@supports (grid-template-rows: subgrid) {
+  @media (min-width: 720px) {
+    .plans .plan { display: grid; grid-template-rows: subgrid; grid-row: span 6; }
+  }
+}
 .plans .plan .btn { width: 100%; justify-content: center; box-sizing: border-box; }
 
 /* Ruled above and below rather than boxed: the price is a line in the card's
@@ -615,8 +639,8 @@ a.work:hover .work-preview img { transform: scale(1.035); filter: saturate(1) co
 /* The space each tier's contents will take, drawn at that size and visibly
    empty. A dashed rule is the one border on this page that says "not finished"
    rather than "here is a thing", which is exactly the claim being made. Its
-   min-height is the self-hosted column's list, so the four cards agree on where
-   their buttons sit before anything is written in the other three. */
+   min-height is the self-hosted column's list: the space is drawn at the size
+   the contents will take, so the row does not resize when they are written. */
 .plans .plan .tbd {
   margin: 20px 0 26px; padding: 16px;
   border: 1px dashed var(--border); border-radius: var(--radius-media);

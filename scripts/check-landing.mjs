@@ -397,6 +397,35 @@ for (const directory of ['web/landing', 'docs/assets']) {
   }
 }
 
+// ---- the tier cards agree with the row count they are laid out on ----
+
+// Subgrid aligns the four tiers row by row, and `grid-row: span N` is how many
+// rows each card claims. That number is written in the stylesheet and the cards
+// themselves are the other half of it: add a line to one card and it claims a
+// row the others never fill, so every card after it slides up by one and the
+// row that was being aligned is aligned against the wrong thing. It goes wrong
+// quietly — four cards still stand in four columns, and only their insides
+// stop agreeing — so the two halves are compared here rather than by eye.
+//
+// The `Recommended` flag is left out on purpose: it is positioned absolutely
+// and takes no row, which is what lets one card carry it without shifting.
+
+const span = page.css.match(/\.plans \.plan \{[^}]*grid-row: span (\d+)/)
+if (span === null) {
+  problems.push('web/landing/styles.css: the tier cards no longer say how many rows they span')
+} else {
+  const rows = Number(span[1])
+  const cards = [...page.html.matchAll(/<div class="card plan[^"]*">([\s\S]*?)\n {6}<\/div>/g)]
+  if (cards.length === 0) problems.push('web/landing/index.html: no tier cards found to count')
+  for (const [index, card] of cards.entries()) {
+    const children = [...card[1].matchAll(/^ {8}<(\w+)([^>]*)>/gm)]
+      .filter(([, , attributes]) => !attributes.includes('class="pick"'))
+    if (children.length !== rows) {
+      problems.push(`web/landing/index.html: tier card ${index + 1} has ${children.length} rows of content, but the cards are laid out on ${rows}`)
+    }
+  }
+}
+
 // ---- report ----
 
 if (problems.length > 0) {

@@ -13,11 +13,11 @@ const T = {
   'nav.sandbox':  { en: 'The sandbox',         zh: '沙箱' },
   'nav.plans':    { en: 'Plans',               zh: '套餐' },
   'nav.run':      { en: 'Get started',         zh: '开始' },
-  'nav.cta':      { en: 'Explore the uncharted', zh: '探索未至之境' },
+  'nav.cta':      { en: 'Get started for free', zh: '免费开始' },
 
   'hero.h1':      { en: 'Agent in SANDBOX',     zh: '让 agent 住进沙箱' },
   'hero.built':   { en: 'Built on DeepSeek Harness', zh: '基于 DeepSeek Harness' },
-  'hero.cta1':    { en: 'Explore the uncharted', zh: '探索未至之境' },
+  'hero.cta1':    { en: 'Get started for free', zh: '免费开始' },
   'hero.cta2':    { en: 'Read the source',     zh: '查看源码' },
 
   'app.new':      { en: 'New session',         zh: '新会话' },
@@ -34,7 +34,6 @@ const T = {
   // saying it had no tiers, on a page that now lists three.
   'app.plan':     { en: 'Free',                zh: '免费' },
   'app.greet':    { en: 'What are we building today?', zh: '今天想构建点什么？' },
-  'app.free':     { en: 'Free',                zh: '免费' },
   'app.ask':      { en: 'Describe what you want to build', zh: '描述你想要构建的内容' },
   'app.send':     { en: 'Send',                zh: '发送' },
   'app.access':   { en: 'Full access',         zh: '完全权限' },
@@ -118,7 +117,7 @@ const T = {
                     zh: '你的电脑关了，沙箱还在跑。' },
   'run.a3':       { en: 'Files and sessions are there next time.',
                     zh: '文件和会话都在，下次接着做。' },
-  'run.acta':     { en: 'Explore the uncharted', zh: '探索未至之境' },
+  'run.acta':     { en: 'Get started for free', zh: '免费开始' },
   'run.bh':       { en: 'Or run it on your own cloud', zh: '或部署到自己的云上' },
   'run.b1':       { en: 'Every line is public.', zh: '每一行代码都是公开的。' },
   'run.b2':       { en: 'Docker to try it, CubeSandbox microVMs in production.', zh: '试跑用 Docker，生产用 CubeSandbox 微虚机。' },
@@ -132,7 +131,7 @@ const T = {
                     zh: '# 一人一台微虚机——生产环境的形态' },
 
   'close.h2':     { en: 'Ready to run DSH in the cloud?', zh: '准备好在云上用 DSH 了吗？' },
-  'close.cta1':   { en: 'Explore the uncharted', zh: '探索未至之境' },
+  'close.cta1':   { en: 'Get started for free', zh: '免费开始' },
   'close.cta2':   { en: 'Star on GitHub',      zh: '去 GitHub 点个 Star' },
 
   'notice.body':  { en: '<strong>HamsterHQ is an independently developed, unofficial project. HamsterHQ and DSH are not products of the same company or organization.</strong> This project is not affiliated with, sponsored by, endorsed by, or maintained by DeepSeek AI, the <code>deepseek-ai</code> organization, Tencent Cloud, or the maintainers of DSH or CubeSandbox. Their names and marks are used only to identify interoperability and upstream dependencies; this project claims no ownership of them.',
