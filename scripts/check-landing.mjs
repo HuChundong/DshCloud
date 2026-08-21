@@ -426,6 +426,49 @@ if (span === null) {
   }
 }
 
+// ---- the front door and the pages behind it remember one choice ------------
+
+// A visitor does not know where this page ends and the next begins: they press
+// 中文 here and then press the button, which lands on a gateway page. Kept
+// under two keys, that page came back in English — nothing failed, nothing
+// logged, and the toggle they had just used appeared not to work. Theme was
+// already shared; language was not, and the difference was one string:
+// `dshcloud.lang` here against `dsh-lang` there.
+
+const chrome = readFileSync(join(root, 'gateway/src/page-chrome.js'), 'utf8')
+
+/**
+ * Every localStorage key a file writes, with a named constant resolved to what
+ * it holds — otherwise naming the key once reads as a different key from
+ * spelling it out.
+ *
+ * @param {string} source - the file.
+ * @returns {string[]} the keys.
+ */
+function keysWritten(source) {
+  const names = [...source.matchAll(/localStorage\.setItem\(\s*(?:'([^']+)'|"([^"]+)"|([A-Z_][A-Z0-9_]*))/g)]
+    .map((match) => match[1] ?? match[2] ?? match[3])
+  return [...new Set(names.map((name) => (/^[A-Z_][A-Z0-9_]*$/.test(name)
+    ? new RegExp(`const ${name} = '([^']+)'`).exec(source)?.[1] ?? name
+    : name)))]
+}
+
+for (const kind of ['lang', 'theme']) {
+  const here = keysWritten(page.js).filter((key) => key.includes(kind))
+  const there = keysWritten(chrome).filter((key) => key.includes(kind))
+  if (here.length === 0 || there.length === 0) {
+    problems.push(`no ${kind} key is written by one of the two halves — this check has stopped finding them`)
+    continue
+  }
+  for (const key of here) {
+    if (there.includes(key)) continue
+    problems.push(
+      `web/landing/main.js writes the ${kind} to \`${key}\` and gateway/src/page-chrome.js writes it to`
+      + ` \`${there.join(', ')}\` — one deployment, one key, or the choice does not survive the first link`,
+    )
+  }
+}
+
 // ---- report ----
 
 if (problems.length > 0) {

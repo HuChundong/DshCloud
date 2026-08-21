@@ -228,6 +228,20 @@ const T = {
 */
 let lang = 'en'
 
+/**
+ * Where the choice of language is kept.
+ *
+ * The same key the gateway's own pages use, which is the whole point: this
+ * page and the sign-in form behind it are one deployment to the person reading
+ * them, and they were keeping the answer in two different places — so choosing
+ * 中文 here and pressing the button turned the next page back to English.
+ *
+ * `FORMER_KEY` is read once, for the visitors who chose before the two agreed.
+ * They get their choice back and it is written where both sides look.
+ */
+const LANG_KEY = 'dsh-lang'
+const FORMER_KEY = 'dshcloud.lang'
+
 function apply(next) {
   lang = next
   document.documentElement.lang = next === 'zh' ? 'zh-CN' : 'en'
@@ -253,11 +267,11 @@ function apply(next) {
   for (const button of document.querySelectorAll('.lang button')) {
     button.setAttribute('aria-pressed', String(button.dataset.lang === next))
   }
-  try { localStorage.setItem('dshcloud.lang', next) } catch { /* private mode */ }
+  try { localStorage.setItem(LANG_KEY, next) } catch { /* private mode */ }
 }
 
 let stored = null
-try { stored = localStorage.getItem('dshcloud.lang') } catch { /* private mode */ }
+try { stored = localStorage.getItem(LANG_KEY) ?? localStorage.getItem(FORMER_KEY) } catch { /* private mode */ }
 apply(stored === 'zh' || stored === 'en' ? stored : (navigator.language || '').startsWith('zh') ? 'zh' : 'en')
 
 for (const button of document.querySelectorAll('.lang button')) {
