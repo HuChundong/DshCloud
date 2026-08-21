@@ -119,6 +119,34 @@ export function requireAbsolute(value) {
  * @returns {string} the normalised path, guaranteed inside {@link ROOT}.
  * @throws {PathRefused} when it is unusable or points outside.
  */
+/**
+ * A path this may READ, which is anywhere in the sandbox.
+ *
+ * Reading is not scoped to the workspace and refusing to would protect
+ * nothing. The sandbox is the security boundary and the tenant is root inside
+ * their own: anything this declines to show, they can `cat` in the terminal on
+ * the next row of the same screen. What the scope was doing was making the
+ * agent's own output unreachable — a script it wrote to `/tmp` came back from
+ * the panel as a path the deployment would not open, and then as
+ * `spawn xdg-open ENOENT`, which is the host's answer to being asked to open a
+ * file on a desktop nobody is sitting at.
+ *
+ * Writing stays inside the workspace, and that is not the same question. The
+ * tree is a workspace browser; a rename or a delete offered outside the one
+ * directory it shows is a destructive action against a path nobody navigated
+ * to.
+ *
+ * Everything `requireAbsolute` refuses is still refused: a relative path, a
+ * null byte, and `..` collapsed before anyone looks at the result.
+ *
+ * @param {string|unknown} value - the path a caller offered.
+ * @returns {string} the normalised absolute path.
+ * @throws {PathRefused} when it is not a path at all.
+ */
+export function requireReadable(value) {
+  return requireAbsolute(value)
+}
+
 export function requireInsideRoot(value) {
   const resolved = requireAbsolute(value)
   if (!isWithin(ROOT, resolved)) {

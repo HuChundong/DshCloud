@@ -43,6 +43,8 @@
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import terminalCss from '@xterm/xterm/css/xterm.css'
+import { extracted } from 'dsh-icons/extracted'
+import { mirrored } from 'dsh-icons/mirrored'
 import { forgetPath } from './tabs.js'
 
 window.__ModuleLoader__.load({
@@ -126,6 +128,7 @@ window.__ModuleLoader__.load({
         'filter.label': '筛选文件',
 
         'preview.preparing': '准备预览…',
+        'preview.opaque': '暂不支持预览。',
         copy: '复制',
         copied: '已复制',
         'copy.text': '复制内容',
@@ -218,6 +221,7 @@ window.__ModuleLoader__.load({
         'filter.label': 'Filter files',
 
         'preview.preparing': 'Preparing the preview…',
+        'preview.opaque': 'Preview is not supported yet.',
         copy: 'Copy',
         copied: 'Copied',
         'copy.text': 'Copy the contents',
@@ -1821,41 +1825,99 @@ window.__ModuleLoader__.load({
     `
 
     /**
-     * One inline icon.
+     * One inline icon, by name.
      *
-     * Stroked paths on `currentColor` so each one takes the colour of whatever
-     * it sits in, which is what makes the hover states above work without a
-     * second rule per icon.
-     * @param {string} d - the path data.
+     * Almost all of them are the harness's own. `ui-primitives` carries 70
+     * glyphs drawn from the same source as the rest of the interface, and the
+     * panel sits inside that interface — so a hand-drawn set beside it read as
+     * a second product in the same window, which is what this replaced.
+     *
+     * The rest are in `dsh-icons`, and only because the harness set has no
+     * drawing that means them: a terminal, the second half of the fullscreen
+     * pair, a plain file, and the three file kinds the tree labels. They are
+     * drawn to the same rules — a 16 grid, a 1.3 stroke expanded to a filled
+     * outline, `currentColor`, no ink of their own.
+     *
+     * Both kinds render the same way here, which is the point of going through
+     * one table: a name that moves from `drawn` to the harness set later is a
+     * line in this table and nothing at the call sites.
+     *
+     * `size` is a square edge in px. It overrides whatever a glyph's own drawn
+     * size is, because these sit in rows whose height the panel decides.
+     *
+     * @param {string} name - a key of `GLYPHS`.
      * @param {number} size - the square edge, in px.
-     * @returns {object} the SVG element.
+     * @returns {object} the element.
      */
-    const icon = (d, size = 16) => h('svg', {
-      width: size,
-      height: size,
-      viewBox: '0 0 24 24',
-      fill: 'none',
-      stroke: 'currentColor',
-      strokeWidth: 2,
-      strokeLinecap: 'round',
-      strokeLinejoin: 'round',
-      'aria-hidden': true,
-    }, h('path', { d }))
+    const icon = (name, size = 16) => {
+      const glyph = GLYPHS[name]
+      if (glyph === undefined) return undefined
+      // A harness glyph is a component; ours is path data. The shell's set is
+      // the one that can go missing — `primitives` is `{}` when the module
+      // table does not carry it — and a missing icon must not take the render
+      // down, so this answers with nothing rather than throwing.
+      // On the glyph itself, not on a wrapper around it. A wrapper is one more
+      // box in a row whose buttons size themselves from their contents, and it
+      // is the kind of change that fails by making something disappear. Passed
+      // as a style, so a component that does not forward props loses the flip
+      // and keeps the icon — the failure worth having, of the two.
+      if (typeof glyph === 'function') return h(glyph, { size })
+      // Painted the way it was drawn. The harness's glyphs are outlines already
+      // expanded to filled shapes; the extracted half is strokes, and filling a
+      // stroke turns a drawing into a blot.
+      const paint = glyph.stroke === undefined
+        ? { fill: 'currentColor', fillRule: 'evenodd' }
+        : {
+            fill: 'none',
+            stroke: 'currentColor',
+            strokeWidth: glyph.stroke.width,
+            strokeLinecap: glyph.stroke.linecap,
+            strokeLinejoin: glyph.stroke.linejoin,
+          }
+      return h('svg', {
+        width: size,
+        height: size,
+        viewBox: glyph.viewBox,
+        fill: 'none',
+        'aria-hidden': true,
+      }, ...glyph.paths.map((d, at) => h('path', { key: at, d, transform: glyph.transform, ...paint })))
+    }
 
-    const ICON_FILES = 'M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z'
-    const ICON_TERMINAL = 'm4 17 6-6-6-6M12 19h8'
-    const ICON_BROWSER = 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM3.6 9h16.8M3.6 15h16.8M11.5 3a17 17 0 0 0 0 18M12.5 3a17 17 0 0 1 0 18'
-    const ICON_CLOSE = 'M18 6 6 18M6 6l12 12'
-    const ICON_NEW = 'M12 5v14M5 12h14'
-    /* Lucide's maximize-2 and minimize-2: one diagonal pair pointing out of
-       the corners, one pointing back into them. The corner brackets they
-       replaced said "fit to frame", which is a different promise than "take
-       more room" — and the pair of arrows says which way it goes without a
-       label. */
-    const ICON_EXPAND = 'M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7'
-    const ICON_SHRINK = 'M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7'
-    /** Lucide's panel-right: the panel as a shape, so the control names itself. */
-    const ICON_PANEL = 'M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM15 3v18'
+    /**
+     * Every glyph the panel draws, as the name the call sites use for it.
+     *
+     * Where two names resolve to one glyph — `files` and `folder`, `browser`
+     * and `html` — that is deliberate: the call sites mean different things and
+     * the harness happens to draw them the same, which is a fact about the set
+     * rather than something to collapse here.
+     */
+    const GLYPHS = {
+      files: primitives.IconFolderClose16,
+      // The globe, not `IconBrowseOutline16` — that one is a document with a
+      // reading rule through it. Both the canvas tool and an HTML file mean
+      // "somewhere on the web", which is what this draws.
+      browser: primitives.IconGlobeOutline14,
+      close: primitives.IconCloseOutline16,
+      new: primitives.IconPlusOutline16,
+      expand: primitives.IconFullscreenOutline16,
+      panel: mirrored['panel-right'],
+      chevron: primitives.IconChevronRightOutline14,
+      more: primitives.IconEllipsisOutline16,
+      code: extracted.code,
+      copy: primitives.IconCopyOutline16,
+      refresh: primitives.IconRefreshOutline16,
+      terminal: extracted.terminal,
+      shrink: extracted.shrink,
+      file: extracted.file,
+      image: extracted.image,
+      markdown: extracted.markdown,
+      'copy-text': extracted['copy-text'],
+      data: extracted.data,
+      archive: extracted.archive,
+      table: extracted.table,
+      media: extracted.media,
+      aside: extracted.list,
+    }
 
     /**
      * What the empty state offers.
@@ -1866,9 +1928,9 @@ window.__ModuleLoader__.load({
      * are never listed here.
      */
     const TOOLS = [
-      { id: 'files', path: ICON_FILES },
-      { id: 'terminal', path: ICON_TERMINAL },
-      { id: 'canvas', path: ICON_BROWSER },
+      { id: 'files', icon: 'files' },
+      { id: 'terminal', icon: 'terminal' },
+      { id: 'canvas', icon: 'browser' },
     ]
 
     /**
@@ -1879,6 +1941,18 @@ window.__ModuleLoader__.load({
      * sides of the wire and nothing can be imported across it.
      */
     const ROOT = '/mnt/workspace'
+
+    /**
+     * Whether a path is one the tree can show.
+     *
+     * The panel opens anything in the sandbox; the tree lists one directory of
+     * it. This is the line between those two, and the reason a file from
+     * `/tmp` gets a tab and no highlighted row.
+     *
+     * @param {string|undefined} path - an absolute path.
+     * @returns {boolean} whether the tree holds it.
+     */
+    const insideWorkspace = (path) => typeof path === 'string' && path.startsWith(`${ROOT}/`)
 
     /**
      * Ask the gateway about the tenant's workspace.
@@ -2061,7 +2135,7 @@ window.__ModuleLoader__.load({
             }
           },
         },
-        h('span', { className: `${NS}-tab-icon` }, icon(tab.icon ?? ICON_FILE, 14)),
+        h('span', { className: `${NS}-tab-icon` }, icon(tab.icon ?? 'file', 14)),
         h('span', { className: `${NS}-tab-label` }, tab.label ?? t(`tool.${tab.id}`)),
         // Rendered on every tab, shown by CSS under the pointer. Rendering it
         // only for the active tab was the first attempt and it does not answer
@@ -2075,7 +2149,7 @@ window.__ModuleLoader__.load({
             event.stopPropagation()
             onClose(tab.id)
           },
-        }, icon(ICON_CLOSE, 12))))),
+        }, icon('close', 12))))),
         // The way to a tool, kept against the tabs because that is what it
         // adds to: after the last one, and at the head of the row when there
         // are none. Drawn whether or not anything is open, which is what makes
@@ -2088,7 +2162,7 @@ window.__ModuleLoader__.load({
           'aria-label': t('panel.open'),
           'aria-pressed': activeId === undefined,
           onClick: onNew,
-        }, icon(ICON_NEW)),
+        }, icon('new')),
         // What is about the panel rather than about one tab sits at its far
         // edge, so the row reads as tabs on one side and panel controls on the
         // other.
@@ -2101,7 +2175,7 @@ window.__ModuleLoader__.load({
           'aria-label': t(maximised ? 'panel.restore' : 'panel.expand'),
           'aria-pressed': maximised,
           onClick: onMaximise,
-        }, icon(maximised ? ICON_SHRINK : ICON_EXPAND)),
+        }, icon(maximised ? 'shrink' : 'expand')),
         // The same control as the one in the session header, by the same
         // class and the same glyph — not a second control that also closes the
         // panel. It is here rather than there because that is where it is
@@ -2112,7 +2186,7 @@ window.__ModuleLoader__.load({
           title: t('panel.collapse'),
           'aria-label': t('panel.collapse'),
           onClick: onCollapse,
-        }, icon(ICON_PANEL)),
+        }, icon('panel')),
       )
     }
 
@@ -2132,7 +2206,7 @@ window.__ModuleLoader__.load({
             className: `${NS}-choice`,
             onClick: () => onOpen(tool),
           },
-          h('span', { className: `${NS}-choice-icon` }, icon(tool.path, 18)),
+          h('span', { className: `${NS}-choice-icon` }, icon(tool.icon, 18)),
           h('span', null, t(`tool.${tool.id}`)),
           h('div', { className: `${NS}-choice-note` },
             // Already open reads as a state, not as a disabled control: the
@@ -2154,8 +2228,6 @@ window.__ModuleLoader__.load({
       )
     }
 
-    const ICON_CHEVRON = 'm9 18 6-6-6-6'
-    const ICON_MORE = 'M12 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2M12 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2M12 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2'
 
     /**
      * The row's own control: one button that opens the menu.
@@ -2181,11 +2253,10 @@ window.__ModuleLoader__.load({
             const rect = event.currentTarget.getBoundingClientRect()
             treeStore.openMenu({ entry, x: rect.left, y: rect.bottom + 4 })
           },
-        }, icon(ICON_MORE, 14)),
+        }, icon('more', 14)),
       )
     }
 
-    const ICON_FILE = 'M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Zm0 0v5h5'
 
     /**
      * One directory's children, loaded when it is first opened.
@@ -2305,9 +2376,14 @@ window.__ModuleLoader__.load({
               // Rotated rather than swapped for a second glyph: one icon, one
               // state, and the turn reads as the thing opening.
               style: { transform: expanded ? 'rotate(90deg)' : 'none' },
-            }, icon(ICON_CHEVRON, 12))
+            }, icon('chevron', 12))
             : h('span', { className: `${NS}-row-twisty` }),
-          h('span', { className: `${NS}-row-icon` }, icon(entry.directory ? ICON_FILES : ICON_FILE, 14)),
+          // The same call the tab makes, so a file wears one icon in this
+          // deployment rather than one here and another on the tab it opens.
+          // Every file was `file` before, which is the icon for "nothing is
+          // known about this" shown for everything that was known.
+          h('span', { className: `${NS}-row-icon` },
+            icon(entry.directory ? 'files' : iconFor(entry.path), 14)),
           h('span', { className: `${NS}-row-name` }, entry.name),
           h(RowMenu, { entry })),
           expanded ? h(Branch, { path: entry.path, depth: depth + 1, onOpen, activePath, at }) : null)
@@ -2371,11 +2447,36 @@ window.__ModuleLoader__.load({
      * @param {string} path - the file's path.
      * @returns {'image'|'html'|'text'} the viewer to use.
      */
+    /**
+     * Extensions whose bytes are not text and have no viewer here.
+     *
+     * Everything used to fall through to the text viewer, which fetched the
+     * bytes, decoded them as UTF-8 and painted whatever came out — so opening a
+     * zip filled the pane with mojibake. That is worse than a refusal: it looks
+     * like a broken file rather than a viewer that was never written, and it
+     * costs the whole download to say nothing.
+     *
+     * Named rather than sniffed. Reading the first bytes to guess would be a
+     * round trip to answer a question the extension already answers for every
+     * file anyone actually opens, and a wrong guess about a text file is a
+     * pane that refuses something it could have shown.
+     */
+    const OPAQUE = new Set([
+      'zip', 'tar', 'gz', 'tgz', 'bz2', 'xz', 'rar', '7z', 'jar', 'war',
+      'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods',
+      'mp3', 'wav', 'ogg', 'flac', 'm4a', 'aac',
+      'mp4', 'webm', 'mov', 'mkv', 'avi', 'wmv',
+      'so', 'dylib', 'dll', 'exe', 'bin', 'o', 'a', 'class', 'wasm',
+      'ttf', 'otf', 'woff', 'woff2', 'eot',
+      'db', 'sqlite', 'sqlite3', 'parquet',
+    ])
+
     function viewerFor(path) {
       const ext = path.slice(path.lastIndexOf('.') + 1).toLowerCase()
       if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'svg', 'ico'].includes(ext)) return 'image'
       if (['html', 'htm'].includes(ext)) return 'html'
       if (['md', 'markdown'].includes(ext)) return 'markdown'
+      if (OPAQUE.has(ext)) return 'opaque'
       return 'text'
     }
 
@@ -2391,21 +2492,31 @@ window.__ModuleLoader__.load({
      * @param {string} path - the file's path.
      * @returns {string} a grammar hint.
      */
+    /**
+     * What each extension is highlighted as.
+     *
+     * Out here rather than inside `grammarFor`, because two questions read it:
+     * which grammar to colour a file with, and whether the thing is code at
+     * all. The second cannot be answered from the first's return — a lookup
+     * that misses answers with the extension itself, and several entries
+     * (`go`, `c`, `json`) answer with it too.
+     */
+    const GRAMMARS = {
+      js: 'javascript', mjs: 'javascript', cjs: 'javascript', jsx: 'jsx',
+      ts: 'typescript', mts: 'typescript', cts: 'typescript', tsx: 'tsx',
+      py: 'python', rb: 'ruby', rs: 'rust', go: 'go', java: 'java',
+      c: 'c', h: 'c', cc: 'cpp', cpp: 'cpp', hpp: 'cpp', cs: 'csharp',
+      sh: 'bash', bash: 'bash', zsh: 'bash', fish: 'fish',
+      yml: 'yaml', yaml: 'yaml', json: 'json', toml: 'toml', ini: 'ini',
+      css: 'css', scss: 'scss', less: 'less', html: 'html', xml: 'xml',
+      sql: 'sql', php: 'php', swift: 'swift', kt: 'kotlin', lua: 'lua',
+      dockerfile: 'dockerfile', makefile: 'makefile',
+    }
+
     function grammarFor(path) {
       const name = basename(path).toLowerCase()
       const ext = name.includes('.') ? name.slice(name.lastIndexOf('.') + 1) : name
-      const known = {
-        js: 'javascript', mjs: 'javascript', cjs: 'javascript', jsx: 'jsx',
-        ts: 'typescript', mts: 'typescript', cts: 'typescript', tsx: 'tsx',
-        py: 'python', rb: 'ruby', rs: 'rust', go: 'go', java: 'java',
-        c: 'c', h: 'c', cc: 'cpp', cpp: 'cpp', hpp: 'cpp', cs: 'csharp',
-        sh: 'bash', bash: 'bash', zsh: 'bash', fish: 'fish',
-        yml: 'yaml', yaml: 'yaml', json: 'json', toml: 'toml', ini: 'ini',
-        css: 'css', scss: 'scss', less: 'less', html: 'html', xml: 'xml',
-        sql: 'sql', php: 'php', swift: 'swift', kt: 'kotlin', lua: 'lua',
-        dockerfile: 'dockerfile', makefile: 'makefile',
-      }
-      return known[ext] ?? ext
+      return GRAMMARS[ext] ?? ext
     }
 
     /**
@@ -2499,6 +2610,13 @@ window.__ModuleLoader__.load({
         return () => { live = false }
       }, [path, wants, revision])
 
+      // Said, rather than shown as whatever the bytes decode to. Nothing is
+      // fetched for one of these: the answer does not depend on the contents,
+      // and downloading a hundred megabytes of video to report that it cannot
+      // be played is the cost of the old behaviour without the mojibake.
+      if (kind === 'opaque') {
+        return h('div', { className: `${NS}-placeholder` }, t('preview.opaque'))
+      }
       if (kind === 'image') {
         return h('div', { className: `${NS}-media` },
           h('img', { key: `${path}:${String(revision)}`, className: `${NS}-image`, src: rawUrl(path), alt: basename(path) }))
@@ -2547,10 +2665,6 @@ window.__ModuleLoader__.load({
       return h('pre', { className: `${NS}-text` }, text.body)
     }
 
-    const ICON_CODE = 'm16 18 6-6-6-6M8 6l-6 6 6 6'
-    const ICON_IMAGE = 'M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM8.5 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3M21 15l-5-5L5 21'
-    const ICON_MARKDOWN = 'M3 5h18a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1M6 15V9l3 3 3-3v6M17 9v4M15 13l2 2 2-2'
-    const ICON_GLOBE_FILE = 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18M3.6 9h16.8M3.6 15h16.8M11.5 3a17 17 0 0 0 0 18M12.5 3a17 17 0 0 1 0 18'
 
     /**
      * The icon a file tab wears.
@@ -2559,18 +2673,52 @@ window.__ModuleLoader__.load({
      * thing they are about to look at, and four answers cover a workspace.
      *
      * @param {string} path - the file's path.
-     * @returns {string} the icon's path data.
+     * @returns {string} the glyph's name in `GLYPHS`.
      */
-    function iconFor(path) {
-      const kind = viewerFor(path)
-      if (kind === 'image') return ICON_IMAGE
-      if (kind === 'html') return ICON_GLOBE_FILE
-      if (kind === 'markdown') return ICON_MARKDOWN
-      return grammarFor(path) === basename(path).toLowerCase() ? ICON_FILE : ICON_CODE
+    /**
+     * Kinds a viewer does not distinguish but a reader scanning a tree does.
+     *
+     * Everything here opens as text or does not open at all, so `viewerFor`
+     * has no reason to tell them apart — but a column of thirty identical
+     * pages is a column nobody can scan, and the extension is already on the
+     * row saying which is which. The icon is the same fact, read faster.
+     *
+     * Keyed by extension rather than by the grammar name, because the grammar
+     * table answers "how is this highlighted" and several of these have no
+     * grammar at all.
+     */
+    const KIND_BY_EXTENSION = {
+      json: 'data', yml: 'data', yaml: 'data', toml: 'data', ini: 'data', env: 'data',
+      zip: 'archive', tar: 'archive', gz: 'archive', tgz: 'archive', bz2: 'archive',
+      xz: 'archive', rar: 'archive', '7z': 'archive',
+      // No pdf: the set this half comes from has no honest mark for one, and a
+      // page with a badge that says something else is worse than the plain
+      // page. The panel cannot open one either, so nothing is lost by it
+      // looking like every other file it cannot open.
+      csv: 'table', tsv: 'table', xls: 'table', xlsx: 'table',
+      mp3: 'media', wav: 'media', ogg: 'media', flac: 'media',
+      mp4: 'media', webm: 'media', mov: 'media', mkv: 'media',
     }
 
-    const ICON_COPY_TEXT = 'M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Zm0 0v5h5M8 13h8M8 17h5'
-    const ICON_COPY = 'M20 8h-8a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2ZM6 16H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1'
+    function iconFor(path) {
+      const kind = viewerFor(path)
+      if (kind === 'image') return 'image'
+      if (kind === 'html') return 'browser'
+      if (kind === 'markdown') return 'markdown'
+      const name = basename(path).toLowerCase()
+      const extension = name.includes('.') ? name.slice(name.lastIndexOf('.') + 1) : ''
+      const byExtension = KIND_BY_EXTENSION[extension]
+      if (byExtension !== undefined) return byExtension
+      // Code when the grammar table knows the extension, and a plain page
+      // otherwise. The test used to be whether `grammarFor` answered with the
+      // name it was given, which made every unfamiliar extension code — a
+      // `.log` and a `.bak` wore the same icon as a `.rs` — and every
+      // extensionless file plain, which made `Makefile` and `Dockerfile`
+      // documents. Both are the wrong way round, and neither showed while
+      // only the tab read this.
+      return GRAMMARS[extension === '' ? name : extension] === undefined ? 'file' : 'code'
+    }
+
 
     /**
      * The path of the file on show, as a row of places that can be gone to.
@@ -2590,12 +2738,17 @@ window.__ModuleLoader__.load({
           h('button', { type: 'button', className: `${NS}-crumb`, onClick: () => onReveal(ROOT) }, '/'))
       }
       const segments = path.split('/').filter(Boolean)
+      // A crumb is a way into the tree, so it is only a control while the tree
+      // is where the path leads. For a file opened from outside the workspace
+      // the row still says where the file is — that is the question it answers
+      // — but nothing in it offers to go somewhere it cannot.
+      const navigable = insideWorkspace(path)
       return h('div', { className: `${NS}-crumb-path`, title: path }, segments.map((segment, index) => {
         const here = `/${segments.slice(0, index + 1).join('/')}`
         const last = index === segments.length - 1
         return h(React.Fragment, { key: here },
           h('span', { className: `${NS}-crumb-sep` }, '/'),
-          last
+          last || !navigable
             ? h('span', { className: `${NS}-crumb-name` }, segment)
             : h('button', { type: 'button', className: `${NS}-crumb`, onClick: () => onReveal(here) }, segment))
       }))
@@ -2641,14 +2794,13 @@ window.__ModuleLoader__.load({
         title: t(closed ? 'expand' : 'collapse', { title }),
         'aria-label': t(closed ? 'expand' : 'collapse', { title }),
         onClick: () => store.fold(kind),
-      }, icon(ICON_ASIDE))
+      }, icon('aside'))
     }
 
     /* A list, not a panel. The first version of this control used the same
        panel outline the panel's own toggle uses, so the two levels looked like
        one control drawn twice — and they do different things: one folds the
        side list, the other closes the whole panel. */
-    const ICON_ASIDE = 'M9 6h12M9 12h12M9 18h12M4 6h.01M4 12h.01M4 18h.01'
 
     /**
      * Every shell that is open, and the one on show.
@@ -2693,7 +2845,7 @@ window.__ModuleLoader__.load({
         },
       },
       h('span', { className: `${NS}-row-twisty` }),
-      h('span', { className: `${NS}-row-icon` }, icon(ICON_TERMINAL, 14)),
+      h('span', { className: `${NS}-row-icon` }, icon('terminal', 14)),
       h('span', { className: `${NS}-row-name` }, entry.name),
       h('span', { className: `${NS}-row-menu` },
         h('button', {
@@ -2702,7 +2854,7 @@ window.__ModuleLoader__.load({
           title: t('terminal.end'),
           'aria-label': t('terminal.end.of', { name: entry.name }),
           onClick: (event) => { event.stopPropagation(); store.closeTerminal(entry.id) },
-        }, icon(ICON_CLOSE, 12)))))
+        }, icon('close', 12)))))
 
       const showing = terminals.find((entry) => entry.id === activeTerminal)
 
@@ -2719,7 +2871,7 @@ window.__ModuleLoader__.load({
             title: t('terminal.new'),
             'aria-label': t('terminal.new'),
             onClick: () => { store.addTerminal() },
-          }, icon(ICON_NEW, 15)),
+          }, icon('new', 15)),
           h(FoldButton, { kind: 'terminal', title: t('terminal.list') })),
         h('div', { className: `${NS}-split` },
           h('div', { className: `${NS}-split-main` }, screens),
@@ -2766,7 +2918,13 @@ window.__ModuleLoader__.load({
 
       // Switching to a tab opens the tree to that tab's file, so the tree
       // always shows where you are without being asked.
-      React.useEffect(() => { treeStore.reveal(path) }, [path])
+      // Only what the tree can hold. The tree is a workspace browser, so
+      // revealing a path from outside it would walk it into directories it
+      // does not list and cannot show — an error row for a file that opened
+      // perfectly well.
+      React.useEffect(() => {
+        if (insideWorkspace(path)) treeStore.reveal(path)
+      }, [path])
 
       return h('div', { className: `${NS}-file` },
         h('div', { className: `${NS}-crumbs` },
@@ -2788,7 +2946,7 @@ window.__ModuleLoader__.load({
             title: t(copied === 'text' ? 'copied.text' : 'copy.text'),
             'aria-label': t('copy.text'),
             onClick: () => copy('text', text),
-          }, icon(ICON_COPY_TEXT, 15)),
+          }, icon('copy-text', 15)),
           h('button', {
             type: 'button',
             className: `${NS}-icon-button`,
@@ -2796,7 +2954,7 @@ window.__ModuleLoader__.load({
             title: t(copied === 'path' ? 'copied.path' : 'copy.path'),
             'aria-label': t('copy.path'),
             onClick: () => copy('path', path),
-          }, icon(ICON_COPY, 15)),
+          }, icon('copy', 15)),
           // Look again, by hand.
           //
           // It exists because the panel cannot always be told: envd will not
@@ -2810,7 +2968,7 @@ window.__ModuleLoader__.load({
             title: t('refresh'),
             'aria-label': t('refresh'),
             onClick: () => { workspaceWatch.refresh() },
-          }, icon(ICON_REFRESH, 15)),
+          }, icon('refresh', 15)),
           h(FoldButton, { kind: 'files', title: t('files.tree') })),
         h('div', { className: `${NS}-split` },
           h('div', { className: `${NS}-split-main` },
@@ -2898,7 +3056,7 @@ window.__ModuleLoader__.load({
             // Bumping the modified stamp remounts the frame below, which is a
             // fresh fetch: the route answers `no-store`.
             onClick: () => setPage((current) => ({ ...current, modified: Date.now() / 1000 })),
-          }, icon(ICON_REFRESH, 15))),
+          }, icon('refresh', 15))),
         // Keyed by path AND by write time, so a rewritten page is a new frame
         // rather than a stale one. The URL itself stays clean, which is what
         // keeps the page's own relative assets resolving.
@@ -2912,7 +3070,6 @@ window.__ModuleLoader__.load({
       )
     }
 
-    const ICON_REFRESH = 'M3 12a9 9 0 0 1 15.5-6.2L21 8M21 3v5h-5M21 12a9 9 0 0 1-15.5 6.2L3 16M3 21v-5h5'
 
     /**
      * The menu a row opens, wherever it was opened from.
@@ -3304,7 +3461,7 @@ window.__ModuleLoader__.load({
           title: t('panel.reveal'),
           'aria-label': t('panel.reveal'),
           onClick: () => store.write({ open: true }),
-        }, icon(ICON_PANEL)))
+        }, icon('panel')))
     }
 
     /**
@@ -3488,7 +3645,7 @@ window.__ModuleLoader__.load({
         title: t('panel.reveal'),
         'aria-label': t('panel.reveal'),
         onClick: () => store.write({ open: true }),
-      }, icon(ICON_PANEL))
+      }, icon('panel'))
 
       if (!open) return corner
 
@@ -3514,7 +3671,7 @@ window.__ModuleLoader__.load({
         }),
         h('div', { className: `${NS}-body` },
           active === undefined
-            ? h(EmptyState, { open: tabs, onOpen: (tool) => openTab({ id: tool.id, icon: tool.path }) })
+            ? h(EmptyState, { open: tabs, onOpen: (tool) => openTab({ id: tool.id, icon: tool.icon }) })
             // A tab is either one of the tools or one file. The file's path is
             // its id, which is what makes opening the same file twice open one
             // tab.
@@ -3611,17 +3768,29 @@ window.__ModuleLoader__.load({
           // chain of them unbroken however the unloads interleave.
           const original = workspaces.openPath
           workspaces.openPath = (path) => {
-            // Decline anything this panel cannot show, and decline by CALLING
-            // THROUGH rather than by doing nothing. A panel that swallows an
-            // open it cannot honour turns a click into silence, which is worse
-            // than the host's own failure — and a path outside the workspace
-            // is not this panel's to show.
-            if (typeof path === 'string' && path.startsWith(`${ROOT}/`)) {
+            // Every path, not only the ones under the workspace.
+            //
+            // Calling through used to be the polite answer for a path this
+            // could not show. It is not an answer here at all: the default
+            // hands the path to the host operating system, and the host is a
+            // container reached through a browser — there is no desktop and
+            // no `xdg-open`, ever. So the fallthrough could only ever produce
+            // `spawn xdg-open ENOENT`, and it did, for exactly the files a
+            // person is most likely to click: the ones the agent just wrote
+            // somewhere like `/tmp`.
+            //
+            // Reading is not scoped to the workspace — the gateway serves any
+            // path in the sandbox, because the tenant is root in there and
+            // refusing protects nothing. What stays scoped is the tree, which
+            // is why an outside path opens without being revealed in it.
+            if (typeof path === 'string' && path.startsWith('/')) {
               store.openTab({ id: path, label: basename(path), path, icon: iconFor(path) })
               store.write({ open: true })
               // The callers ignore the result; resolving says "handled".
               return Promise.resolve()
             }
+            // Anything that is not an absolute path is not a file open this
+            // understands, and the harness may know what to do with it.
             return original.call(workspaces, path)
           }
           return () => { workspaces.openPath = original }

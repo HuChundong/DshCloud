@@ -30,7 +30,7 @@
  */
 
 import { listDir, makeDir, move, newestFile, readFile, remove, stat, writeFile } from './envd.js'
-import { PathRefused, ROOT, pathFromRawUrl, requireInsideRoot } from './panel-path.js'
+import { PathRefused, ROOT, pathFromRawUrl, requireInsideRoot, requireReadable } from './panel-path.js'
 import { TICKET_TTL_MS, mintTicket, readPreviewUrl, readTicket } from './panel-ticket.js'
 import { STATS_PATH, WATCH_PATH, serveStats, serveWatch } from './stats.js'
 
@@ -219,7 +219,8 @@ export async function handlePanel(req, res, deps) {
   try {
     const bytesPath = rawPath ?? preview?.path
     if (bytesPath !== undefined) {
-      const resolved = requireInsideRoot(bytesPath)
+      // Read, so anywhere in the sandbox — see `requireReadable`.
+      const resolved = requireReadable(bytesPath)
       const { status, body } = await readFile(handle, resolved)
       if (status >= 400) {
         json(res, status === 404 ? 404 : 502, { error: { code: 'file.unreadable' } })
@@ -266,7 +267,8 @@ export async function handlePanel(req, res, deps) {
       return true
     }
     if (action === 'stat' && req.method === 'GET') {
-      const resolved = requireInsideRoot(url.searchParams.get('path'))
+      // Read, and the one question a tab asks about a file it is showing.
+      const resolved = requireReadable(url.searchParams.get('path'))
       json(res, 200, { path: resolved, entry: entryOf(await stat(handle, resolved)) })
       return true
     }

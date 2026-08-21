@@ -32,6 +32,7 @@ import {
 import { forgetPath, shows } from '../packages/dsh-artifact-panel/src/tabs.js'
 import {
   PathRefused,
+  requireReadable,
   RAW_PREFIX,
   ROOT,
   isWithin,
@@ -273,6 +274,40 @@ t('a preview path is still bounded by the same scope', () => {
   const ticket = mintTicket(SECRET, 'acct-1', NOW)
   const parsed = readPreviewUrl(previewUrl(ticket, `${ROOT}/../root/.dsh`))
   refused(parsed.path, 403)
+})
+
+// ---- reading reaches the whole sandbox; writing does not --------------------
+
+// Two scopes, and the difference is the point. `requireInsideRoot` is the
+// tree's: a rename or a delete offered outside the one directory it lists is a
+// destructive action against a path nobody navigated to. `requireReadable` is
+// a tab's, and it is deliberately wider — refusing to SHOW a path protects
+// nothing when the tenant is root in the same sandbox and can read it from the
+// terminal on the next row. What the narrow scope actually did was make the
+// agent's own output unreachable: a file written to `/tmp` came back as
+// `spawn xdg-open ENOENT`, the host being asked to open a file on a desktop
+// nobody is sitting at.
+
+t('a path outside the workspace may be read', () => {
+  assert.equal(requireReadable('/tmp/notes.txt'), '/tmp/notes.txt')
+  assert.equal(requireReadable('/etc/hostname'), '/etc/hostname')
+})
+
+t('and may not be written, which is a different question', () => {
+  assert.throws(() => requireInsideRoot('/tmp/notes.txt'), PathRefused)
+})
+
+// Everything the narrow scope refused about the shape of a path, the wide one
+// refuses too. Only the root requirement is gone.
+t('reading still refuses what is not a path', () => {
+  for (const bad of ['', 'relative/path', '/nul\u0000byte', undefined, 42]) {
+    assert.throws(() => requireReadable(bad), PathRefused, `accepted ${JSON.stringify(bad)}`)
+  }
+})
+
+t('and still collapses traversal before anyone reads the answer', () => {
+  assert.equal(requireReadable('/tmp/../etc/hostname'), '/etc/hostname')
+  assert.equal(requireReadable('/tmp//a/./b'), '/tmp/a/b')
 })
 
 // ---- what the tab bar looks like once a file is gone ----
