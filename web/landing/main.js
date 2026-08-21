@@ -27,7 +27,7 @@ const T = {
   'nav.sandbox':  { en: 'The sandbox',         zh: '沙箱' },
   'nav.plans':    { en: 'Plans',               zh: '套餐' },
   'nav.run':      { en: 'Get started',         zh: '开始' },
-  'nav.cta':      { en: 'Create a free sandbox', zh: '免费创建沙箱' },
+  'nav.cta':      { en: 'Start free',           zh: '免费开始' },
 
   // The headline keeps its lockup: `SANDBOX` is set in caps as typography, not
   // as emphasis, and `doc.title` repeats it. What changed is the Chinese, which
@@ -36,7 +36,7 @@ const T = {
   'hero.built':   { en: 'Built on DeepSeek Harness', zh: '基于 DeepSeek Harness' },
   // The calls to action stay short in both languages. Terse is what a button
   // is, at any register; lengthening these would be formality worn as padding.
-  'hero.cta1':    { en: 'Create a free sandbox', zh: '免费创建沙箱' },
+  'hero.cta1':    { en: 'Start free',           zh: '免费开始' },
   'hero.cta2':    { en: 'View the source',     zh: '查看源代码' },
 
   'app.new':      { en: 'New session',         zh: '新会话' },
@@ -178,7 +178,7 @@ const T = {
                     zh: '任务并不运行在您眼前这台机器上，关掉它不影响任何事。' },
   'run.a3':       { en: 'Files and sessions are preserved for the next visit.',
                     zh: '文件与会话均予保留，下次可继续。' },
-  'run.acta':     { en: 'Create a free sandbox', zh: '免费创建沙箱' },
+  'run.acta':     { en: 'Start free',           zh: '免费开始' },
   'run.bh':       { en: 'Or deploy it to a cloud of your own', zh: '或部署至您自己的云环境' },
   'run.b1':       { en: 'Every line of it is public.', zh: '每一行代码均已公开。' },
   'run.b2':       { en: 'Docker for a trial run, CubeSandbox microVMs in production.', zh: '测试环境可采用 Docker，生产环境建议采用 CubeSandbox 微虚机。' },
@@ -192,7 +192,7 @@ const T = {
                     zh: '# 一人一台微虚机——生产环境的形态' },
 
   'close.h2':     { en: 'Run DSH in the cloud.', zh: '在云上运行 DSH。' },
-  'close.cta1':   { en: 'Create a free sandbox', zh: '免费创建沙箱' },
+  'close.cta1':   { en: 'Start free',           zh: '免费开始' },
   'close.cta2':   { en: 'Star it on GitHub',   zh: '前往 GitHub 加星' },
 
   'notice.body':  { en: '<strong>HamsterHQ is an independently developed, unofficial project. HamsterHQ and DSH are not products of the same company or organization.</strong> This project is not affiliated with, sponsored by, endorsed by, or maintained by DeepSeek AI, the <code>deepseek-ai</code> organization, Tencent Cloud, or the maintainers of DSH or CubeSandbox. Their names and marks are used only to identify interoperability and upstream dependencies; this project claims no ownership of them.',
