@@ -74,7 +74,6 @@ export function loginPage(state = {}) {
   // Ticked again when the page is re-rendered after a refusal that was not
   // about the consent: a form that quietly unticks it makes the next submit
   // fail for a reason the person already dealt with.
-  const agreed = agree !== undefined && agree !== ''
 
   const banner = toast(error, notice)
 
@@ -113,8 +112,7 @@ export function loginPage(state = {}) {
     ? '<h1 data-t="step.address.h">登录</h1>\n      <p class="lede" data-t="step.address.lede">输入邮箱，我们会发一封带验证码的邮件。</p>'
     : '<h1 data-t="step.code.h">输入验证码</h1>\n      <p class="lede" data-t="step.code.lede">验证码已发送，请查收邮箱。</p>'
 
-  // Consent, and the reason it is a checkbox on every sign-in rather than a
-  // sentence under the button.
+  // Consent, on both steps, as the same control both times.
   //
   // Registration is what needs agreement, and this form does not know which of
   // the two it is doing — deliberately, because an answer that differed would
@@ -123,15 +121,23 @@ export function loginPage(state = {}) {
   // expects to find. It is `required`, so the browser refuses the submit before
   // the server has to, and the server refuses it again.
   //
-  // On the second step it is a hidden field carrying what was already agreed:
-  // asking twice for the same consent, once either side of a mailed code, reads
-  // as a form that was not paying attention the first time.
-  const consent = pending === undefined
-    ? `<label class="consent">
-        <input type="checkbox" name="agree" value="${POLICY_VERSION}" required${agreed ? ' checked' : ''}>
-        <span data-th="consent">我已阅读并同意 ${policyLinks({ separator: '、' })}</span>
-      </label>`
-    : `<input type="hidden" name="agree" value="${escapeHtml(agreed ? agree : POLICY_VERSION)}">`
+  // The second step carried it as a hidden field, on the argument that asking
+  // twice reads as a form that was not paying attention. What that missed is
+  // WHERE the account is made: `accounts.admit(email, agree)` runs when the
+  // code is answered, and it is that call that writes `agreed_at` and
+  // `agreed_policy`. So the screen that records the agreement was the one
+  // screen not showing it, and the only way to decline there was to abandon the
+  // page. Consent that cannot be seen or withdrawn at the moment it is taken is
+  // not being asked for, it is being assumed.
+  //
+  // Ticked only when what was agreed is what the page says now. `agreed` used
+  // to mean "not empty", so a visitor sent back because the documents changed
+  // met a box already ticked for the new ones — a re-consent nobody gave. Stale
+  // arrives unticked, which is the whole point of sending them back.
+  const consent = `<label class="consent">
+      <input type="checkbox" name="agree" value="${POLICY_VERSION}" required${agree === POLICY_VERSION ? ' checked' : ''}>
+      <span data-th="consent">我已阅读并同意 ${policyLinks({ separator: '、' })}</span>
+    </label>`
 
   // No "forgot password" in either state, because there is no password: the
   // code that signs someone in is the same code that registers them, and an
@@ -181,6 +187,14 @@ export function loginPage(state = {}) {
     }
   }
 
+  // Both steps show the consent, so both steps have to be able to say it.
+  // Rendered with the links inside it, so the sentence reads as a sentence in
+  // both languages rather than as a phrase with a list bolted on the end.
+  table.consent = {
+    zh: `我已阅读并同意 ${policyLinks({ separator: '、', lang: 'zh' })}`,
+    en: `I have read and agree to ${policyLinks({ separator: ', ', lang: 'en' })}`,
+  }
+
   if (pending === undefined) {
     table['doc.title'] = { zh: '登录 · HamsterHQ', en: 'Sign in · HamsterHQ' }
     table['step.address.h'] = { zh: '登录', en: 'Sign in' }
@@ -189,12 +203,6 @@ export function loginPage(state = {}) {
       en: 'Enter your email and we will send you a code.',
     }
     table['submit.send'] = { zh: '获取验证码', en: 'Send code' }
-    // Rendered with the links inside it, so the sentence reads as a sentence in
-    // both languages rather than as a phrase with a list bolted on the end.
-    table.consent = {
-      zh: `我已阅读并同意 ${policyLinks({ separator: '、', lang: 'zh' })}`,
-      en: `I have read and agree to ${policyLinks({ separator: ', ', lang: 'en' })}`,
-    }
     if (inviteRequired !== true) {
       table['alt.register'] = {
         zh: '首次登录将自动注册，开通免费版',
