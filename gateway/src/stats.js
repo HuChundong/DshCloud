@@ -72,6 +72,7 @@ const reported = new Map()
 /** The record for one sandbox, created on first use. */
 function record(sandboxId) {
   let entry = reported.get(sandboxId)
+  if (entry !== undefined) entry.expires = undefined
   if (entry === undefined) {
     entry = { last: undefined, readers: new Set(), changers: new Set(), timer: undefined, coalescing: false }
     reported.set(sandboxId, entry)
@@ -214,9 +215,38 @@ function watchWorkspace(sandboxId, onEvent) {
 /** Drop a sandbox's record once nobody is listening to either half of it. */
 function forget(sandboxId, entry) {
   if (entry.readers.size > 0 || entry.changers.size > 0) return
+  // The silence timer goes, because nobody is left to tell. The last reading
+  // STAYS.
+  //
+  // Dropping it was what made a refresh feel slow: the record went with the
+  // last listener, so the page came back to nothing and then waited out the
+  // sandbox's idle pace — up to twenty seconds of empty rings — before the
+  // first reading arrived. Kept, a refresh draws immediately with a figure at
+  // most that old, and the live rate resumes when the sandbox next reports and
+  // is told somebody is watching again.
   if (entry.timer !== undefined) clearTimeout(entry.timer)
-  reported.delete(sandboxId)
+  entry.timer = undefined
+  entry.expires = Date.now() + KEEP_MS
 }
+
+/**
+ * How long a reading outlives the last person who was looking at it.
+ *
+ * Long enough to cover a reload and a change of mind, short enough that a
+ * sandbox which has been reclaimed does not leave a plausible-looking figure
+ * behind for the next person to open the panel.
+ */
+const KEEP_MS = 5 * 60 * 1000
+
+// Nothing here is on a timer per sandbox; this is one sweep for all of them,
+// and it only runs while there is something to sweep.
+setInterval(() => {
+  const now = Date.now()
+  for (const [sandboxId, entry] of reported) {
+    if (entry.readers.size > 0 || entry.changers.size > 0) continue
+    if (entry.expires !== undefined && entry.expires < now) reported.delete(sandboxId)
+  }
+}, 60 * 1000).unref()
 
 /** The path a browser subscribes on. */
 /**

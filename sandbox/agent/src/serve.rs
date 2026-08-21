@@ -41,10 +41,14 @@ const WATCHED: Duration = Duration::from_secs(5);
 /// Not never: the gateway learns the sandbox is alive, and this learns when
 /// somebody starts watching — which is the figure it is really chosen by, since
 /// it is the longest a tenant can wait between opening the panel and the rings
-/// beginning to move. Two thousand unwatched sandboxes at this pace cost the
-/// gateway a hundred messages a second between them, a fifth of one percent of
-/// a core.
-const IDLE: Duration = Duration::from_secs(20);
+/// beginning to MOVE. What they see in the meantime is not nothing: the gateway
+/// keeps the last reading across a reload, so the rings draw at once with a
+/// figure at most this old.
+///
+/// Two thousand unwatched sandboxes at this pace cost the gateway two hundred
+/// messages a second between them, which is under half of one percent of a
+/// core — cheap enough that halving the wait is worth paying for twice.
+const IDLE: Duration = Duration::from_secs(10);
 
 /// How long changes are gathered before they are sent.
 ///
