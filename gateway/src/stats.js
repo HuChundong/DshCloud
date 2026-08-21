@@ -315,6 +315,12 @@ async function watchWorkspace(handle, onEvent) {
     const stopped = (reason) => {
       const current = watching.get(handle)
       watching.delete(handle)
+      // Closed, not merely forgotten. Dropping the record leaves the process at
+      // the other end of it running: a watch that ends — and under a volume it
+      // ends almost at once, because envd refuses a network filesystem — used
+      // to leave one behind, the browser would reconnect, and the next would
+      // join it. Four were found in a sandbox two minutes old.
+      current?.handle?.close()
       for (const watcher of current?.watchers ?? []) watcher({ watching: false, reason })
     }
     try {

@@ -771,65 +771,22 @@ async function streamLines(handle, cmd, args, sink) {
  * gateway forever; now one process per sandbox looks at its own disk, and says
  * something only when there is something to say.
  */
-const WATCHER_SOURCE = `
-const fs = require('fs')
-const path = require('path')
-const root = process.argv[1]
-const SWEEP_MS = 30000
-const MAX_DIRS = 20000
+/**
+ * Why the watcher is a binary and not a script.
+ *
+ * There was a Node one here, and it had the same lifetime bug twice over.
+ * Closing the stream tears down the GATEWAY's end of the connection and leaves
+ * the process running, so it has to notice for itself — and the only thing it
+ * can notice is a write that fails. But a watcher writes only when something
+ * changes, and a workspace can be quiet for hours: it sat silent, never
+ * performed a write, and so never learned that its reader had gone. Four were
+ * found in a sandbox two minutes old, each watching for a browser that had
+ * reconnected past it.
+ *
+ * The binary writes on a timer whether or not anything happened. See
+ * `sandbox/agent/src/watch.rs`.
+ */
 
-const say = (message) => process.stdout.write(JSON.stringify(message) + '\\n')
-
-// The reader having gone is the only signal this gets that it is no longer
-// wanted, and it is a signal only this side can see: closing the stream tears
-// down the GATEWAY's end of the connection and leaves this process running.
-// Without this, every gateway restart left one of these behind for the life of
-// the sandbox — 33 of them were found on one tenant's machine, each watching a
-// tree for a reader that had not existed for hours.
-process.stdout.on('error', () => { process.exit(0) })
-
-fs.watch(root, { recursive: true }, (type, name) => {
-  if (name) say({ type, name })
-}).on('error', (error) => {
-  process.stderr.write(String(error && error.message) + '\\n')
-  process.exit(1)
-})
-
-const snapshot = () => {
-  const seen = new Map()
-  const stack = [root]
-  while (stack.length > 0 && seen.size < MAX_DIRS) {
-    const dir = stack.pop()
-    let entries
-    try {
-      entries = fs.readdirSync(dir, { withFileTypes: true })
-      seen.set(dir, fs.statSync(dir).mtimeMs)
-    } catch { continue }
-    for (const entry of entries) {
-      if (entry.isDirectory()) stack.push(path.join(dir, entry.name))
-    }
-  }
-  return seen
-}
-
-let previous = snapshot()
-setInterval(() => {
-  const current = snapshot()
-  let moved = current.size !== previous.size
-  if (!moved) {
-    for (const [dir, mtime] of current) {
-      if (previous.get(dir) !== mtime) { moved = true; break }
-    }
-  }
-  previous = current
-  if (moved) say({ stale: true })
-}, SWEEP_MS)
-
-// Held open deliberately: this watches for events that may not come for hours,
-// and stdin is the only thing keeping the loop alive between them. What ends
-// it is the stdout handler above, not EOF here.
-process.stdin.resume()
-`
 
 /**
  * Hear about changes under a directory.
@@ -855,10 +812,14 @@ process.stdin.resume()
  * @throws {Error} when the watcher cannot be started.
  */
 export async function watchDir(handle, path, sink) {
-  return await streamLines(handle, 'node', ['-e', WATCHER_SOURCE, path], {
+  return await streamLines(handle, AGENT, ['watch', path], {
     onLine: (line) => {
       let change
       try { change = JSON.parse(line) } catch { return }
+      // The heartbeat is the watcher asking whether anyone is still there, not
+      // news about the tree. It is dropped here, and its whole purpose is that
+      // the write which carries it can fail.
+      if (change.heartbeat === true) return
       if (change.stale === true) { sink.onEvent({ stale: true }); return }
       sink.onEvent({ name: String(change.name ?? ''), type: String(change.type ?? '') })
     },

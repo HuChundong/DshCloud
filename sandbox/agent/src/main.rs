@@ -25,6 +25,8 @@
 //! the whole of the lifecycle, and it belongs on this side because this is the
 //! side that can observe it.
 
+mod watch;
+
 use std::io::{ErrorKind, Read, Write};
 use std::net::TcpStream;
 use std::process::ExitCode;
@@ -42,6 +44,13 @@ const TIMEOUT: Duration = Duration::from_secs(4);
 fn main() -> ExitCode {
     match std::env::args().nth(1).as_deref() {
         Some("metrics") => metrics(),
+        Some("watch") => match std::env::args().nth(2) {
+            Some(root) => watch::watch(&root),
+            None => {
+                eprintln!("dsh-agent: watch needs a directory");
+                ExitCode::from(2)
+            }
+        },
         other => {
             eprintln!("dsh-agent: unknown command {:?}", other.unwrap_or("<none>"));
             ExitCode::from(2)
