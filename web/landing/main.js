@@ -6,6 +6,20 @@
   than inferred, so a translation that happens to contain an angle bracket
   cannot silently promote itself from text to markup. Nothing here interpolates
   input — every value is a literal in this table.
+
+  WRITE THE COPY, DO NOT COLLECT IT. Every string here is this project's own
+  sentence. Reading what other products say is how anyone learns to write a
+  landing page, and the ORDER a page argues in is a layout decision nobody
+  owns — but a sentence is the part that is owned, so none is taken from
+  another company's page, in either language. That is a rule about this file
+  rather than a general opinion: the strings are short, the claims are the same
+  claims every product in this category makes, and it is genuinely easy to end
+  up with someone else's line in here without meaning to.
+
+  The register is stated so it does not drift string by string: measured and
+  written rather than spoken. Chinese uses 您 and full sentences; English is
+  plain and specific and never breezy. Buttons are the exception in both — a
+  control is terse at any register.
 */
 const T = {
   'nav.chip':     { en: 'Open source · MIT',   zh: '开源 · MIT' },
@@ -13,18 +27,27 @@ const T = {
   'nav.sandbox':  { en: 'The sandbox',         zh: '沙箱' },
   'nav.plans':    { en: 'Plans',               zh: '套餐' },
   'nav.run':      { en: 'Get started',         zh: '开始' },
-  'nav.cta':      { en: 'Get started for free', zh: '免费开始' },
+  'nav.cta':      { en: 'Create a free sandbox', zh: '免费创建沙箱' },
 
-  'hero.h1':      { en: 'Agent in SANDBOX',     zh: '让 agent 住进沙箱' },
+  // The headline keeps its lockup: `SANDBOX` is set in caps as typography, not
+  // as emphasis, and `doc.title` repeats it. What changed is the Chinese, which
+  // said 住进 — a thing a person does to a flat.
+  'hero.h1':      { en: 'Agent in SANDBOX',     zh: '让 agent 运行在独立沙箱中' },
   'hero.built':   { en: 'Built on DeepSeek Harness', zh: '基于 DeepSeek Harness' },
-  'hero.cta1':    { en: 'Get started for free', zh: '免费开始' },
-  'hero.cta2':    { en: 'Read the source',     zh: '查看源码' },
+  // The calls to action stay short in both languages. Terse is what a button
+  // is, at any register; lengthening these would be formality worn as padding.
+  'hero.cta1':    { en: 'Create a free sandbox', zh: '免费创建沙箱' },
+  'hero.cta2':    { en: 'View the source',     zh: '查看源代码' },
 
   'app.new':      { en: 'New session',         zh: '新会话' },
   'app.workspace':{ en: 'Workspace',           zh: '工作区' },
   'app.session':  { en: 'New session',         zh: '新会话' },
   'app.sandbox':  { en: 'Sandbox',             zh: '沙箱' },
   'app.running':  { en: 'Running',             zh: '运行中' },
+  // The words the product's own rings use. This still is a picture of the
+  // workspace someone gets after signing in, so a label here that the
+  // application does not have is a picture of a different product — the two
+  // were `MEM`/`DISK` here and `RAM`/`Disk` there, and these are the pair kept.
   'app.mem':      { en: 'MEM',                 zh: '内存' },
   'app.disk':     { en: 'DISK',                zh: '磁盘' },
   'app.name':     { en: 'hammy',               zh: 'hammy' },
@@ -44,84 +67,122 @@ const T = {
   'app.s4':       { en: 'Ship a script',       zh: '写个脚本跑起来' },
   'app.s5':       { en: 'Read a repository',   zh: '读一个仓库' },
 
-  'work.h2':      { en: 'The DSH you already know', zh: '你已经熟悉的 DSH' },
+  'work.h2':      { en: 'The DSH you already know', zh: '您已经熟悉的 DSH' },
   'work.lede':    { en: 'The experience does not change — only where it runs.',
-                    zh: '体验不变，变的只是它跑在哪。' },
+                    zh: '使用体验保持不变，改变的只是它运行的位置。' },
   'work.w1h':     { en: 'Product launch landing page', zh: '产品上线落地页' },
-  'work.w1b':     { en: 'From a sentence to pages you can open.', zh: '从一句话到能打开的页面。' },
+  'work.w1b':     { en: 'From one description to pages you can open.', zh: '从一句需求描述，到可直接打开的页面。' },
   'work.w2h':     { en: 'Competitive research brief', zh: '竞品调研简报' },
-  'work.w2b':     { en: 'Sources, notes, and a write-up you can send.', zh: '来源、笔记，和一份能发出去的成稿。' },
-  'work.w3h':     { en: 'Weekly sales table, cleaned', zh: '清洗好的周销售表' },
-  'work.w3b':     { en: 'Clean, join, export. The files stay in the sandbox.', zh: '清理、拼接、导出，文件留在沙箱里。' },
-  'work.w4h':     { en: 'A nightly report that runs', zh: '每晚自动跑的报表' },
-  'work.w4b':     { en: 'Install, build, run — on the same machine.', zh: '安装、构建、运行，就在这台机器上。' },
-  'work.w5h':     { en: 'Read a repository',   zh: '读一个仓库' },
-  'work.w5b':     { en: 'Clone, search, patch.', zh: '克隆、搜索、改代码。' },
-  'value.h2':     { en: 'Everyone gets a sandbox.', zh: '每个人分到一个沙箱。' },
-  'value.lede':   { en: 'One per account: a shell, a filesystem, a network. Close your laptop — it keeps working.',
-                    zh: '一个账号一个：有终端、有文件系统、能联网。合上笔记本，它照样干活。' },
-  'value.c1h':    { en: 'Same DSH',            zh: '体验不变' },
-  'value.c1b':    { en: 'The interface you already know.', zh: '还是你熟悉的界面，不用重学。' },
-  'value.c2h':    { en: 'Swap what it runs on', zh: '底层运行时可替换' },
-  'value.c2b':    { en: 'Docker or CubeSandbox, over an E2B-compatible API.', zh: 'Docker 或 CubeSandbox，走 E2B 兼容 API。' },
-  'value.c3h':    { en: 'Not your laptop',     zh: '不占你自己的电脑' },
-  'value.c3b':    { en: 'Keeps working even when your computer is off.', zh: '电脑关了也还在干活。' },
-  'value.c4h':    { en: 'Models, ready to go',  zh: '模型开箱即用' },
-  'value.c4b':    { en: 'Configured already. Or bring your own key.', zh: '默认就配好了，也可以换成自己的 Key。' },
+  'work.w2b':     { en: 'Sources, notes, and a write-up ready to send.', zh: '来源、笔记，以及一份可直接发送的成稿。' },
+  'work.w3h':     { en: 'Weekly sales table, cleaned', zh: '清洗完成的周度销售表' },
+  'work.w3b':     { en: 'Clean, join and export — the files remain in the sandbox.', zh: '清洗、合并、导出，文件始终保留在沙箱内。' },
+  // Not "a nightly report", which is what this said. Nothing in this
+  // deployment schedules anything: a sandbox is reclaimed once it has been
+  // idle, so a cron line inside one does not survive to fire. The card is
+  // about the machine being real enough to install onto and run on, which is
+  // true — and it stops promising the one thing that is not.
+  'work.w4h':     { en: 'A report that actually runs', zh: '真的跑得起来的报表' },
+  'work.w4b':     { en: 'Install, build and run — all on the same machine.', zh: '安装、构建、运行，全部在同一台机器上完成。' },
+  'work.w5h':     { en: 'Read a repository',   zh: '读取一个代码仓库' },
+  'work.w5b':     { en: 'Clone, search and patch.', zh: '克隆、检索、修改代码。' },
+  // The heading states the arrangement and the lede states what it consists
+  // of. They both said "one per account" before, which spent the lede's
+  // sentence repeating the heading above it.
+  'value.h2':     { en: 'Every account gets a sandbox of its own.', zh: '每个账号独享一台沙箱。' },
+  'value.lede':   { en: 'A full shell, a filesystem and network access. Work continues once your own machine goes offline.',
+                    zh: '具备完整的终端、文件系统与网络访问能力。本地设备离线后，任务仍持续执行。' },
+  'value.c1h':    { en: 'Same DSH',            zh: '体验保持一致' },
+  'value.c1b':    { en: 'The interface you already know — nothing to relearn.', zh: '仍是您已经熟悉的界面，无需重新学习。' },
+  'value.c2h':    { en: 'A replaceable runtime', zh: '运行时可替换' },
+  'value.c2b':    { en: 'Docker or CubeSandbox, over an E2B-compatible API.', zh: 'Docker 或 CubeSandbox，通过 E2B 兼容接口接入。' },
+  'value.c3h':    { en: 'Not your own machine', zh: '不占用本地设备' },
+  'value.c3b':    { en: 'It keeps running once your own machine is off.', zh: '本地设备离线后仍持续运行。' },
+  'value.c4h':    { en: 'Models, ready to use',  zh: '模型开箱即用' },
+  'value.c4b':    { en: 'Configured by default, or supply your own key.', zh: '默认已完成配置，也可替换为您自己的密钥。' },
 
-  'plans.h2':     { en: 'Choose a plan',       zh: '选择你的套餐' },
-  'plans.lede':   { en: 'Every account starts on the free plan. The paid tiers are opening; running it yourself is free forever.',
-                    zh: '每个账号都从免费版开始。付费档位正在开放中，自己部署的那一档永远开源免费。' },
+  // The trust section, and it carries no numbers.
+  //
+  // A count of users or models would be the conventional thing here and this
+  // deployment has none it could state truthfully — an operator running it on
+  // their own hardware has whatever they have. What it does have is a property
+  // no closed product can offer: every claim below names something a reader can
+  // go and read. So the section is claims-with-receipts rather than statistics,
+  // and each one is qualified where the runtime changes the answer.
+  'proof.h2':     { en: 'Every claim here can be checked', zh: '这里的每一条都可以自己核对' },
+  'proof.lede':   { en: 'This project is open source, so each of the following can be traced to the code that makes it true.',
+                    zh: '本项目开源，下述每一项均可在代码中查证。' },
+  'proof.c1h':    { en: 'Open source, in full', zh: '开源，且是完整的' },
+  'proof.c1b':    { en: 'Authentication, isolation, reclamation — every line of it is public. Nothing is described only in the documentation.',
+                    zh: '认证、隔离、回收——每一行都是公开的。不存在只写在文档里的部分。' },
+  'proof.c2h':    { en: 'Isolation is machine isolation', zh: '隔离是机器级的' },
+  'proof.c2b':    { en: 'One machine per account: a microVM under CubeSandbox, a container under Docker. Never two tenants inside one process.',
+                    zh: '一个账号一台机器：CubeSandbox 下是微虚机，Docker 下是容器。绝不会是同一进程里的两个租户。' },
+  'proof.c3h':    { en: 'The model credential stays out', zh: '模型密钥不进沙箱' },
+  'proof.c3b':    { en: 'On runtimes that support it, the sandbox holds a placeholder and the real key is substituted as the request leaves. Prompt injection cannot reach what was never there.',
+                    zh: '在支持的运行时上，沙箱内只有占位符，真实密钥在请求离开时才被替换。提示注入拿不到一个从未存在过的东西。' },
+  'proof.c4h':    { en: 'No third parties',    zh: '不接第三方' },
+  'proof.c4b':    { en: 'No CDN, no analytics, no tracking script. This page is not an exception — open the network panel and see.',
+                    zh: '没有 CDN、没有统计、没有追踪脚本。这一页也不例外——打开网络面板即可验证。' },
+
+  'plans.h2':     { en: 'Choose a plan',       zh: '选择适合您的套餐' },
+  'plans.lede':   { en: 'Every account starts on the free plan. The paid tiers are opening; deploying it yourself is open source and free, permanently.',
+                    zh: '所有账号均从免费版开始。付费档位正在开放中；自行部署始终开源且免费。' },
   'plans.pick':   { en: 'Recommended',         zh: '推荐' },
   // One string for all three tiers that have one: what they include is the same
   // undecided thing, and three copies of it would be three places to edit on
   // the day it is decided.
-  'plans.tbd':    { en: 'What each tier includes is still being decided. This is where it goes.',
-                    zh: '各档位包含哪些能力还在定，这一格留给它。' },
-  'plans.soon':   { en: 'Not open yet',        zh: '即将开放' },
+  'plans.tbd':    { en: 'The capabilities included in each tier are still being settled. This space is reserved for them.',
+                    zh: '各档位包含的具体能力尚在确定中，此处为其预留。' },
+  'plans.soon':   { en: 'Not yet available',   zh: '尚未开放' },
 
   'plans.free.h':     { en: 'Free',            zh: '免费' },
-  'plans.free.b':     { en: 'Registering is all it takes.', zh: '注册就有，先试试。' },
+  'plans.free.b':     { en: 'Available on registration.', zh: '注册后即可使用。' },
   'plans.free.price': { en: '¥0',              zh: '¥0' },
-  'plans.free.note':  { en: 'Free, always',    zh: '一直免费' },
+  'plans.free.note':  { en: 'Free, permanently', zh: '永久免费' },
   'plans.free.cta':   { en: 'Get started',     zh: '开始使用' },
 
   'plans.pro.h':      { en: 'Pro',             zh: '专业' },
-  'plans.pro.b':      { en: 'For the people who are in here every day.', zh: '给每天都在用的人。' },
+  'plans.pro.b':      { en: 'For those who use it every day.', zh: '面向每日持续使用的用户。' },
   'plans.pro.price':  { en: 'Coming soon',     zh: '敬请期待' },
   'plans.pro.note':   { en: 'Price to be announced', zh: '定价待定' },
 
   'plans.team.h':     { en: 'Team',            zh: '团队' },
-  'plans.team.b':     { en: 'A group of people, a sandbox each.', zh: '一群人，各自一台沙箱。' },
+  'plans.team.b':     { en: 'One sandbox per member, across a whole team.', zh: '团队成员各自独享一台沙箱。' },
   'plans.team.price': { en: 'Coming soon',     zh: '敬请期待' },
-  'plans.team.note':  { en: 'Per seat',        zh: '按席位计' },
+  'plans.team.note':  { en: 'Per seat',        zh: '按席位计费' },
 
-  'plans.self.h':     { en: 'Run it yourself', zh: '自部署' },
-  'plans.self.b':     { en: 'On your own cloud, on your own terms.', zh: '部署到你自己的云上，规矩你定。' },
-  'plans.self.price': { en: 'Free and open',   zh: '开源免费' },
-  'plans.self.note':  { en: 'MIT licence',     zh: 'MIT 协议' },
-  'plans.self.a':     { en: 'No account here, and no bill.', zh: '不用在这儿开账号，也没有账单。' },
-  'plans.self.b2':    { en: 'As many sandboxes as your hardware holds.', zh: '沙箱开几个，取决于你的机器。' },
-  'plans.self.c':     { en: 'Yours to run, and yours to keep running.', zh: '你自己跑，也你自己运维。' },
-  'plans.self.cta':   { en: 'How to deploy',   zh: '怎么部署' },
+  'plans.self.h':     { en: 'Deploy it yourself', zh: '自行部署' },
+  'plans.self.b':     { en: 'On your own cloud, under your own rules.', zh: '部署在您自己的云上，规则由您制定。' },
+  'plans.self.price': { en: 'Open source, no charge', zh: '开源免费' },
+  // The licence's own name, which is spelled the American way and carries a
+  // capital L — a proper noun rather than the common noun the rest of this
+  // page's British spelling would ask for.
+  'plans.self.note':  { en: 'MIT License',     zh: 'MIT 协议' },
+  'plans.self.a':     { en: 'No account here, and no billing.', zh: '无需在此注册账号，也不会产生账单。' },
+  'plans.self.b2':    { en: 'As many sandboxes as your own hardware allows.', zh: '可运行的沙箱数量取决于您自己的硬件。' },
+  'plans.self.c':     { en: 'Yours to deploy, and yours to maintain.', zh: '部署与运维均由您自行负责。' },
+  'plans.self.cta':   { en: 'How to deploy',   zh: '部署方式' },
 
-  'plans.foot':   { en: 'The paid tiers are not on sale yet: nothing on this page takes payment. An administrator grants and changes them, and the WeChat account in the footer is where to ask.',
-                    zh: '付费档位尚未开放购买，这个页面不收款。开通和变更由部署的管理员操作，有需要可以通过页脚的公众号联系我们。' },
+  'plans.foot':   { en: 'The paid tiers are not yet available for purchase, and this page takes no payment. Tiers are granted and changed by the deployment’s administrator; the WeChat Official Account in the footer is where to enquire.',
+                    zh: '付费档位尚未开放购买，本页面不涉及任何支付。档位的开通与变更由部署管理员操作；如有需要，可通过页脚的公众号与我们联系。' },
 
   'run.h2':       { en: 'Choose how to run DSH', zh: '选择 DSH 的运行方式' },
-  'run.lede':     { en: 'Use the hosted service, or deploy it to your own cloud.', zh: '直接使用托管版，或部署到自己的云上。' },
-  'run.ah':       { en: 'Start on ours',       zh: '直接用我们的' },
-  'run.a1':       { en: 'Open a browser. Nothing to install.',
-                    zh: '打开浏览器就能用，不用安装。' },
-  'run.a2':       { en: 'Your own computer can be off. The sandbox keeps running.',
-                    zh: '你的电脑关了，沙箱还在跑。' },
-  'run.a3':       { en: 'Files and sessions are there next time.',
-                    zh: '文件和会话都在，下次接着做。' },
-  'run.acta':     { en: 'Get started for free', zh: '免费开始' },
-  'run.bh':       { en: 'Or run it on your own cloud', zh: '或部署到自己的云上' },
-  'run.b1':       { en: 'Every line is public.', zh: '每一行代码都是公开的。' },
-  'run.b2':       { en: 'Docker to try it, CubeSandbox microVMs in production.', zh: '试跑用 Docker，生产用 CubeSandbox 微虚机。' },
-  'run.b3':       { en: 'Your credentials, your data, your perimeter.', zh: '你的密钥、你的数据、你的边界。' },
+  'run.lede':     { en: 'Use the hosted service, or deploy it to a cloud of your own.', zh: '直接使用托管服务，或部署至您自己的云环境。' },
+  'run.ah':       { en: 'Use our hosted service', zh: '使用我们的托管服务' },
+  'run.a1':       { en: 'Open a browser — there is nothing to install.',
+                    zh: '打开浏览器即可使用，无需安装。' },
+  // Not a second telling of `value.c3b`. That card is the claim; this line is
+  // what it means for the person setting one up, which is that the machine in
+  // front of them is not the one doing the work.
+  'run.a2':       { en: 'The work is not on the machine in front of you, so closing it changes nothing.',
+                    zh: '任务并不运行在您眼前这台机器上，关掉它不影响任何事。' },
+  'run.a3':       { en: 'Files and sessions are preserved for the next visit.',
+                    zh: '文件与会话均予保留，下次可继续。' },
+  'run.acta':     { en: 'Create a free sandbox', zh: '免费创建沙箱' },
+  'run.bh':       { en: 'Or deploy it to a cloud of your own', zh: '或部署至您自己的云环境' },
+  'run.b1':       { en: 'Every line of it is public.', zh: '每一行代码均已公开。' },
+  'run.b2':       { en: 'Docker for a trial run, CubeSandbox microVMs in production.', zh: '测试环境可采用 Docker，生产环境建议采用 CubeSandbox 微虚机。' },
+  'run.b3':       { en: 'Your credentials, your data, your perimeter.', zh: '您的密钥、您的数据、您的边界。' },
 
   'term.tab1':    { en: 'Docker',              zh: 'Docker' },
   'term.tab2':    { en: 'CubeSandbox',         zh: 'CubeSandbox' },
@@ -130,9 +191,9 @@ const T = {
   'term.c2':      { en: '# a microVM per person — what production runs',
                     zh: '# 一人一台微虚机——生产环境的形态' },
 
-  'close.h2':     { en: 'Ready to run DSH in the cloud?', zh: '准备好在云上用 DSH 了吗？' },
-  'close.cta1':   { en: 'Get started for free', zh: '免费开始' },
-  'close.cta2':   { en: 'Star on GitHub',      zh: '去 GitHub 点个 Star' },
+  'close.h2':     { en: 'Run DSH in the cloud.', zh: '在云上运行 DSH。' },
+  'close.cta1':   { en: 'Create a free sandbox', zh: '免费创建沙箱' },
+  'close.cta2':   { en: 'Star it on GitHub',   zh: '前往 GitHub 加星' },
 
   'notice.body':  { en: '<strong>HamsterHQ is an independently developed, unofficial project. HamsterHQ and DSH are not products of the same company or organization.</strong> This project is not affiliated with, sponsored by, endorsed by, or maintained by DeepSeek AI, the <code>deepseek-ai</code> organization, Tencent Cloud, or the maintainers of DSH or CubeSandbox. Their names and marks are used only to identify interoperability and upstream dependencies; this project claims no ownership of them.',
                     zh: '<strong>HamsterHQ 是独立开发维护的非官方项目。HamsterHQ 与 DSH 不是同一家公司或组织的产品。</strong>本项目不隶属于、不代表，也未获得 DeepSeek AI、GitHub 上的 <code>deepseek-ai</code> 组织、腾讯云、DSH 或 CubeSandbox 维护方的赞助、背书或维护。文中相关名称与标识仅用于说明兼容性和上游依赖；本项目不主张对其享有任何权利。' },
@@ -143,16 +204,22 @@ const T = {
   // button beside them.
   'foot.wechat':  { en: 'WeChat Official Account', zh: '微信公众号' },
   'foot.scan':    { en: 'Scan to follow',      zh: '微信扫码关注' },
+  // Shortened, but still the documents' names — so they keep the capitals the
+  // full titles have. `Data notice` and `Safe use` read as descriptions of a
+  // thing rather than as what the thing is called.
   'foot.terms':   { en: 'Terms',               zh: '服务条款' },
-  'foot.privacy': { en: 'Data notice',         zh: '数据处理说明' },
-  'foot.security':{ en: 'Safe use',            zh: '安全使用政策' },
+  'foot.privacy': { en: 'Data Notice',         zh: '数据处理说明' },
+  'foot.security':{ en: 'Safe Use',            zh: '安全使用政策' },
 
   'copy.idle':    { en: 'Copy',                zh: '复制' },
   'copy.done':    { en: 'Copied',              zh: '已复制' },
 
   'nav.theme':    { en: 'Switch between light and dark', zh: '切换深色/浅色' },
 
-  'doc.title':    { en: 'HamsterHQ — Agent in SANDBOX', zh: 'HamsterHQ — 让 agent 住进沙箱' },
+  // The headline again, and it has to be the headline: a tab that says one
+  // thing and a page that says another is two names for one product. The
+  // reason the Chinese above stopped saying 住进 applies here unchanged.
+  'doc.title':    { en: 'HamsterHQ — Agent in SANDBOX', zh: 'HamsterHQ — 让 agent 运行在独立沙箱中' },
 }
 
 /*

@@ -16,14 +16,18 @@
   into and nothing that pretends to answer, because a composer that swallows a
   sentence and then asks you to sign in has wasted the sentence.
 
-  Below it, the rhythm of happycapy.ai — what they can ship, what the machine
-  behind it is, how to get one. One word for that machine, and it is "sandbox":
-  the headline names it, the section is called it, and the only thing still
-  called a computer is the reader's own — which is the contrast the page is
-  making. Technology stays in docs/design.md. The header is ours
-  and stays ours:
-  this project is open source and that is the difference worth leading with, so
-  the repository sits in the top bar rather than in a footer column.
+  Below it, the order a reader needs: what they can ship, what the machine
+  behind it is, what it costs, and how to get one. One word for that machine,
+  and it is "sandbox": the headline names it, the section is called it, and the
+  only thing still called a computer is the reader's own — which is the
+  contrast the page is making. Technology stays in docs/design.md. The header
+  is ours and stays ours: this project is open source and that is the
+  difference worth leading with, so the repository sits in the top bar rather
+  than in a footer column.
+
+  Every line of copy on this page is this project's own. Section order is a
+  layout decision and nobody owns one; a sentence is not, so none is borrowed
+  from anywhere — see the note above the T table in main.js.
 
   NOTHING ON THIS PAGE MAY MOVE AFTER IT IS PAINTED:
     - the workspace still has a fixed height, so it cannot settle as it loads;
@@ -280,7 +284,7 @@
         <p class="body" data-t="value.c2b">Docker or CubeSandbox, over an E2B-compatible API.</p>
       </div>
       <div class="card">
-        <p class="en">Not your laptop</p>
+        <p class="en">Not your own machine</p>
         <h3 data-t="value.c3h">Not your laptop</h3>
         <p class="body" data-t="value.c3b">Keeps working even when your computer is off.</p>
       </div>
@@ -288,6 +292,51 @@
         <p class="en">Models included</p>
         <h3 data-t="value.c4h">Models, ready to go</h3>
         <p class="body" data-t="value.c4b">Configured already. Or bring your own key.</p>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!--
+  The trust section, which carries no numbers.
+
+  Every page in this category puts a row of counts here — models, users,
+  countries. This deployment has none it could state truthfully: it runs on
+  whatever hardware an operator gave it, so any figure would be either
+  someone else's or invented. What it has instead is that each line below
+  names something the reader can go and read, which is a kind of proof a
+  closed product cannot offer at all.
+
+  Not cards. The four bands above are cards already, and a fifth set of them
+  would read as more of the same rather than as a different KIND of claim —
+  so these are ruled columns, lighter than what is above them.
+-->
+<section class="band" id="proof">
+  <div class="rail">
+    <h2 data-t="proof.h2">Every claim here can be checked</h2>
+    <p class="lede" data-t="proof.lede">This project is open source, so each of the following can be traced to the code that makes it true.</p>
+
+    <div class="proof">
+      <div class="claim">
+        <p class="en">MIT</p>
+        <h3 data-t="proof.c1h">Open source, in full</h3>
+        <p class="body" data-t="proof.c1b">Authentication, isolation, reclamation — every line of it is public. Nothing is described only in the documentation.</p>
+      </div>
+      <div class="claim">
+        <p class="en">Isolation</p>
+        <h3 data-t="proof.c2h">Isolation is machine isolation</h3>
+        <p class="body" data-t="proof.c2b">One machine per account: a microVM under CubeSandbox, a container under Docker. Never two tenants inside one process.</p>
+      </div>
+      <div class="claim">
+        <p class="en">Credentials</p>
+        <h3 data-t="proof.c3h">The model credential stays out</h3>
+        <p class="body" data-t="proof.c3b">On runtimes that support it, the sandbox holds a placeholder and the real key is substituted as the request leaves. Prompt injection cannot reach what was never there.</p>
+      </div>
+      <div class="claim">
+        <p class="en">Network</p>
+        <h3 data-t="proof.c4h">No third parties</h3>
+        <p class="body" data-t="proof.c4b">No CDN, no analytics, no tracking script. This page is not an exception — open the network panel and see.</p>
       </div>
     </div>
 

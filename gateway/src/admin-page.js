@@ -753,10 +753,16 @@ const S = {
   'empty.tenants': { zh: '还没有人注册。', en: 'Nobody has registered yet.' },
   'empty.invites': { zh: '还没有邀请码。', en: 'No invite codes yet.' },
 
-  'tag.live':   { zh: '运行中', en: 'running' },
-  'tag.idle':   { zh: '未运行', en: 'not running' },
-  'tag.off':    { zh: '已停用', en: 'disabled' },
-  'tag.unused': { zh: '未使用', en: 'unused' },
+  // Sentence case, like every other standalone string in this deployment. These
+  // were lowercase as a set — internally consistent, and disagreeing with the
+  // rest of the product on the one word it says most: a tenant reads `Running`
+  // in their own sidebar and an operator read `running` for the same sandbox.
+  // The lowercase fragments below (`env`, `key.set`, `self.sep`) stay lowercase
+  // because they are read INSIDE a sentence rather than as a label of their own.
+  'tag.live':   { zh: '运行中', en: 'Running' },
+  'tag.idle':   { zh: '未运行', en: 'Not running' },
+  'tag.off':    { zh: '已停用', en: 'Disabled' },
+  'tag.unused': { zh: '未使用', en: 'Unused' },
 
   'act.release': { zh: '回收沙箱', en: 'Reclaim sandbox' },
   'act.delete':  { zh: '删除', en: 'Delete' },

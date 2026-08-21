@@ -609,6 +609,27 @@ a.work:hover .work-preview img { transform: scale(1.035); filter: saturate(1) co
 .work-meta h3 { margin-bottom: 8px; }
 .work-meta p { color: var(--text-3); font-size: 14.5px; line-height: 1.55; }
 
+/* ---------- what can be checked ---------- */
+
+/* Ruled columns rather than cards. The bands above this one are cards, and a
+   fifth set would read as more of the same; a rule over each claim says "a
+   different kind of statement" with one border instead of four. */
+.proof {
+  display: grid; gap: clamp(20px, 2.4vw, 32px);
+  margin-top: clamp(40px, 5vw, 56px);
+}
+@media (min-width: 720px)  { .proof { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 1120px) { .proof { grid-template-columns: repeat(4, 1fr); } }
+.proof > * { min-width: 0; }
+
+.claim { padding-top: 18px; border-top: 1px solid var(--border); }
+.claim .en {
+  font-family: var(--mono); font-size: 11px; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--accent); margin: 0 0 14px;
+}
+.claim h3 { margin-bottom: 8px; }
+.claim p.body { color: var(--text-3); font-size: 15px; line-height: 1.55; margin: 0; }
+
 /* ---------- the tiers ---------- */
 
 /* Built on `.card`, not beside it: a plan is one of this page's cards with

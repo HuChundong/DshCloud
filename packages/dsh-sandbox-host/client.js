@@ -435,8 +435,14 @@ window.__ModuleLoader__.load({
         memory: 'Memory',
         disk: 'Disk',
 
-        'ring.memory': 'RAM',
-        'ring.disk': 'Disk',
+        // The rings are a readout rather than a sentence, so their labels are
+        // set as abbreviations — and as the same two the front door's picture
+        // of this sidebar shows. They read `RAM` and `Disk` here while that
+        // picture read `MEM` and `DISK`, which made the still a still of a
+        // product that does not exist. `memory` and `disk` above keep their
+        // whole words: those label rows, where there is room to say it.
+        'ring.memory': 'MEM',
+        'ring.disk': 'DISK',
         measuring: 'measuring',
         'cpu.measuring': 'CPU: measuring',
         'cpu.title': 'CPU {percent}%',
