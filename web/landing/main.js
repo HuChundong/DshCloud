@@ -29,10 +29,13 @@ const T = {
   'nav.run':      { en: 'Get started',         zh: '开始' },
   'nav.cta':      { en: 'Start free',           zh: '免费开始' },
 
-  // The headline keeps its lockup: `SANDBOX` is set in caps as typography, not
-  // as emphasis, and `doc.title` repeats it. What changed is the Chinese, which
-  // said 住进 — a thing a person does to a flat.
-  'hero.h1':      { en: 'Agent in SANDBOX',     zh: '让 agent 运行在独立沙箱中' },
+  // Set by the person who owns this deployment, and it is the harness's own
+  // line. The rule at the top of this file — that every sentence here is this
+  // project's own — does not hold for this one, and the notice at the foot of
+  // the page states that this is an unofficial project. Both are recorded here
+  // rather than quietly reconciled, because the next person to read this file
+  // will otherwise take the rule to have been abandoned.
+  'hero.h1':      { en: 'Everything is a plugin, build your agent', zh: '一切皆插件，打造你的Agent' },
   'hero.built':   { en: 'Built on DeepSeek Harness', zh: '基于 DeepSeek Harness' },
   // The calls to action stay short in both languages. Terse is what a button
   // is, at any register; lengthening these would be formality worn as padding.
@@ -219,7 +222,7 @@ const T = {
   // The headline again, and it has to be the headline: a tab that says one
   // thing and a page that says another is two names for one product. The
   // reason the Chinese above stopped saying 住进 applies here unchanged.
-  'doc.title':    { en: 'HamsterHQ — Agent in SANDBOX', zh: 'HamsterHQ — 让 agent 运行在独立沙箱中' },
+  'doc.title':    { en: 'HamsterHQ — Everything is a plugin', zh: 'HamsterHQ — 一切皆插件，打造你的Agent' },
 }
 
 /*
