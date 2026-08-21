@@ -259,6 +259,22 @@ header.top .rail { display: flex; justify-content: center; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) footer.foot .mark { filter: invert(1); } }
 :root[data-theme="dark"] footer.foot .mark { filter: invert(1); }
 :root[data-theme="light"] footer.foot .mark { filter: none; }
+
+/* The other upstream mark, which arrives in eleven shades of blue.
+ *
+ * It is the only colour in a row that is otherwise ink on paper, and one blue
+ * logo among monochrome ones does not read as their third member — it reads as
+ * something pasted in. Greyscale rather than a flat silhouette, because the
+ * thing is an isometric cube and its faces are told apart by nothing but their
+ * shade: painted one colour it becomes a hexagon.
+ *
+ * Its darkest face is near-black, so on a dark ground greyscale alone would
+ * leave that face on the ground it stands on. Inverted there, the same way the
+ * mark beside it is, which turns the shading over — legible on a solid of flat
+ * faces, and the alternative was a brightness constant chosen by eye. */
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) footer.foot .cube { filter: grayscale(1) invert(1); } }
+:root[data-theme="dark"] footer.foot .cube { filter: grayscale(1) invert(1); }
+:root[data-theme="light"] footer.foot .cube { filter: grayscale(1); }
 .chip {
   font-family: var(--mono); font-size: 11px; letter-spacing: .04em;
   color: var(--text-3); padding: 3px 10px; white-space: nowrap;
@@ -527,8 +543,16 @@ h1 { font-size: clamp(34px, 4vw, 52px); line-height: 1.14; letter-spacing: -.04e
 /* ---------- sections ---------- */
 
 section.band { position: relative; padding: clamp(76px, 10vw, 130px) 0; border-top: 1px solid var(--border-soft); }
+/* Same argument as the row inside it: four columns and a footnote are already
+   a screenful, and the band's usual shoulders were what pushed them past one. */
+section.band#plans { padding: clamp(56px, 6.5vw, 88px) 0; }
 
 .trio, .quad { display: grid; gap: clamp(16px, 2vw, 22px); margin-top: clamp(40px, 5vw, 56px); }
+/* The tiers are the one band read as a whole rather than scrolled through, so
+   it is given less air than the sections around it: the page's own step from
+   heading to content put the fourth card's button off the bottom of a laptop
+   screen. */
+.plans { margin-top: clamp(24px, 3vw, 34px); }
 @media (min-width: 900px)  { .trio { grid-template-columns: repeat(3, 1fr); } }
 @media (min-width: 720px)  { .quad { grid-template-columns: repeat(2, 1fr); } }
 @media (min-width: 1120px) { .quad { grid-template-columns: repeat(4, 1fr); } }
@@ -591,7 +615,14 @@ a.work:hover .work-preview img { transform: scale(1.035); filter: saturate(1) co
    three things added — a price slot, the space its contents will fill, and one
    action at the foot. Anything a plan card does that the cards above it do
    differently would read as a second design on one page. */
-.plans .plan { display: flex; flex-direction: column; position: relative; }
+/* Tighter than the cards above, and the row is why. Those stand alone and can
+   afford the page's usual padding; these are four of them side by side, read
+   by looking down one and across to the next, and at the page's rhythm that
+   run of four was taller than a screen. What is cut is space, not content. */
+.plans .plan { display: flex; flex-direction: column; position: relative; padding: clamp(20px, 2vw, 24px); }
+.plans .plan .en { margin-bottom: 8px; }
+.plans .plan h3 { margin-bottom: 5px; }
+.plans .plan p.body { margin-bottom: 10px; }
 /* The action sits on the floor of the card whatever is above it. Kept for the
    browsers the rule below does not reach, where the buttons are the one row
    worth lining up if only one can be. */
@@ -617,7 +648,19 @@ a.work:hover .work-preview img { transform: scale(1.035); filter: saturate(1) co
  * one. */
 @supports (grid-template-rows: subgrid) {
   @media (min-width: 720px) {
+    /* The row gap has to go with it, and this is the trap. `gap` on the row of
+       cards was setting both axes, and with one row of cards the row half never
+       applied. Once each card spans six of the parent's rows, that same value
+       lands BETWEEN those six — inside every card, five times over — and the
+       cards get taller for having been made to line up. */
+    .plans { row-gap: 0; }
     .plans .plan { display: grid; grid-template-rows: subgrid; grid-row: span 6; }
+  }
+  /* Which leaves the two rows of cards at the middle width touching, since the
+     gap that used to separate them is the one just zeroed. Given back to the
+     two cards that have another card beneath them. */
+  @media (min-width: 720px) and (max-width: 1119px) {
+    .plans .plan:nth-child(-n+2) { margin-bottom: clamp(16px, 2vw, 22px); }
   }
 }
 .plans .plan .btn { width: 100%; justify-content: center; box-sizing: border-box; }
@@ -626,7 +669,7 @@ a.work:hover .work-preview img { transform: scale(1.035); filter: saturate(1) co
    own column, and a panel around it would make it a second card. */
 .plans .plan .price {
   display: flex; flex-direction: column; gap: 2px;
-  margin-top: 4px; padding: 18px 0;
+  margin-top: 0; padding: 13px 0;
   border-top: 1px solid var(--border-soft);
   border-bottom: 1px solid var(--border-soft);
 }
@@ -638,13 +681,14 @@ a.work:hover .work-preview img { transform: scale(1.035); filter: saturate(1) co
 
 /* The space each tier's contents will take, drawn at that size and visibly
    empty. A dashed rule is the one border on this page that says "not finished"
-   rather than "here is a thing", which is exactly the claim being made. Its
-   min-height is the self-hosted column's list: the space is drawn at the size
-   the contents will take, so the row does not resize when they are written. */
+   rather than "here is a thing", which is exactly the claim being made.
+   No min-height: subgrid makes this row as tall as the self-hosted column's
+   list, which is the height the contents were going to take anyway, so the
+   number that used to say so was saying it twice. */
 .plans .plan .tbd {
-  margin: 20px 0 26px; padding: 16px;
+  margin: 14px 0 18px; padding: 14px;
   border: 1px dashed var(--border); border-radius: var(--radius-media);
-  min-height: 104px; box-sizing: border-box;
+  box-sizing: border-box;
 }
 .plans .plan .tbd .en { margin: 0 0 6px; color: var(--text-4); letter-spacing: .1em; font-size: 10px; }
 .plans .plan .tbd p:last-child { font-size: 13px; color: var(--text-4); line-height: 1.55; margin: 0; }
@@ -652,9 +696,9 @@ a.work:hover .work-preview img { transform: scale(1.035); filter: saturate(1) co
 /* The self-hosted column's list, which is the only one with contents today. It
    is `.pair`'s list — same dash, same measure — because it is the same kind of
    list on the same page. */
-.plans ul { list-style: none; padding: 0; margin: 20px 0 26px; min-height: 104px; }
+.plans ul { list-style: none; padding: 0; margin: 14px 0 18px; }
 .plans li {
-  position: relative; padding-left: 20px; margin-bottom: 10px;
+  position: relative; padding-left: 20px; margin-bottom: 7px;
   color: var(--text-3); font-size: 15px;
 }
 .plans li::before {
@@ -692,7 +736,7 @@ a.work:hover .work-preview img { transform: scale(1.035); filter: saturate(1) co
 /* The same note the account page carries, in the same words, at the size this
    page sets its small print. */
 .fine {
-  margin: 32px 0 0; max-width: 44em;
+  margin: 22px 0 0; max-width: 44em;
   font-size: 13px; line-height: 1.7; color: var(--text-4);
 }
 
@@ -781,12 +825,17 @@ footer.foot .rail { padding-top: 22px; padding-bottom: 42px; display: flex; flex
    no other host, and a footer is not worth an exception to that. */
 footer.foot a { display: inline-flex; align-items: center; gap: 7px; }
 footer.foot a svg, footer.foot a .mark { width: 15px; height: 15px; flex: none; }
+/* Ink, not the row's colour. The glyph is `currentColor` and the row is set in
+   `--text-4`, so it came out at forty per cent beside two marks that are
+   images and therefore solid — three logos at two weights. The labels stay
+   quiet; the marks are all one strength. */
+footer.foot a svg { color: var(--text); }
 /* Their own file, kept here rather than linked from their site. The page
    reaches no other host — that is a promise the data notice makes in so many
    words, and it is also what keeps the page whole on a private network — so a
-   logo it needs is a logo it carries. It is upright and coloured, so it takes
-   its own proportions and is not inverted with the rest. */
-footer.foot a .cube { width: 13px; height: 16px; flex: none; }
+   logo it needs is a logo it carries. It is upright rather than square, so it
+   takes its own proportions; what it is painted in is decided above. */
+footer.foot a .cube { width: 13px; height: 16px; flex: none; filter: grayscale(1); }
 /* The licence is the one thing in this row that is a fact about this project
    rather than a link out of it, so it is set the way the sign-in page's badge
    is: filled, small, and the only thing here with a ground of its own. */
