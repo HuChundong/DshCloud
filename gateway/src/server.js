@@ -105,6 +105,23 @@ if ((process.env.GATEWAY_ADMINS ?? '') === '') {
 }
 
 /**
+ * The first of these that was actually given.
+ *
+ * Not `??`, which asks whether a variable EXISTS. What matters for a
+ * deployment's configuration is whether it was FILLED IN, and compose hands
+ * every optional variable over as an empty string either way.
+ *
+ * @param {...(string|undefined)} values - candidates, in order of preference.
+ * @returns {string} the first non-empty one, or an empty string.
+ */
+function firstOf(...values) {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim() !== '') return value
+  }
+  return ''
+}
+
+/**
  * Where a tenant reaches whoever runs this deployment.
  *
  * The policy pages have to name somebody: a data notice that grants rights and
@@ -113,8 +130,13 @@ if ((process.env.GATEWAY_ADMINS ?? '') === '') {
  * already in its configuration — naming it twice would be one more thing to
  * keep in step. `POLICY_CONTACT` overrides it for a deployment that would
  * rather publish a role address than a person's.
+ *
+ * An empty override is not an override. Compose passes this through as
+ * `${POLICY_CONTACT:-}`, so a deployment that never set it still has it as an
+ * empty string — and `??` falls back only on `undefined`, so that empty string
+ * would be taken as the answer and the document would name nobody.
  */
-const POLICY_CONTACT = (process.env.POLICY_CONTACT ?? process.env.GATEWAY_ADMINS ?? '')
+const POLICY_CONTACT = firstOf(process.env.POLICY_CONTACT, process.env.GATEWAY_ADMINS)
   .split(',')[0]
   .trim()
 

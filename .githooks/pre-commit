@@ -31,6 +31,7 @@ node scripts/check-assets.mjs >/dev/null
 node scripts/check-icons.mjs >/dev/null
 node scripts/check-docs.mjs >/dev/null
 node scripts/check-forwarded.mjs >/dev/null
+node scripts/check-env-defaults.mjs >/dev/null
 node scripts/check-panel-paths.mjs >/dev/null
 
 echo "pre-commit: parses, loads, and says both languages"

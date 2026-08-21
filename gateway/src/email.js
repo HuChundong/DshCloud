@@ -23,11 +23,20 @@ import process from 'node:process'
  * sign-in path that behaves differently in development is a sign-in path
  * nobody has actually tested.
  *
- * Absent in every deployment that serves real people, because nothing sets it
- * there. It is not a flag that turns something off; it is an address, and the
- * only addresses worth putting in it are ones that exist on the machine.
+ * Absent in every deployment that serves real people. It is not a flag that
+ * turns something off; it is an address, and the only addresses worth putting
+ * in it are ones that exist on the machine.
+ *
+ * EMPTY counts as absent, and that distinction is the whole of this. Compose
+ * passes it through as `${EMAIL_API_URL:-}`, so a deployment that never set it
+ * still HAS it — as an empty string. `??` falls back on `undefined` and not on
+ * `''`, so production went to `fetch('')`, and every sign-in came back as
+ * `Failed to parse URL from`. Nothing about the deployment was wrong; the
+ * default simply never applied.
  */
-const API_URL = process.env.EMAIL_API_URL ?? 'https://api.resend.com/emails'
+const API_URL = (process.env.EMAIL_API_URL ?? '').trim() === ''
+  ? 'https://api.resend.com/emails'
+  : String(process.env.EMAIL_API_URL).trim()
 
 /** The API credential. Absent, the deployment cannot sign anybody in. */
 const API_KEY = process.env.RESEND_API_KEY ?? ''
