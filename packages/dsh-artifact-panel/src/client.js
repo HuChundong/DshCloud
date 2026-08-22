@@ -902,16 +902,34 @@ window.__ModuleLoader__.load({
       }
       .${NS}-tabs::-webkit-scrollbar { display: none; }
 
-      /* One width for every tab, whatever it is called and whether or not it
-         is the one showing. A tab that grows with its name makes the row
-         reflow as files are opened, and a tab that grows when selected makes
-         the row move under the pointer that just selected it. */
+      /* A tab is as wide as its own name, up to a ceiling.
+
+         Not one width for all of them, and not a width the row divides among
+         them. Both were tried here and both make a tab's width a function of
+         the OTHER tabs: under the shared-width rule, opening a seventh file
+         moved the six already open — every one of them narrowed, so the tab
+         somebody was about to click was no longer where they were looking. A
+         width that follows the name is stable under everything except renaming
+         the file, and the row is read left to right rather than measured.
+
+         The ceiling is what keeps one long name from taking the row: past
+         132px the name fades out (see the label below) instead of pushing its
+         neighbours off the end. There is no floor. A short name gets a short
+         tab, which is the whole of this rule, and the label's own right-hand
+         padding is what stops the close key landing on the last letter of one.
+
+         Past the row's width the strip scrolls — by wheel, by drag, and by
+         itself when the tab in play is off the end. Scrolling is the honest
+         answer to more tabs than fit: it hides some of them completely, which
+         is at least visible, while narrowing hides a piece of every name at
+         once and reads as though nothing was lost. */
       .${NS}-tab {
+        position: relative;
         display: inline-flex;
         align-items: center;
         gap: 4px;
         flex: none;
-        width: 132px;
+        max-width: 132px;
         height: 30px;
         padding: 0 8px;
         box-sizing: border-box;
@@ -929,10 +947,45 @@ window.__ModuleLoader__.load({
         background: var(--dsw-alias-interactive-bg-hover);
         color: var(--dsw-alias-label-primary);
       }
+      /* The showing tab, told apart by its ground.
+
+         \`button-ghost-active-fill\` is the token for a pressed ghost button —
+         a state that lasts as long as a finger is down, so it is a whisper by
+         design, and one shade off the panel's own surface. Held for as long as
+         a tab is open it was not a state anyone could see: measured in the
+         running panel it was 1.12:1 against the panel's surface in the light
+         theme, and 1.005:1 against the HOVER fill. The tab that was open and
+         whatever tab the pointer happened to be over were the same colour to
+         three decimal places.
+
+         One step of an interactive fill is not enough on its own — every one
+         the theme publishes is a thin tint meant for a state that lasts a
+         moment, and this state lasts as long as the file is open. So two are
+         laid over each other: the held-interactive fill as the colour, and the
+         panel's own division token painted over it as a flat image. Both are
+         translucent, so the ground lands about twice as far from the surface
+         as either reaches alone — a visible step in both schemes, and still a
+         neutral one, which is what a row of six of them needs.
+
+         Layered rather than outlined, and that is the requirement rather than
+         a preference: a ring says "focused", the eye reads it as the thing it
+         is about to act on rather than the thing it is looking at, and it
+         draws a second edge inside a row that already has the rule under it.
+         The ground is what a tab IS.
+
+         The ground and the label colour, and nothing else. A heavier weight
+         was here too and had to go once a tab took its width from its name:
+         500 measures wider than 400, so selecting a tab widened it and pushed
+         every tab to its right along by a couple of pixels — a row that
+         twitches under the pointer that just clicked it. The ground says the
+         same thing and costs no width. */
       .${NS}-tab[aria-selected='true'] {
-        background: var(--dsw-alias-button-ghost-active-fill);
+        background-color: var(--dsw-alias-interactive-bg-active);
+        background-image: linear-gradient(
+          var(--dsw-alias-border-l2),
+          var(--dsw-alias-border-l2)
+        );
         color: var(--dsw-alias-label-primary);
-        font-weight: 500;
       }
       /* Pushes the closing control to the panel's own edge. */
       .${NS}-spacer {
@@ -944,27 +997,64 @@ window.__ModuleLoader__.load({
         color: var(--dsw-alias-label-tertiary);
       }
       .${NS}-tab[aria-selected='true'] .${NS}-tab-icon {
-        color: var(--dsw-alias-label-secondary);
+        color: var(--dsw-alias-label-primary);
       }
+      /* A name that does not fit fades out; it is not cut with an ellipsis.
+
+         An ellipsis costs three characters to say "there is more", and at the
+         widths this row reaches that is most of the name — \`m…\` says nothing
+         at all, while three more letters of \`main.py\` often say everything.
+         The fade carries the same "there is more" for free, and it is honest
+         about it: the reader sees the letters running out rather than a mark
+         standing in for them.
+
+         Masked rather than drawn as a gradient over the top, because a
+         gradient would need to know the ground it sits on — and the ground
+         here is three different colours (idle, hovered, showing) over two
+         themes. A mask makes the TEXT transparent instead, so whatever is
+         behind it shows through unchanged.
+
+         The mask is on the box, not on the text, so a name shorter than its
+         box is untouched: the fade lands where there is nothing to fade. */
       .${NS}-tab-label {
         flex: 1 1 auto;
         min-width: 0;
         overflow: hidden;
-        text-overflow: ellipsis;
+        /* The gutter is what makes one fade correct for both cases, with no
+           measuring and no second rule for the pointer.
+
+           A name that fits ends 14px before the box does, so the fade has only
+           empty ground to work on and the name is drawn whole — and that same
+           14px is where the close key sits, so it appears over the gutter
+           rather than over the last letter. A name that does not fit is
+           scrolled under its own gutter: the padding goes past the clipping
+           edge, the letters reach the fade, and the tail dissolves exactly
+           where the key will be. */
+        padding-right: 14px;
+        -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 14px), transparent);
+        mask-image: linear-gradient(to right, #000 calc(100% - 14px), transparent);
       }
 
       /* The close key appears under the pointer rather than on the selected
-         tab. With every tab the same fixed width it can appear and disappear
-         without anything moving, so there is no reason to reserve it for the
-         one tab that happens to be showing. */
+         tab, and it is LAID OVER the name rather than given a column of its
+         own.
+
+         Its own column was 16px and it held them whether or not anything was
+         drawn in it — on a short tab, most of the room the name had, spent on
+         empty space for the tab the pointer is not on. Out of the flow it
+         costs nothing until it is wanted, and it lands on the label's gutter:
+         empty ground when the name fits, and the tail the fade has already
+         given up when it does not. */
       .${NS}-tab-close {
+        position: absolute;
+        top: 50%;
+        right: 6px;
+        margin-top: -8px;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        flex: none;
         width: 16px;
         height: 16px;
-        margin-right: -2px;
         opacity: 0;
         border: none;
         border-radius: 4px;
@@ -1174,6 +1264,29 @@ window.__ModuleLoader__.load({
         line-height: 18px;
         text-align: left;
         cursor: pointer;
+      }
+      /* A menu row that carries a mark, for the menu the `+` opens: the same
+         row as the tree's, plus the icon that names the tool in the tab bar —
+         two ways of saying the same tool, so the menu and the tab it produces
+         look like each other.
+
+         Stated as a compound selector and placed AFTER the plain row, both on
+         purpose. A row is \`display: block\` and this one has to be a flex
+         line; at equal specificity the later rule wins, so written above with
+         one class it lost its display to the very rule it was extending —
+         the icon and the name ran together on the baseline with no gap and no
+         centring, which is exactly what a block box does with two inline
+         children. */
+      .${NS}-menu-item.${NS}-menu-tool {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .${NS}-menu-tool > span:first-child {
+        display: inline-flex;
+        flex: none;
+        align-items: center;
+        color: var(--dsw-alias-label-tertiary);
       }
       .${NS}-menu-item:hover {
         background: var(--dsw-alias-interactive-bg-hover);
@@ -2089,9 +2202,15 @@ window.__ModuleLoader__.load({
      * @param {object} props - tabs, the active id, and the three gestures.
      * @returns {object} the element.
      */
-    function TabBar({ tabs, activeId, onSelect, onClose, onNew, onCollapse, onMaximise, maximised }) {
+    function TabBar({ tabs, activeId, onSelect, onClose, onNew, onOpen, onCollapse, onMaximise, maximised }) {
       const t = useT()
       const strip = React.useRef(null)
+      // The `+` menu: the button it hangs from, and where it landed once it
+      // had been measured.
+      const plus = React.useRef(null)
+      const menu = React.useRef(null)
+      const [listing, setListing] = React.useState(false)
+      const [place, setPlace] = React.useState(undefined)
 
       // Keep the tab in play in view. Opening a file when the strip is already
       // full otherwise puts the new tab off the end, so the one thing that
@@ -2116,6 +2235,80 @@ window.__ModuleLoader__.load({
         else if (it.right > box_.right) box.scrollLeft += it.right - box_.right
       }, [activeId, tabs.length])
 
+      // A wheel over the strip scrolls it sideways.
+      //
+      // A mouse has one wheel and it reports on `deltaY`; a strip that only
+      // answers `deltaX` is a strip only a trackpad can move, which leaves the
+      // tabs past the edge reachable by dragging alone. Both axes are taken
+      // and the larger wins, so a trackpad's sideways gesture still arrives as
+      // itself rather than being added to the same number twice.
+      //
+      // Attached here rather than as `onWheel`, and this is the whole reason
+      // for the effect: React registers wheel handlers on its root as PASSIVE,
+      // so `preventDefault` inside one does nothing but log a warning — the
+      // strip would scroll sideways AND the conversation behind it would scroll
+      // away underneath. A native listener with `passive: false` is the only
+      // form that can hold the page still.
+      //
+      // The default is only refused when this strip can actually take the
+      // scroll: with every tab already in view, a wheel over the row belongs
+      // to whatever is behind it.
+      React.useEffect(() => {
+        const box = strip.current
+        if (box === null || box === undefined) return undefined
+        /** @param {WheelEvent} event - the wheel. */
+        const onWheel = (event) => {
+          const over = box.scrollWidth - box.clientWidth
+          if (over <= 0) return
+          const by = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY
+          if (by === 0) return
+          const before = box.scrollLeft
+          box.scrollLeft += by
+          // Only when it moved: at either end the row has nothing left to
+          // give, and holding the page still there makes the panel feel stuck.
+          if (box.scrollLeft !== before) event.preventDefault()
+        }
+        box.addEventListener('wheel', onWheel, { passive: false })
+        return () => { box.removeEventListener('wheel', onWheel) }
+      }, [])
+
+      // The menu closes to anything that is not itself, the way the tree's
+      // does: a pointer elsewhere, Escape, or the panel being resized under
+      // it. Capture, so the click that closes it does not also land on
+      // whatever was underneath.
+      React.useEffect(() => {
+        if (!listing) return undefined
+        const away = (event) => {
+          if (menu.current?.contains(event.target) === true) return
+          if (plus.current?.contains(event.target) === true) return
+          setListing(false)
+        }
+        const onKey = (event) => { if (event.key === 'Escape') setListing(false) }
+        const shut = () => { setListing(false) }
+        document.addEventListener('pointerdown', away, true)
+        document.addEventListener('keydown', onKey)
+        window.addEventListener('resize', shut)
+        return () => {
+          document.removeEventListener('pointerdown', away, true)
+          document.removeEventListener('keydown', onKey)
+          window.removeEventListener('resize', shut)
+        }
+      }, [listing])
+
+      // Measured after it is drawn, because where it fits depends on how wide
+      // it turned out to be. Hung from the button's RIGHT edge rather than its
+      // left: the panel is the window's right-hand column, and a menu that
+      // grows rightward from a control near that edge grows off the screen.
+      React.useLayoutEffect(() => {
+        if (!listing || menu.current === null || plus.current === null) { setPlace(undefined); return }
+        const button = plus.current.getBoundingClientRect()
+        const box = menu.current.getBoundingClientRect()
+        setPlace({
+          left: Math.max(8, Math.min(button.right - box.width, window.innerWidth - box.width - 8)),
+          top: button.bottom + 6,
+        })
+      }, [listing, tabs.length])
+
       // The bar is always drawn, because the controls that close and widen the
       // panel live in it and have to be reachable with nothing open. Its rule
       // is not: with no tabs there is nothing above the line to divide from
@@ -2128,6 +2321,23 @@ window.__ModuleLoader__.load({
           'aria-selected': tab.id === activeId,
           className: `${NS}-tab`,
           onClick: () => onSelect(tab.id),
+          // The middle button closes the tab, which is what a middle button
+          // does to a tab everywhere else it exists — and the one gesture that
+          // closes several in a row without the pointer having to find a 16px
+          // target each time.
+          //
+          // `onAuxClick` rather than a button test inside `onClick`: React
+          // routes the non-primary buttons there, and a middle press never
+          // reaches the click handler at all. The mousedown is refused
+          // separately because middle-press is the browser's autoscroll
+          // gesture, which otherwise starts on the tab strip and leaves the
+          // page in scroll mode after the tab has gone.
+          onMouseDown: (event) => { if (event.button === 1) event.preventDefault() },
+          onAuxClick: (event) => {
+            if (event.button !== 1) return
+            event.preventDefault()
+            onClose(tab.id)
+          },
           onKeyDown: (event) => {
             if (event.key === 'Enter' || event.key === ' ') {
               event.preventDefault()
@@ -2140,7 +2350,8 @@ window.__ModuleLoader__.load({
         // Rendered on every tab, shown by CSS under the pointer. Rendering it
         // only for the active tab was the first attempt and it does not answer
         // the requirement: hovering any other tab found no element to reveal.
-        // With every tab a fixed width, showing it costs no reflow.
+        // Showing it costs no reflow: it is positioned rather than laid out,
+        // so no tab changes width when the pointer arrives or leaves.
         h('span', {
           className: `${NS}-tab-close`,
           role: 'button',
@@ -2156,13 +2367,46 @@ window.__ModuleLoader__.load({
         // the row permanent — a bar whose controls come and go is a bar you
         // have to look for before you can use it.
         h('button', {
+          ref: plus,
           type: 'button',
           className: `${NS}-icon-button`,
           title: t('panel.open'),
           'aria-label': t('panel.open'),
           'aria-pressed': activeId === undefined,
-          onClick: onNew,
+          'aria-haspopup': tabs.length === 0 ? undefined : 'menu',
+          'aria-expanded': tabs.length === 0 ? undefined : listing,
+          // With nothing open the panel is already showing the chooser, so the
+          // `+` only has to make sure it is what is on screen. With something
+          // open, sending the panel to the chooser would take the tab away to
+          // ask a question — the tenant would lose sight of what they were
+          // reading in order to add something beside it. So the choice comes
+          // to them instead, as a menu hanging off the control they pressed,
+          // and whatever is open stays open behind it.
+          onClick: () => { if (tabs.length === 0) onNew(); else setListing((open) => !open) },
         }, icon('new')),
+        // Drawn beside the button rather than inside it: `overflow` on the tab
+        // strip would clip it, and the row's own stacking context would put it
+        // under the panel's chrome.
+        !listing || tabs.length === 0 ? null : h('div', {
+          ref: menu,
+          role: 'menu',
+          className: `${NS}-menu`,
+          style: {
+            left: `${String(place?.left ?? 0)}px`,
+            top: `${String(place?.top ?? 0)}px`,
+            // Placed on the second pass; drawn where it will land rather than
+            // at the corner and then moved, which reads as a jump.
+            visibility: place === undefined ? 'hidden' : undefined,
+          },
+        }, TOOLS.map((tool) => h('button', {
+          key: tool.id,
+          type: 'button',
+          role: 'menuitem',
+          className: `${NS}-menu-item ${NS}-menu-tool`,
+          // Opening what is already open is focusing it, which is what the
+          // chooser has always done — so there is nothing to disable here.
+          onClick: () => { setListing(false); onOpen(tool) },
+        }, h('span', null, icon(tool.icon, 15)), h('span', null, t(`tool.${tool.id}`))))),
         // What is about the panel rather than about one tab sits at its far
         // edge, so the row reads as tabs on one side and panel controls on the
         // other.
@@ -3665,6 +3909,7 @@ window.__ModuleLoader__.load({
           onSelect: (id) => store.select(id),
           onClose: closeTab,
           onNew: () => store.select(undefined),
+          onOpen: (tool) => openTab({ id: tool.id, icon: tool.icon }),
           onCollapse: () => store.write({ open: false }),
           onMaximise: () => setMaximised((current) => !current),
           maximised,
