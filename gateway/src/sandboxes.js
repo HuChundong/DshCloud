@@ -228,7 +228,7 @@ export class SandboxManager {
       SANDBOX_ID: sandboxId,
       SANDBOX_TOKEN: token,
       GATEWAY_TUNNEL_URL: this.options.gatewayTunnelUrl,
-      ...await this.options.env(),
+      ...await this.options.env(username),
     })
 
     // The table decides who won, not this process. Two gateways can reach here

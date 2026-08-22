@@ -166,6 +166,31 @@ CREATE TABLE IF NOT EXISTS sandbox_secrets (
   PRIMARY KEY (email, name)
 );
 
+-- One model account per tenant, on the model gateway that meters them.
+--
+-- The deployment used to hand every sandbox the same model credential: one
+-- key, one bill, and no way to say that a particular tenant had spent their
+-- share. What is kept here is the key and the identity it belongs to; the
+-- allowance, the prices and the refusal are the model gateway's, which is what
+-- keeps a metering plane off this deployment's request path.
+--
+-- The password is kept rather than discarded because it is the only way back
+-- into that account from the inside — the model gateway mints keys for the
+-- caller, so rotating a tenant's key means signing in as them again. It is a
+-- credential to an account that holds an allowance and nothing else.
+--
+-- Cascading from the account for the same reason every other table does: a row
+-- that outlived its owner would hand the next holder of that address somebody
+-- else's allowance.
+CREATE TABLE IF NOT EXISTS model_accounts (
+  email            text        PRIMARY KEY REFERENCES accounts(email) ON DELETE CASCADE ON UPDATE CASCADE,
+  gateway_user_id  integer     NOT NULL,
+  gateway_username text        NOT NULL,
+  gateway_password text        NOT NULL,
+  api_key          text        NOT NULL,
+  created_at       timestamptz NOT NULL DEFAULT now()
+);
+
 -- Which sandbox belongs to whom, and where it is.
 --
 -- This was a Map in the gateway process, which made three things true that

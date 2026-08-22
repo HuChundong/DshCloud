@@ -97,6 +97,13 @@ fi
 # directory, so starting it anywhere else would make that directory the tenant's
 # workspace — and with full access inside the container, the agent's default
 # working directory would have been the harness's own installation.
+# The provider this deployment serves, written into the tenant's settings the
+# first time they have none. See seed-settings.mjs for what is written and what
+# it refuses to touch; it exits without writing when this deployment has not
+# named a model, which is every deployment that has not configured one.
+node /app/sandbox/seed-settings.mjs "$DSH_HOME/settings.yaml" || \
+  echo "sandbox: could not seed the model provider; the tenant configures their own" >&2
+
 cd "$WORKSPACE"
 # `--no-open` because 0.1.0-rc.8 made `dsh web` open the default browser, and
 # this one is a container with no desktop, no DISPLAY and nobody in front of it.

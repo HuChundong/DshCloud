@@ -34,6 +34,7 @@ import { connect } from './db.js'
 import { canSendEmail } from './email.js'
 import { Invites } from './invites.js'
 import { loginPage } from './login-page.js'
+import { ModelAccounts } from './model-accounts.js'
 import { ASSET_PREFIX, assetFor } from './page-assets.js'
 import { POLICY_SLUGS, policyPage } from './policy-page.js'
 import { handlePanel } from './panel.js'
@@ -160,6 +161,15 @@ const verification = new Verification(db)
  * per request also means a missing asset fails the boot instead of leaving a
  * broken image on the only page an unauthenticated visitor can reach.
  */
+/**
+ * Per-tenant model accounts, on the gateway that meters them.
+ *
+ * Constructed unconditionally and inert when unconfigured: a deployment with
+ * no `MODEL_GATEWAY_URL` gets `undefined` from every call and keeps handing
+ * out the deployment's own credential, which is what it did before.
+ */
+const modelAccounts = new ModelAccounts(db)
+
 const sandboxes = new SandboxManager({
   db,
   gatewayTunnelUrl: GATEWAY_TUNNEL_URL,
@@ -178,11 +188,32 @@ const sandboxes = new SandboxManager({
   // handed to the sandbox rather than to the browser. Resolved per creation:
   // an administrator who rotates the key in the console has it reach the next
   // sandbox started, not the next time the gateway is restarted.
-  env: async () => {
+  env: async (username) => {
     const credential = await settings.modelCredential()
+    // The tenant's own key on the model gateway, minted the first time they
+    // need one. It replaces the deployment's key rather than sitting beside
+    // it: what the sandbox is handed is one credential, and which one decides
+    // whose allowance the agent spends.
+    //
+    // A failure here is not a failure to start. The deployment's own key is
+    // what every sandbox used before this existed, so falling back to it
+    // leaves a tenant with a working agent and the operator with a line in the
+    // log — where refusing would leave them with a sandbox that cannot answer
+    // and no way to tell why from the inside.
+    const own = await modelAccounts.keyFor(username).catch((error) => {
+      console.warn(`gateway: no model account for ${username}: ${error.message}`)
+      return undefined
+    })
     return {
-      DEEPSEEK_API_KEY: credential.apiKey,
+      DEEPSEEK_API_KEY: own ?? credential.apiKey,
       DEEPSEEK_BASE_URL: credential.baseUrl,
+      // What the sandbox writes into the tenant's settings on first boot, so
+      // that a new tenant opens a model picker with this deployment's model in
+      // it rather than dsh's defaults, which name providers it does not serve.
+      MODEL_ID: process.env.MODEL_ID ?? '',
+      MODEL_NAME: process.env.MODEL_NAME ?? '',
+      MODEL_REASONING_EFFORTS: process.env.MODEL_REASONING_EFFORTS ?? '',
+      MODEL_DEFAULT_EFFORT: process.env.MODEL_DEFAULT_EFFORT ?? '',
       // Deployment shape rather than a credential, which is why it comes from
       // the environment and not from the console: rotating a key is an
       // operational act, while changing which provider serves the deployment

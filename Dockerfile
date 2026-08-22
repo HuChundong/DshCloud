@@ -373,7 +373,7 @@ RUN ln -snf "/usr/share/zoneinfo/$TZ" /etc/localtime && echo "$TZ" > /etc/timezo
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/package.json ./package.json
-COPY sandbox/entrypoint.sh sandbox/migrate-storage-paths.mjs sandbox/cordis.patch.yml ./sandbox/
+COPY sandbox/entrypoint.sh sandbox/migrate-storage-paths.mjs sandbox/seed-settings.mjs sandbox/cordis.patch.yml ./sandbox/
 RUN chmod +x /app/sandbox/entrypoint.sh
 
 # The entry a tenant's backend runs: the same `lib/bin.js` the npm package ships

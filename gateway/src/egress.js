@@ -112,8 +112,36 @@ export function protectedEgress(env) {
   const rules = injectionRules(env.DEEPSEEK_BASE_URL ?? '', env.DEEPSEEK_API_KEY ?? '')
   return {
     env: rules.length === 0 ? env : { ...env, DEEPSEEK_API_KEY: MODEL_KEY_PLACEHOLDER },
-    network: { allowOut: [gatewayAddress(env.GATEWAY_TUNNEL_URL)], rules },
+    network: { allowOut: [gatewayAddress(env.GATEWAY_TUNNEL_URL), ...privateModelHost(env.DEEPSEEK_BASE_URL ?? '')], rules },
   }
+}
+
+/**
+ * The model endpoint's address, when it is one a sandbox would otherwise be
+ * denied.
+ *
+ * CubeSandbox allows public egress and denies the private ranges, which is
+ * right for everything except the case where the model is on this deployment's
+ * own network — a gateway on the LAN, or on the host itself. There the rule
+ * that injects the credential is written, accepted, and never reached, because
+ * the connection it would have applied to is refused a layer below it.
+ *
+ * An address and only an address, for the reason `allowOut` takes no names:
+ * a DNS name there is honoured only alongside a deny-all. A model endpoint
+ * named by hostname is a public one as far as this is concerned, and needs
+ * nothing — the default already allows it.
+ *
+ * @param {string} baseUrl - the model endpoint.
+ * @returns {string[]} the address to allow, or nothing.
+ */
+function privateModelHost(baseUrl) {
+  if (baseUrl === '') return []
+  let hostname
+  try { ({ hostname } = new URL(baseUrl)) } catch { return [] }
+  if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(hostname)) return []
+  const [a, b] = hostname.split('.').map(Number)
+  const private_ = a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || a === 127
+  return private_ ? [hostname] : []
 }
 
 /**
