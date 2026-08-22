@@ -84,6 +84,24 @@ Two constraints came out of trying to be clever with it:
   request carries the placeholder, so a tenant configuring their own key would
   not have it overwritten. `ngx.req.clear_header` always runs first, so by the
   time the rule can look, there is nothing left to look at.
+- **Only ports 80 and 443 are intercepted at all.** CubeEgress is fed by a
+  TPROXY rule that selects on ingress interface and destination port and
+  nothing else — `iif cube-dev` plus `tcp dport 80/443`, in
+  `CubeEgress/scripts/cube-proxy-iptables-init.sh`. A model endpoint on any
+  other port never reaches the rule engine, so no rule can inject into it: the
+  request goes out with the placeholder and the provider answers 401. This is
+  the whole of why a model server at `host:3000` cannot be served by egress
+  injection, and it is not visible from anything the rule API accepts — the
+  rule is taken, stored, and never consulted. An endpoint on a custom port has
+  to carry its own credential inside the sandbox.
+- **A plaintext endpoint can be injected into, and pays for it.** The rule the
+  gateway builds carries an SNI only for `https` — there is no handshake to
+  read one from otherwise — and CubeSandbox's own rule builder makes the same
+  distinction. What an `http` endpoint costs is the hop from CubeEgress to the
+  endpoint, where the credential travels in the clear. It still never enters
+  the sandbox, which is the property that was worth having; whether the clear
+  hop is acceptable is a fact about where the endpoint is, and a model server
+  on the same host is not the same answer as one across the internet.
 
 ## S3 is not a filesystem, and the agent notices immediately
 

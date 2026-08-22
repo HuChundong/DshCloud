@@ -67,15 +67,32 @@ function gatewayAddress(tunnelUrl) {
 function injectionRules(baseUrl, apiKey) {
   if (apiKey === '' || baseUrl === '') return []
   const { protocol, hostname } = new URL(baseUrl)
-  // CubeEgress mints a leaf certificate for the requested SNI, so it can only
-  // rewrite what it can decrypt. A plaintext endpoint would work too, but then
-  // the credential it injects would cross the network in the clear.
-  if (protocol !== 'https:') {
-    throw new Error(`egress: DEEPSEEK_BASE_URL must be https to inject a credential, got ${JSON.stringify(baseUrl)}`)
+  if (protocol !== 'https:' && protocol !== 'http:') {
+    throw new Error(`egress: DEEPSEEK_BASE_URL must be http or https, got ${JSON.stringify(baseUrl)}`)
   }
+  // The SNI is what CubeEgress mints its leaf certificate for, so it is the
+  // match for a TLS endpoint and meaningless for a plaintext one — a rule that
+  // named an SNI on an http endpoint would match nothing, because there is no
+  // handshake to read one from. CubeSandbox's own rule builder makes exactly
+  // this distinction (`llm_egress_rule` in CubeAPI), and this follows it.
+  //
+  // Plaintext was refused here until a deployment needed it: the credential
+  // then travels from CubeEgress to the endpoint in the clear, which is a real
+  // cost and the reason this is worth stating rather than hiding. It buys the
+  // arrangement that matters more — the key is still not inside the sandbox,
+  // where an agent running on the tenant's behalf could be talked into reading
+  // it back. Where the endpoint is a model server on the same host or the same
+  // LAN, the clear hop is that machine's own network and the trade is worth
+  // making; where it is across the internet, it is not, and the deployment
+  // that points DEEPSEEK_BASE_URL at an http URL out there has chosen it.
+  const secure = protocol === 'https:'
   return [{
     name: 'model-api-credential',
-    match: { scheme: 'https', sni: hostname, host: hostname },
+    match: {
+      scheme: secure ? 'https' : 'http',
+      ...secure ? { sni: hostname } : {},
+      host: hostname,
+    },
     action: {
       allow: true,
       audit: 'metadata',
