@@ -2074,9 +2074,12 @@ window.__ModuleLoader__.load({
     const GLYPHS = {
       files: primitives.IconFolderClose16,
       // The globe, not `IconBrowseOutline16` — that one is a document with a
-      // reading rule through it. Both the canvas tool and an HTML file mean
-      // "somewhere on the web", which is what this draws.
+      // reading rule through it. An HTML file in the tree means "somewhere on
+      // the web", which is what this draws. The canvas TAB used to wear it too
+      // and now wears `brush`: a tool and a file that share one mark are two
+      // things the eye has to tell apart by position.
       browser: primitives.IconGlobeOutline14,
+      brush: extracted.brush,
       close: primitives.IconCloseOutline16,
       new: primitives.IconPlusOutline16,
       expand: primitives.IconFullscreenOutline16,
@@ -3182,7 +3185,7 @@ window.__ModuleLoader__.load({
           store.selectTerminal(entry.id)
         },
       },
-      h('span', { className: `${NS}-row-twisty` }),
+      // No twisty, and none reserved: nothing in this list opens.
       h('span', { className: `${NS}-row-icon` }, icon('terminal', 14)),
       h('span', { className: `${NS}-row-name` }, entry.name),
       h('span', { className: `${NS}-row-menu` },

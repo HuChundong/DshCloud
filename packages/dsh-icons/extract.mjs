@@ -59,6 +59,13 @@ const WANTED = {
   // behind it is guarded; behind the console link are three lists of people.
   shield: 'shield',
   list: 'list',
+  // The canvas tab. A globe was there first and said "somewhere on the web",
+  // which is what the tab SHOWS and not what it is: the page under it is the
+  // one the agent is making, and the tab is where the tenant watches it being
+  // made. A brush is the making. It also stops the tab and an `.html` file in
+  // the tree wearing the same mark, which is the other half of why the globe
+  // was wrong — one of them is a tool, the other is a file.
+  brush: 'brush',
   // The sandbox is a box a tenant's work sits inside.
   sandbox: 'box',
   // The operator's console, whose sections are administrators, users and
