@@ -1057,16 +1057,60 @@ window.__ModuleLoader__.load({
         border: none;
         border-radius: 4px;
         padding: 0;
-        background: transparent;
+        /* The tab's own ground, repainted under the key so it is opaque.
+           
+           The key is laid over the name's tail rather than given a column, and
+           the tail is faded but not gone — so a transparent key was a glyph
+           drawn on top of letters, which is two drawings in 16px and neither
+           of them legible. What goes behind it has to be the ground it sits
+           on, or the key reads as a chip stuck onto the tab.
+           
+           So it is built the way the tab's ground is: the panel's own surface
+           as an opaque colour, and the same translucent tint the tab is
+           wearing painted over it. A skin that fills the panel with
+           \`--dsw-specific-sidebar-fill\` instead is the one case where these
+           two come out different — the key is 16px, and the alternative is a
+           key nobody can read. */
+        background-color: var(--dsw-alias-bg-layer-1);
+        background-image: linear-gradient(
+          var(--dsw-alias-interactive-bg-hover),
+          var(--dsw-alias-interactive-bg-hover)
+        );
         color: var(--dsw-alias-label-tertiary);
         cursor: pointer;
+      }
+      /* On the showing tab the ground is the other one, so the key repaints
+         that instead — both layers of it. */
+      .${NS}-tab[aria-selected='true'] .${NS}-tab-close {
+        background-image:
+          linear-gradient(
+            var(--dsw-alias-interactive-bg-active),
+            var(--dsw-alias-interactive-bg-active)
+          ),
+          linear-gradient(
+            var(--dsw-alias-border-l2),
+            var(--dsw-alias-border-l2)
+          );
       }
       .${NS}-tab:hover .${NS}-tab-close,
       .${NS}-tab-close:focus-visible {
         opacity: 1;
       }
-      .${NS}-tab-close:hover {
-        background: var(--dsw-alias-border-l2);
+      /* Under the pointer it darkens by one more layer of the same token,
+         which is a step up from either ground. Both selectors, because the
+         selected rule above outranks a bare \`:hover\` and would otherwise keep
+         the key looking untouched on the one tab most likely to be closed. */
+      .${NS}-tab .${NS}-tab-close:hover,
+      .${NS}-tab[aria-selected='true'] .${NS}-tab-close:hover {
+        background-image:
+          linear-gradient(
+            var(--dsw-alias-border-l2),
+            var(--dsw-alias-border-l2)
+          ),
+          linear-gradient(
+            var(--dsw-alias-border-l2),
+            var(--dsw-alias-border-l2)
+          );
         color: var(--dsw-alias-label-primary);
       }
 
