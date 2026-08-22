@@ -23,6 +23,8 @@ import { randomBytes } from 'node:crypto'
 import process from 'node:process'
 import { SignJWT, jwtVerify } from 'jose'
 
+import { revokeAllFor } from './revoke.js'
+
 /** How long an access token proves anything. Also the revocation delay. */
 const ACCESS_TTL_SECONDS = 15 * 60
 
@@ -179,7 +181,7 @@ export class Tokens {
    * @returns {Promise<void>} resolves once none of them can be spent.
    */
   async revokeAll(email) {
-    await this.pool.query('DELETE FROM refresh_tokens WHERE email = $1', [email])
+    await revokeAllFor(this.pool, email)
   }
 }
 

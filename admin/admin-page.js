@@ -47,7 +47,6 @@ function when(at) {
  * @param {Array<{code: string, createdAt: number, redeemedAt: number | undefined, redeemedBy: string | undefined}>} state.invites - the invite codes, unredeemed first.
  * @param {{baseUrl: string, apiKey: string, source: string, updatedAt: number | undefined, updatedBy: string | undefined}} state.credential - the model credential in force, described rather than shown.
  * @param {{inviteRequired: boolean, sandboxLimit: number, source: string, updatedAt: number | undefined, updatedBy: string | undefined}} state.access - the gate in force: who may register, and how many sandboxes may run.
- * @param {number} state.live - how many sandboxes are running right now, which is what the ceiling is measured against.
  * @param {{enabled: boolean, source: string, recoveryLeft: number, updatedAt: number|undefined, updatedBy: string|undefined, qr: string|undefined, secret: string|undefined, freshCodes: string[]|undefined}} state.security - the second factor: whether one is in force, and any enrolment half-finished.
  * @param {string} state.viewer - the administrator's own address, so the page can refuse to offer them their own delete button.
  * @param {string | {code: string, params?: object}} [state.notice] - the outcome of the action that led here, as a message code rather than a sentence.
@@ -55,7 +54,7 @@ function when(at) {
  * @returns {string} the HTML document.
  */
 export function adminPage(state) {
-  const { accounts, invites, credential, access, security, live, viewer, notice, version } = state
+  const { accounts, invites, credential, access, security, viewer, notice, version } = state
   const release = version === undefined || version === '' ? '' : ` · v${escapeHtml(version)}`
   // A toast rather than a block in the page. It reports an action that has
   // already happened, so it dismisses itself — and being out of the layout, it
@@ -86,8 +85,19 @@ export function adminPage(state) {
   const accessHint = access.source === 'console'
     ? `${escapeHtml(access.updatedBy ?? '')} · ${when(access.updatedAt)}`
     : '<span data-t="env">环境变量</span>'
-  const ceiling = access.sandboxLimit === 0 ? undefined : `${live} / ${access.sandboxLimit}`
-  // The ceiling reads as a fraction or as a word, and the word is a word in
+  // The ceiling alone, with nothing running counted against it.
+  //
+  // It used to read `3 / 20`, and the left-hand number came from the gateway,
+  // which is where sandboxes are. This console is a separate service now and
+  // does not hold a connection to the platform or to the gateway — so that
+  // number arrived as `undefined` and the card read `undefined / 20`.
+  //
+  // Restored as the ceiling rather than refetched, for the reason the accounts
+  // table no longer has a sandbox column: a count this page learned from a
+  // third party some seconds ago is worse than a count it does not show. How
+  // many are running is a question for wherever machines are managed.
+  const ceiling = access.sandboxLimit === 0 ? undefined : String(access.sandboxLimit)
+  // The ceiling reads as a number or as a word, and the word is a word in
   // each language — so it goes through the table rather than into the sentence
   // as text.
   // Composed here rather than shipped in two pieces: the word is only ever seen
@@ -826,8 +836,8 @@ const S = {
   'access.invite': { zh: '注册需要邀请码', en: 'Registration needs an invite code' },
   'access.limit':  { zh: '沙箱上限', en: 'Sandbox ceiling' },
   'access.note':   {
-    zh: '在线沙箱 {0}。上限填 0 表示不限；达到上限后，手上没有沙箱的账号既不能注册也不能登录，已在运行的租户不受影响。',
-    en: 'Sandboxes running: {0}. A ceiling of 0 means no limit. Once it is reached, an account without a sandbox can neither register nor sign in; tenants already running are unaffected.',
+    zh: '沙箱上限 {0}。填 0 表示不限；达到上限后，手上没有沙箱的账号既不能注册也不能登录，已在运行的租户不受影响。当前在线数由平台侧统计，这里不显示。',
+    en: 'Sandbox ceiling: {0}. A ceiling of 0 means no limit. Once it is reached, an account without a sandbox can neither register nor sign in; tenants already running are unaffected. How many are running is counted where machines are managed, not here.',
   },
 
   'model.h':   { zh: '模型密钥', en: 'Model credential' },

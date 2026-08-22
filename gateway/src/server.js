@@ -52,7 +52,7 @@ import { handleSignIn } from './sign-in.js'
 import { Tokens, signedOutCookies } from './tokens.js'
 import { TunnelServer } from './tunnel-server.js'
 import { Verification } from './verification.js'
-import { destroyVolume } from './volumes.js'
+import { destroyVolume, volumesEnabled } from './volumes.js'
 
 /**
  * The addresses that are the application itself, as the browser asks for them.
@@ -101,7 +101,12 @@ if (!canSendEmail()) {
   process.exit(1)
 }
 if ((process.env.GATEWAY_ADMINS ?? '') === '') {
-  console.warn('gateway: GATEWAY_ADMINS is empty; nobody can reach the user console')
+  // Not about the console any more. The operator's console is a separate
+  // service with its own credential, and nobody reaches it by being named
+  // here. What this list still does is mark accounts, and stand in for
+  // POLICY_CONTACT when that is unset — so an empty one means the policy pages
+  // name nobody to write to.
+  console.warn('gateway: GATEWAY_ADMINS is empty; the policy pages will name no contact unless POLICY_CONTACT is set')
 }
 
 /**
@@ -471,12 +476,42 @@ async function handleRequest(req, res) {
     let told
     try { told = JSON.parse(body?.toString('utf8') ?? '{}') } catch { told = {} }
     const email = typeof told.email === 'string' ? told.email : ''
-    if (email !== '') {
-      console.log(`gateway: the console reports ${email} ${String(told.event)}`)
-      await sandboxes.release(email).catch((error) => {
-        console.error(`gateway: releasing ${email} after ${String(told.event)} failed: ${error.message}`)
-      })
+    if (email === '') {
+      res.writeHead(400, { 'Content-Type': 'text/plain' })
+      res.end('no address')
+      return
     }
+
+    console.log(`gateway: the console reports ${email} ${String(told.event)}`)
+
+    // The machine, for either event. Best effort: a sandbox that outlives this
+    // by a few minutes is collected by the idle sweep, and nothing reaches it
+    // in the meantime because the console has already ended the sessions.
+    await sandboxes.release(email).catch((error) => {
+      console.error(`gateway: releasing ${email} after ${String(told.event)} failed: ${error.message}`)
+    })
+
+    // The volume, for a deletion only, and not best effort. It holds the
+    // tenant's files; the console keeps the account row until this answers, so
+    // a failure here leaves something to retry rather than a deleted row and
+    // an orphaned disk nobody is looking for.
+    if (told.event === 'deleted' && volumesEnabled()) {
+      const id = typeof told.id === 'string' ? told.id : ''
+      if (id === '') {
+        res.writeHead(400, { 'Content-Type': 'text/plain' })
+        res.end('no account id')
+        return
+      }
+      try {
+        await destroyVolume(cubeRequest, id)
+      } catch (error) {
+        console.error(`gateway: destroying ${email}'s volume failed: ${error.message}`)
+        res.writeHead(502, { 'Content-Type': 'text/plain' })
+        res.end('the volume is still there')
+        return
+      }
+    }
+
     res.writeHead(204)
     res.end()
     return

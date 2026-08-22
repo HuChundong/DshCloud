@@ -79,7 +79,7 @@ async function pages() {
         credential: { baseUrl: 'https://api.example.com', apiKey: 'set', source: 'database', updatedAt: 0, updatedBy: 'root@example.com' },
         access: { inviteRequired: true, sandboxLimit: 10, source: 'database', updatedAt: 0, updatedBy: 'root@example.com' },
         security: { enabled: true, source: 'console', recoveryLeft: 7, updatedAt: 0, updatedBy: 'root@example.com', qr: undefined, secret: undefined, freshCodes: undefined },
-        live: 1, viewer: 'root@example.com', notice: undefined, version: '1.2.3',
+        viewer: 'root@example.com', notice: undefined, version: '1.2.3',
       }),
     },
     {
@@ -93,7 +93,7 @@ async function pages() {
         credential: { baseUrl: '', apiKey: '', source: 'environment', updatedAt: undefined, updatedBy: undefined },
         access: { inviteRequired: false, sandboxLimit: 0, source: 'environment', updatedAt: undefined, updatedBy: undefined },
         security: { enabled: false, source: 'none', recoveryLeft: 0, updatedAt: undefined, updatedBy: undefined, qr: undefined, secret: undefined, freshCodes: undefined },
-        live: 0, viewer: 'root@example.com', notice: 'code.wrong', version: '1.2.3',
+        viewer: 'root@example.com', notice: 'code.wrong', version: '1.2.3',
       }),
     },
     // The two states the console only reaches mid-enrolment. Rendered here
@@ -112,7 +112,7 @@ async function pages() {
           secret: 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ',
           freshCodes: undefined,
         },
-        live: 0, viewer: 'root@example.com', notice: undefined, version: '1.2.3',
+        viewer: 'root@example.com', notice: undefined, version: '1.2.3',
       }),
     },
     {
@@ -126,7 +126,7 @@ async function pages() {
           enabled: true, source: 'environment', recoveryLeft: 0, updatedAt: undefined, updatedBy: undefined,
           qr: undefined, secret: undefined, freshCodes: undefined,
         },
-        live: 0, viewer: 'root@example.com', notice: undefined, version: '1.2.3',
+        viewer: 'root@example.com', notice: undefined, version: '1.2.3',
       }),
     },
     {
@@ -141,7 +141,7 @@ async function pages() {
           qr: undefined, secret: undefined,
           freshCodes: ['abcde-fghjk', 'mnpqr-stuvw', 'xyz23-45678'],
         },
-        live: 0, viewer: 'root@example.com', notice: 'tfa.on', version: '1.2.3',
+        viewer: 'root@example.com', notice: 'tfa.on', version: '1.2.3',
       }),
     },
   )

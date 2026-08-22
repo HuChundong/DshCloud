@@ -34,6 +34,7 @@ node scripts/check-forwarded.mjs >/dev/null
 node scripts/check-env-defaults.mjs >/dev/null
 node scripts/check-entitlements.mjs >/dev/null
 node scripts/check-totp.mjs >/dev/null
+node scripts/check-service-env.mjs >/dev/null
 # Stands down where no platform is configured, which is every checkout.
 node scripts/check-e2b-conformance.mjs >/dev/null
 node scripts/check-panel-paths.mjs >/dev/null

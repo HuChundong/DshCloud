@@ -109,35 +109,49 @@ const readBody = async (req, limit) => {
 }
 
 /**
- * Tell the gateway an account is gone or suspended, so it can act on the
- * machine that belongs to it.
+ * Ask the gateway to do the part of an account change that only it can.
  *
- * One direction only: this says what happened, and the gateway decides what
- * that means for a sandbox. It is allowed to fail — an operator's action must
- * not be refused because another service is restarting — and the gateway
- * reaches the same state on its own eventually, through the idle sweep and
- * through refusing a suspended account at sign-in.
+ * Sandboxes and volumes belong to the runtime plane: this service holds no
+ * connection to a platform and should not grow one. So it says what happened
+ * and the gateway acts.
  *
- * @param {string} event - `suspended` or `erased`.
+ * Whether that is allowed to fail depends on what was said, and the caller
+ * decides — which is why this returns an answer rather than swallowing one.
+ * A suspension may fail here: the tokens are already gone, so nothing reaches
+ * the machine, and the idle sweep collects it. A deletion may not: a volume
+ * holds a tenant's files, and reporting a deletion that left them behind is
+ * the one promise the console must not break.
+ *
+ * @param {string} event - `suspended` or `deleted`.
  * @param {string} email - whose account.
- * @returns {Promise<void>} resolves whether or not it was delivered.
+ * @param {object} [extra] - anything the event needs beyond the address.
+ * @returns {Promise<boolean>} whether the gateway acknowledged it.
  */
-const tellGateway = async (event, email) => {
+const tellGateway = async (event, email, extra = {}) => {
   const url = process.env.GATEWAY_INTERNAL_URL ?? ''
   const secret = process.env.INTERNAL_SHARED_SECRET ?? ''
-  if (url === '' || secret === '') return
+  if (url === '' || secret === '') {
+    console.error(`admin: no internal channel configured, so the gateway was not told about ${email}`)
+    return false
+  }
   try {
-    await fetch(`${url}/_internal/account`, {
+    const response = await fetch(`${url}/_internal/account`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Internal-Secret': secret },
-      body: JSON.stringify({ event, email }),
+      body: JSON.stringify({ event, email, ...extra }),
     })
+    if (!response.ok) {
+      console.error(`admin: the gateway refused ${event} for ${email}: HTTP ${String(response.status)}`)
+      return false
+    }
+    return true
   } catch (error) {
     console.error(`admin: could not tell the gateway about ${email}: ${error.message}`)
+    return false
   }
 }
 
-const deps = { accounts, invites, settings, secondFactor, readBody, tellGateway, version: process.env.DSH_VERSION }
+const deps = { accounts, invites, settings, secondFactor, db, readBody, tellGateway, version: process.env.DSH_VERSION }
 
 /**
  * The headers every response here carries.

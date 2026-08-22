@@ -224,6 +224,24 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-dsh}:${POSTGRES_PASSWORD:?set a database password}@postgres:5432/${POSTGRES_DB:-dsh}
+      # The same values the gateway is given, defaults included, and that is
+      # the requirement rather than a tidiness: these two services interpret
+      # the same variables, and one that saw a different value would report a
+      # setting the other does not enforce.
+      #
+      # The console reports what is in force, and the deployment's own
+      # variables are half of that.
+      # A settings row wins over these; with no row, this is what a sandbox
+      # actually gets — and a console that could not see them reported "not
+      # set" for a credential that was working.
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL}
+      REGISTRATION: ${REGISTRATION:-invite}
+      SANDBOX_LIMIT: ${SANDBOX_LIMIT:-0}
+      # Read to mark which accounts the deployment names. It grants nothing
+      # here — this console is reached with the credential below and not by
+      # being on that list.
+      GATEWAY_ADMINS: ${GATEWAY_ADMINS:-}
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       # Produced by `node admin/hash-password.mjs`. Without it the service
       # refuses to start, rather than starting with a default — which is a

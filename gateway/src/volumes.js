@@ -41,9 +41,18 @@ const MOUNT_PATH = process.env.SANDBOX_VOLUME_MOUNT || '/mnt'
 
 /**
  * Whether this deployment gives tenants a volume.
+ *
+ * Two conditions, and the runtime is the one that was missing. A volume is
+ * created by asking the platform for one, and only the `cube` runtime asks —
+ * the docker runtime is a simulation with no such API. So a deployment running
+ * on docker has no volumes no matter what the switch says, and answering `true`
+ * there meant deleting an account tried to destroy something that was never
+ * created, failed, and reported the deletion as stuck.
+ *
  * @returns {boolean} whether volumes are in use.
  */
 export function volumesEnabled() {
+  if (process.env.SANDBOX_RUNTIME !== 'cube') return false
   return (process.env.SANDBOX_VOLUMES ?? 'on') !== 'off'
 }
 

@@ -195,7 +195,6 @@ window.__ModuleLoader__.load({
       settings: primitives.IconSettingsOutline16,
       profile: primitives.IconUserOutline16,
       account: primitives.IconUserOutline16,
-      admin: DRAWN.admin,
       signout: DRAWN.signout,
     }
 
@@ -336,8 +335,6 @@ window.__ModuleLoader__.load({
         'profile.failed.status': '保存失败（{status}）',
 
         'row.user': '当前用户',
-        'row.admin': '管理',
-        console: '用户管理',
         'sign-out': '退出登录',
         'sign-out.what': '退出后当前会话立即失效，你的沙箱会被释放。',
         settings: '设置',
@@ -392,8 +389,6 @@ window.__ModuleLoader__.load({
         'profile.failed.status': 'Could not save ({status})',
 
         'row.user': 'Signed in as',
-        'row.admin': 'Console',
-        console: 'Tenants',
         'sign-out': 'Sign out',
         'sign-out.what': 'Signing out ends this session at once, and your sandbox is released.',
         settings: 'Settings',
@@ -1055,7 +1050,7 @@ window.__ModuleLoader__.load({
     const AccountSection = () => {
       const t = useT()
       const who = useWhoami()
-      const { username, admin, displayName, avatar, plan } = who
+      const { username, displayName, avatar, plan } = who
       const [editing, setEditing] = React.useState(false)
 
       const row = { display: 'flex', alignItems: 'baseline', gap: '12px', padding: '10px 0' }
@@ -1176,21 +1171,10 @@ window.__ModuleLoader__.load({
           t('plan.granted'),
         ),
         editing ? React.createElement(ProfileDialog, { who, onClose: () => setEditing(false) }) : null,
-        // The only way in to the console, and the reason it is here: `/admin`
-        // answers 404 to everyone else, so it is not linked anywhere a tenant
-        // could find it — which left an administrator having to remember the
-        // path. Rendered from `/whoami`'s answer rather than by trying the page,
-        // so a tenant's browser never asks for it at all.
-        admin && React.createElement(
-          'div',
-          { style: { ...row, borderBottom: '1px solid var(--dsw-alias-border-l2, rgb(0 0 0 / 10%))' } },
-          React.createElement('span', { style: key }, t('row.admin')),
-          React.createElement(
-            'a',
-            { href: '/admin', style: { fontSize: '14px', color: 'inherit' } },
-            t('console'),
-          ),
-        ),
+        // No console row either. This was the only way in when the console was
+        // a path on this site; it is a separate service on its own hostname
+        // now, reached with a credential that has nothing to do with any
+        // tenant account. An operator goes there directly.
         React.createElement(
           'div',
           { style: { paddingTop: '18px' } },
@@ -1771,15 +1755,12 @@ window.__ModuleLoader__.load({
             React.createElement(Glyph, { name: 'profile' }),
             t('profile.title'),
           ),
-          // Only the console's own audience is told it exists: `/admin` answers
-          // 404 to everyone else, so a link nobody may follow would be a dead
-          // end rather than a discovery.
-          who.admin && React.createElement(
-            'a',
-            { role: 'menuitem', className: `${U}-item`, href: '/admin' },
-            React.createElement(Glyph, { name: 'admin' }),
-            t('console'),
-          ),
+          // No console entry. There used to be one here for anybody the
+          // deployment named, because the console was a path on this site.
+          // It is a separate service with its own hostname and its own
+          // credential now, and being named in GATEWAY_ADMINS does not open
+          // it — so the link went to a path that no longer answers, which is
+          // worse than no link at all.
           React.createElement('div', { className: `${U}-sep` }),
           React.createElement(
             'button',

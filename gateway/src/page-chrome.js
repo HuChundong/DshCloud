@@ -336,6 +336,10 @@ export const CONSOLE_NOTICES = {
   'account.suspended':  { zh: '{email} 已停用。', en: '{email} is now disabled.' },
   'account.restored':   { zh: '{email} 已恢复。', en: '{email} is enabled again.' },
   'account.erased':     { zh: '{email} 已删除。', en: '{email} has been deleted.' },
+  'account.erase.stuck': {
+    zh: '未删除：网关没有确认沙箱和数据卷已清理，账号保留以便重试。会话已经吊销。',
+    en: 'Not deleted: the gateway did not confirm the sandbox and volume were cleared, so the account is kept to try again. The sessions are already revoked.',
+  },
   'sandbox.reclaimed':  { zh: '{email} 的沙箱已回收，下次请求会重建一个。', en: 'The sandbox for {email} was reclaimed; the next request builds a new one.' },
   'plan.moved':         { zh: '{email} 的套餐已更新。', en: 'The plan for {email} has been updated.' },
   'plan.unknown':       { zh: '没有这个套餐。', en: 'No such plan.' },

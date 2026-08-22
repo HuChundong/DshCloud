@@ -22,21 +22,27 @@ import { toString as qrSvg } from 'qrcode'
 import { enrolmentUri } from './totp.js'
 import { adminPage } from './admin-page.js'
 import { normalizeEmail } from '../gateway/src/accounts.js'
-import { eraseAccount } from '../gateway/src/erase.js'
 import { normalizeInvite } from '../gateway/src/invites.js'
+import { revokeAllFor } from '../gateway/src/revoke.js'
 import { isPlan } from '../gateway/src/plans.js'
 
 /**
- * What the console needs from the rest of the gateway.
+ * What the console needs.
+ *
+ * Shorter than it was, and the omissions are the design. This service holds the
+ * database, so it can change an account and end its sessions. It holds no
+ * connection to a sandbox platform and no key to mint a token — so releasing a
+ * machine and destroying a volume are asked of the gateway rather than done
+ * here, and a session can be ended here but never started.
+ *
  * @typedef {object} ConsoleDeps
- * @property {import('./accounts.js').Accounts} accounts - who exists.
- * @property {import('./invites.js').Invites} invites - the codes that admit them.
- * @property {import('./tokens.js').Tokens} tokens - what suspension and deletion revoke.
- * @property {import('./settings.js').Settings} settings - the model credential, and the gate.
- * @property {import('./sandboxes.js').SandboxManager} sandboxes - whose machine is running.
- * @property {(req: import('node:http').IncomingMessage, res?: import('node:http').ServerResponse) => Promise<object | undefined>} callerOf - resolves the caller, renewing tokens.
+ * @property {import('../gateway/src/accounts.js').Accounts} accounts - who exists.
+ * @property {import('../gateway/src/invites.js').Invites} invites - the codes that admit them.
+ * @property {import('../gateway/src/settings.js').Settings} settings - the model credential, and the gate.
+ * @property {import('./second-factor.js').SecondFactor} secondFactor - the operator's own enrolment.
+ * @property {import('pg').Pool} db - the pool, for the one thing that is a fact about rows rather than about a store: ending sessions.
  * @property {(req: import('node:http').IncomingMessage, limit: number) => Promise<Buffer | undefined>} readBody - the capped body reader.
- * @property {(accountId: string) => Promise<void>} destroyVolume - takes a deleted tenant's volume with them.
+ * @property {(event: string, email: string, extra?: object) => Promise<boolean>} tellGateway - hands the runtime plane what only it can do, and says whether it arrived.
  * @property {string | undefined} version - the release shown on the page.
  */
 
@@ -234,7 +240,7 @@ export async function handleConsole(path, req, res, deps) {
       // Suspension has to take away what is already granted, or it only stops
       // the next sign-in while the open tab keeps working.
       if (updated?.disabled === true) {
-        await deps.tokens.revokeAll(email)
+        await revokeAllFor(deps.db, email)
         // Said, not done. Whether a suspended tenant's machine keeps running
         // for a moment is the runtime plane's to decide; what this service
         // owns is the account's state, and it has already changed. The
@@ -267,10 +273,25 @@ export async function handleConsole(path, req, res, deps) {
     }
     case '/delete': {
       const doomed = await deps.accounts.read(email)
-      // The same sequence a tenant's own deletion runs, from the same place:
-      // two ways to delete an account that took different things away would be
-      // two different promises about what deletion means.
-      if (doomed !== undefined) await eraseAccount(deps, doomed)
+      if (doomed === undefined) break
+
+      // Sessions first, and here: they are rows in the database this service
+      // owns, and ending them is what makes everything after this safe to do
+      // in any order — nothing reaches the machine once the tokens are gone.
+      await revokeAllFor(deps.db, email)
+
+      // Then the machine and the volume, which are the gateway's. Asked, and
+      // the answer is waited for: a volume holds a tenant's files, and a
+      // deletion that reported success while the files survived would be the
+      // one promise this action must not break. The row stays if it fails, so
+      // the console still lists somebody to try again on.
+      const gone = await deps.tellGateway('deleted', email, { id: doomed.id })
+      if (!gone) {
+        notice = 'account.erase.stuck'
+        break
+      }
+
+      await deps.accounts.erase(email)
       notice = { code: 'account.erased', params: { email } }
       break
     }
@@ -282,7 +303,11 @@ export async function handleConsole(path, req, res, deps) {
   }
   // The code, not the sentence: the sentence has a language now, and a log line
   // that picked one would be picking it for whoever reads the logs.
-  console.log(`admin: ${OPERATOR} — ${notice === undefined ? `no such account ${email}` : `${notice.code} ${email}`}`)
+  // A notice is either a bare code or a code with parameters, and this line
+  // printed `undefined` for every bare one — which is most of the failures,
+  // the only ones worth reading a log for.
+  const said = notice === undefined ? `no such account ${email}` : `${typeof notice === 'string' ? notice : notice.code} ${email}`
+  console.log(`admin: ${OPERATOR} — ${said}`)
   backToConsole(res, notice, req)
 }
 
