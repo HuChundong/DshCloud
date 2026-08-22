@@ -4,20 +4,16 @@
  * `totp.js` knows the algorithm. This knows the deployment: where the secret
  * is kept, how it gets onto a phone, and what happens when that phone is lost.
  *
- * ## Why the secret moved out of the environment
+ * ## One place the secret can be
  *
- * It used to be `ADMIN_TOTP_SECRET`, read once at boot. That works, and it is
- * still the fallback — but it means enrolling is an operator editing a file on
- * the host, restarting the service, and typing thirty-two characters into a
- * phone by hand. Every 2FA system people have already used does the opposite:
- * sign in, press a button, scan a square, type one code to prove the square
- * was read. So the secret has to be writable at runtime, and the environment
- * is not.
- *
- * The precedent is the model credential, which is also a secret and also lives
- * in `settings`: a stored row wins, and the environment is what answers when
- * there is no row. A deployment that only ever sets the variable behaves
- * exactly as it did.
+ * The enrolment row, and nowhere else. It was briefly readable from
+ * `ADMIN_TOTP_SECRET` as well, so that a deployment could pin it in a file —
+ * and that second source of truth immediately did what second sources of truth
+ * do: a fresh deployment demanded a code from a secret nobody had scanned,
+ * because the variable was set before anybody could enrol. The environment
+ * cannot be written at runtime, so it cannot be the place a phone is enrolled;
+ * having it win anyway only meant the console showed buttons it then refused
+ * to honour.
  *
  * ## Nothing is enabled until a code proves it
  *
@@ -42,9 +38,8 @@
  */
 
 import { createHash, randomInt, timingSafeEqual } from 'node:crypto'
-import process from 'node:process'
 
-import { accepts as totpAccepts, enrolmentUri, generateSecret, normalize, usable } from './totp.js'
+import { accepts as totpAccepts, enrolmentUri, generateSecret, usable } from './totp.js'
 
 /** Where the enrolment lives in the settings table. */
 const KEY = 'admin.second_factor'
@@ -133,7 +128,7 @@ export class SecondFactor {
   /**
    * What the console shows, and what sign-in decides with.
    *
-   * @returns {Promise<{enabled: boolean, source: 'console'|'environment'|'none', recoveryLeft: number, updatedAt: number|undefined, updatedBy: string|undefined}>} the state.
+   * @returns {Promise<{enabled: boolean, source: 'console'|'none', recoveryLeft: number, updatedAt: number|undefined, updatedBy: string|undefined}>} the state.
    */
   async state() {
     const row = await this.stored()
@@ -145,10 +140,6 @@ export class SecondFactor {
         updatedAt: row.updatedAt,
         updatedBy: row.updatedBy,
       }
-    }
-    const fromEnvironment = normalize(process.env.ADMIN_TOTP_SECRET ?? '')
-    if (usable(fromEnvironment)) {
-      return { enabled: true, source: 'environment', recoveryLeft: 0, updatedAt: undefined, updatedBy: undefined }
     }
     return { enabled: false, source: 'none', recoveryLeft: 0, updatedAt: undefined, updatedBy: undefined }
   }
@@ -173,10 +164,8 @@ export class SecondFactor {
   async accepts(offered) {
     const typed = String(offered ?? '').trim()
     const row = await this.stored()
-    const secret = row !== undefined && usable(row.secret)
-      ? row.secret
-      : normalize(process.env.ADMIN_TOTP_SECRET ?? '')
-    if (!usable(secret)) return false
+    if (row === undefined || !usable(row.secret)) return false
+    const secret = row.secret
 
     if (/^\d{6}$/.test(typed.replaceAll(/\s/g, ''))) return totpAccepts(secret, typed)
 
@@ -279,10 +268,7 @@ export class SecondFactor {
   }
 
   /**
-   * Forget the console's enrolment.
-   *
-   * Falls back to `ADMIN_TOTP_SECRET` if the deployment sets one, which is why
-   * this is "forget the row" rather than "turn the second factor off".
+   * Turn the second factor off, by forgetting what was enrolled.
    *
    * @returns {Promise<void>} resolves once the row is gone.
    */

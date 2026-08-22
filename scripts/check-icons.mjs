@@ -79,12 +79,19 @@ for (const [name, glyph] of Object.entries(icons)) {
 
 /** @type {Array<{file: string, constant: string, glyphs: string[]}>} */
 const COPIES = [
-  { file: 'packages/dsh-tenant-account/client.js', constant: 'DRAWN', glyphs: ['signout', 'admin'] },
+  { file: 'packages/dsh-tenant-account/client.js', constant: 'DRAWN', glyphs: ['signout'] },
   { file: 'packages/dsh-sandbox-host/client.js', constant: 'SANDBOX_GLYPH', glyphs: ['sandbox'] },
 ]
 
-/** Which glyph in `extracted` a copied name means, where the plugin calls it something else. */
-const ALIAS = { admin: 'people' }
+/**
+ * Which glyph in `extracted` a copied name means, where the plugin calls it
+ * something else.
+ *
+ * Empty at the moment. It held `admin: 'people'` while the account menu had a
+ * row that led to the console; the console has its own hostname and its own
+ * credential now, and nothing on the tenants' side links to it.
+ */
+const ALIAS = {}
 
 for (const { file, constant, glyphs } of COPIES) {
   const source = read(file)

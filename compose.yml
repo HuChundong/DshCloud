@@ -248,11 +248,6 @@ services:
       # published password.
       ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH:-}
       ADMIN_SESSION_SECRET: ${ADMIN_SESSION_SECRET:-}
-      # The second factor. Produced by `node admin/totp-secret.mjs`. Unset, the
-      # service starts and says on every boot that one password is the only
-      # thing in front of every account — which is a warning worth repeating
-      # rather than a default worth accepting.
-      ADMIN_TOTP_SECRET: ${ADMIN_TOTP_SECRET:-}
       # How it tells the gateway about an account it changed. Both halves empty
       # means it tells nothing and the gateway reaches the same state on its
       # own, more slowly.

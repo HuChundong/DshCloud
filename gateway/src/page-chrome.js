@@ -1,8 +1,12 @@
 /**
- * What the gateway's two pages have in common.
+ * What this deployment's server-rendered pages have in common.
  *
- * Sign-in and the user console are separate pages with separate jobs, but a
- * person meets them one after the other and they have to look like one product.
+ * They no longer all belong to the gateway. The operator's console is a
+ * separate service on a separate hostname and imports this from here, which is
+ * the point rather than an accident: a tenant's sign-in and an operator's
+ * console are different products to different people and still have to look
+ * like one deployment.
+ *
  * The palette, the wordmark, the toast, and the theme toggle were written twice
  * before this existed, which is exactly as long as it took for a fix to land in
  * one of them and not the other.
@@ -337,8 +341,8 @@ export const CONSOLE_NOTICES = {
   'account.restored':   { zh: '{email} 已恢复。', en: '{email} is enabled again.' },
   'account.erased':     { zh: '{email} 已删除。', en: '{email} has been deleted.' },
   'account.erase.stuck': {
-    zh: '未删除：网关没有确认沙箱和数据卷已清理，账号保留以便重试。会话已经吊销。',
-    en: 'Not deleted: the gateway did not confirm the sandbox and volume were cleared, so the account is kept to try again. The sessions are already revoked.',
+    zh: '未删除：网关没有应答，什么都没有发生。账号仍在，可以稍后重试。',
+    en: 'Not deleted: the gateway did not answer, so nothing happened at all. The account is still there — try again shortly.',
   },
   'sandbox.reclaimed':  { zh: '{email} 的沙箱已回收，下次请求会重建一个。', en: 'The sandbox for {email} was reclaimed; the next request builds a new one.' },
   'plan.moved':         { zh: '{email} 的套餐已更新。', en: 'The plan for {email} has been updated.' },
@@ -631,8 +635,9 @@ export function langToggle(table) {
     //
     // The applier runs on load and on the toggle, which was the whole story while
     // every page here was rendered once and then only read. The console is not:
-    // every action re-reads /admin and swaps the whole of main for what the
-    // server sent, and what the server sends is Chinese with a key beside it.
+    // every action re-reads the console and swaps the whole of main for what
+    // the server sent, and what the server sends is Chinese with a key beside
+    // it.
     // A reader who had chosen English got their table back in Chinese after
     // every suspend, reclaim and delete — the toggle still said EN, because the
     // toggle is outside main and was never replaced.

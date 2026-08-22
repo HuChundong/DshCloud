@@ -50,9 +50,14 @@ Chosen on the way in, and shown in the sidebar afterwards.
 
 ![A tenant's profile](docs/assets/screenshot-profile.webp)
 
-### Administration
+### The operator's console
 
-![Administration](docs/assets/screenshot-admin.webp)
+Its own deployment, its own hostname, its own credential — a username, a
+password, and a second factor enrolled by scanning a square in the console
+itself. Nothing on the tenants' side links to it. Accounts, tiers, invite codes
+and the model credential live here.
+
+![The operator's console](docs/assets/screenshot-admin.webp)
 
 ## Architecture
 

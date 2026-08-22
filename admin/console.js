@@ -47,11 +47,11 @@ import { isPlan } from '../gateway/src/plans.js'
  */
 
 /**
- * Serve the administrator's console and its actions.
+ * Serve the operator's console and its actions.
  *
- * Every path here requires an administrator, and an ordinary caller is answered
- * 404 rather than 403: the console is not something a tenant needs to know
- * exists.
+ * Nothing here checks a caller. It is not reachable without `server.js` having
+ * admitted one, and a second check would be a second place for the two to
+ * disagree.
  *
  * @param {string} path - the request path.
  * @param {import('node:http').IncomingMessage} req - the request.
@@ -275,23 +275,20 @@ export async function handleConsole(path, req, res, deps) {
       const doomed = await deps.accounts.read(email)
       if (doomed === undefined) break
 
-      // Sessions first, and here: they are rows in the database this service
-      // owns, and ending them is what makes everything after this safe to do
-      // in any order — nothing reaches the machine once the tokens are gone.
-      await revokeAllFor(deps.db, email)
-
-      // Then the machine and the volume, which are the gateway's. Asked, and
-      // the answer is waited for: a volume holds a tenant's files, and a
-      // deletion that reported success while the files survived would be the
-      // one promise this action must not break. The row stays if it fails, so
-      // the console still lists somebody to try again on.
-      const gone = await deps.tellGateway('deleted', email, { id: doomed.id })
-      if (!gone) {
+      // Asked of the gateway, whole. Deleting an account revokes its sessions,
+      // releases its machine and destroys its volume, and that sequence lives
+      // in one place because a tenant deleting themselves must take away the
+      // same things — so this asks for it rather than performing a second
+      // version of it here.
+      //
+      // The row is the gateway's to remove too, at the end of that sequence.
+      // If the request never arrives, nothing has happened at all: the account
+      // is still listed, still signed in, still running, and the operator can
+      // try again. A half-deleted tenant is the state worth not having.
+      if (!await deps.tellGateway('deleted', email)) {
         notice = 'account.erase.stuck'
         break
       }
-
-      await deps.accounts.erase(email)
       notice = { code: 'account.erased', params: { email } }
       break
     }
@@ -338,7 +335,7 @@ function readNotice(done) {
  * Answer an administrative action by sending the browser back to the console.
  *
  * A redirect rather than the page itself, so the address bar keeps saying
- * `/admin` after a delete instead of `/delete` — and so a refresh reloads
+ * the console's own root after a delete instead of `/delete` — and so a refresh reloads
  * the console rather than re-submitting the action. The outcome rides along as
  * a query parameter, which is the only part of it that has to survive a
  * redirect; it is rendered as escaped text by the page that reads it.

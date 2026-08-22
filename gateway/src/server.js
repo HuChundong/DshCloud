@@ -17,8 +17,6 @@
  *   *    /secrets        the tenant's own sandbox environment — see secrets.js
  *   POST /sandbox/restart  throw this tenant's sandbox away; the next request rebuilds it
  *   POST /profile        set them, then into the application
- *   GET  /admin          the administrator's console — see console.js
- *   POST /admin/*        one administrative action, then back to the console
  *   *    /api/*          authenticated; proxied into the caller's sandbox
  *   WS   /api/events.*   authenticated; bridged into the caller's sandbox
  *   WS   /_tunnel        sandbox dial-in
@@ -52,7 +50,8 @@ import { handleSignIn } from './sign-in.js'
 import { Tokens, signedOutCookies } from './tokens.js'
 import { TunnelServer } from './tunnel-server.js'
 import { Verification } from './verification.js'
-import { destroyVolume, volumesEnabled } from './volumes.js'
+import { destroyVolume } from './volumes.js'
+import { eraseAccount } from './erase.js'
 
 /**
  * The addresses that are the application itself, as the browser asks for them.
@@ -217,8 +216,10 @@ const profileDeps = {
   accounts,
   callerOf,
   readBody,
-  // What closing an account takes with it. The same four the console's own
-  // delete uses, because both hand them to `eraseAccount`.
+  // What closing an account takes with it. The operator's console reaches the
+  // same four through `/_internal/account`, because both deletions hand them
+  // to `eraseAccount` — one sequence, so the two cannot come to mean different
+  // things.
   tokens,
   sandboxes,
   destroyVolume: async (accountId) => { await destroyVolume(cubeRequest, accountId) },
@@ -484,33 +485,28 @@ async function handleRequest(req, res) {
 
     console.log(`gateway: the console reports ${email} ${String(told.event)}`)
 
-    // The machine, for either event. Best effort: a sandbox that outlives this
-    // by a few minutes is collected by the idle sweep, and nothing reaches it
-    // in the meantime because the console has already ended the sessions.
+    // A deletion runs the same sequence a tenant's own deletion runs, from the
+    // same place. Two ways to delete an account that took different things
+    // away would be two different promises about what deletion means — and
+    // writing the second one here is exactly what `erase.js` exists to stop.
+    //
+    // The row goes with it. The console keeps its own until this answers, so a
+    // request that never arrived leaves an account to try again on rather than
+    // a tenant who is half gone.
+    if (told.event === 'deleted') {
+      const account = await accounts.read(email)
+      if (account !== undefined) await eraseAccount(profileDeps, account)
+      res.writeHead(204)
+      res.end()
+      return
+    }
+
+    // A suspension takes the machine and nothing else. Best effort: the console
+    // has already ended the sessions, so nothing reaches a sandbox that outlives
+    // this by a few minutes, and the idle sweep collects it.
     await sandboxes.release(email).catch((error) => {
       console.error(`gateway: releasing ${email} after ${String(told.event)} failed: ${error.message}`)
     })
-
-    // The volume, for a deletion only, and not best effort. It holds the
-    // tenant's files; the console keeps the account row until this answers, so
-    // a failure here leaves something to retry rather than a deleted row and
-    // an orphaned disk nobody is looking for.
-    if (told.event === 'deleted' && volumesEnabled()) {
-      const id = typeof told.id === 'string' ? told.id : ''
-      if (id === '') {
-        res.writeHead(400, { 'Content-Type': 'text/plain' })
-        res.end('no account id')
-        return
-      }
-      try {
-        await destroyVolume(cubeRequest, id)
-      } catch (error) {
-        console.error(`gateway: destroying ${email}'s volume failed: ${error.message}`)
-        res.writeHead(502, { 'Content-Type': 'text/plain' })
-        res.end('the volume is still there')
-        return
-      }
-    }
 
     res.writeHead(204)
     res.end()
@@ -581,7 +577,6 @@ async function handleRequest(req, res) {
     // the sidebar rendering a letter first and replacing it a moment later.
     res.end(JSON.stringify({
       username: caller.email,
-      admin: caller.admin,
       displayName: account?.displayName ?? null,
       avatar: account?.avatar ?? null,
       // The tier's id, and only its id. What it is CALLED is a question with a

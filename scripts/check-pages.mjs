@@ -116,20 +116,6 @@ async function pages() {
       }),
     },
     {
-      name: 'admin (second factor set in the environment)',
-      group: 'admin',
-      html: adminPage({
-        accounts: [], invites: [],
-        credential: { baseUrl: '', apiKey: '', source: 'environment', updatedAt: undefined, updatedBy: undefined },
-        access: { inviteRequired: false, sandboxLimit: 0, source: 'environment', updatedAt: undefined, updatedBy: undefined },
-        security: {
-          enabled: true, source: 'environment', recoveryLeft: 0, updatedAt: undefined, updatedBy: undefined,
-          qr: undefined, secret: undefined, freshCodes: undefined,
-        },
-        viewer: 'root@example.com', notice: undefined, version: '1.2.3',
-      }),
-    },
-    {
       name: 'admin (recovery codes, shown once)',
       group: 'admin',
       html: adminPage({

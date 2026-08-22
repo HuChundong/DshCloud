@@ -174,16 +174,6 @@ window.__ModuleLoader__.load({
         ],
         stroke: { width: 2, linecap: 'round', linejoin: 'round' },
       },
-      admin: {
-        viewBox: '0 0 24 24',
-        paths: [
-          'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2',
-          'M16 3.128a4 4 0 0 1 0 7.744',
-          'M22 21v-2a4 4 0 0 0-3-3.87',
-          'M5 7a4 4 0 1 0 8 0a4 4 0 1 0 -8 0',
-        ],
-        stroke: { width: 2, linecap: 'round', linejoin: 'round' },
-      },
     }
 
 
@@ -252,7 +242,7 @@ window.__ModuleLoader__.load({
      * already what the free tier looks like, so starting there is the one
      * choice that does not flicker for the people it is right about.
      */
-    const NOBODY = { username: '', admin: false, displayName: '', avatar: '', plan: 'free' }
+    const NOBODY = { username: '', displayName: '', avatar: '', plan: 'free' }
 
     /**
      * The plugin context, captured at mount, so the pieces that are not
@@ -466,7 +456,7 @@ window.__ModuleLoader__.load({
 
     /**
      * Subscribe to the caller.
-     * @returns {{username: string, admin: boolean, displayName: string, avatar: string, plan: string}} the caller, `NOBODY` until the answer lands.
+     * @returns {{username: string, displayName: string, avatar: string, plan: string}} the caller, `NOBODY` until the answer lands.
      */
     const useWhoami = () => {
       const [who, setWho] = React.useState(NOBODY)
@@ -476,7 +466,6 @@ window.__ModuleLoader__.load({
           if (!live) return
           setWho({
             username: String(body?.username ?? ''),
-            admin: body?.admin === true,
             // Both are null for an account that has not set them, and the empty
             // string is what every reader below tests for.
             displayName: typeof body?.displayName === 'string' ? body.displayName : '',
@@ -1060,9 +1049,9 @@ window.__ModuleLoader__.load({
         'div',
         { style: { display: 'flex', flexDirection: 'column', gap: '4px', maxWidth: '32rem' } },
         // The profile, and the one way to change it. `/profile` is a gateway
-        // page rather than a panel here for the same reason `/admin` is a link:
-        // it edits an account the harness has no notion of, and it has to work
-        // on the way in, before this bundle has ever loaded.
+        // page rather than a panel here because it edits an account the harness
+        // has no notion of, and it has to work on the way in, before this
+        // bundle has ever loaded.
         React.createElement(
           'div',
           { style: { ...row, alignItems: 'center', borderBottom: '1px solid var(--dsw-alias-border-l1)' } },
@@ -1704,11 +1693,10 @@ window.__ModuleLoader__.load({
             // event never travels through it.
             //
             // It was stopped row by row before, which held only as long as
-            // nobody added a row. The admin link never had it and always
-            // opened settings on its way to /admin, and the dialog this menu
-            // opens had it nowhere, so saving a profile opened settings too.
-            // One boundary, at the edge of what is portalled, is the version
-            // that stays fixed.
+            // nobody added a row — the row that went to the console never had
+            // it, and the dialog this menu opens had it nowhere, so saving a
+            // profile opened settings too. One boundary, at the edge of what is
+            // portalled, is the version that stays fixed.
             onClick: (event) => { event.stopPropagation() },
             onPointerDown: (event) => { event.stopPropagation() },
           },

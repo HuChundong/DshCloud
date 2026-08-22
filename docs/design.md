@@ -226,18 +226,31 @@ Sign-in codes are the only short-lived rows and expire by a column rather than
 by the store, so a row that outlived its use is already invisible to every read
 and the sweep is housekeeping rather than correctness.
 
-## The user console
+## The operator's console
 
-`GATEWAY_ADMINS` names the addresses that administer the deployment. They get
-`/admin`: who has registered, when, whether their sandbox is running, the invite
-codes and who used them, and a box to mint more. Two things can be done about an
-account. Suspending keeps the account and everything it owns, and
-revokes its tokens and sandbox so it takes effect now rather than at the next
-sign-in. Deleting takes the account, its sessions, and its sandbox. Anyone else
-gets 404 there — the console is not something a tenant needs to know exists.
+A separate service on a separate hostname, with a credential that belongs to the
+deployment rather than to any account: a username, a password, and a second
+factor enrolled from the console itself. It used to be `/admin` on the tenants'
+site, reached by a tenant who happened to be named in `GATEWAY_ADMINS`, and that
+was hiding rather than isolating — an operator is a different kind of principal
+from somebody who signed up, and running both through one session made the one
+surface that can change every account a page on the surface every tenant reaches.
 
-Administrators are not offered either action against their own account. Both
-would work, and the second would take away the only way back in.
+It shows who has registered, when, the tiers they are on, the invite codes and
+who used them, and a box to mint more. It does not show whether a sandbox is
+running: that is the platform's to answer and the gateway's to ask, and a count
+this service learned from a third party some seconds ago is worse than a count it
+does not show.
+
+Two things can be done about an account. Suspending keeps the account and
+everything it owns, and revokes its sessions so it takes effect now rather than
+at the next sign-in. Deleting takes the account, its sessions, its sandbox and
+its volume — asked of the gateway over an internal channel, because that is the
+same sequence a tenant's own deletion runs and two versions of it would be two
+different promises about what deletion means.
+
+`GATEWAY_ADMINS` no longer opens anything. It marks accounts on the console, and
+stands in for `POLICY_CONTACT` when that is unset.
 
 ## What a tenant keeps
 

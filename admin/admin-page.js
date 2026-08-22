@@ -97,16 +97,16 @@ export function adminPage(state) {
   // third party some seconds ago is worse than a count it does not show. How
   // many are running is a question for wherever machines are managed.
   const ceiling = access.sandboxLimit === 0 ? undefined : String(access.sandboxLimit)
-  // The ceiling reads as a number or as a word, and the word is a word in
-  // each language — so it goes through the table rather than into the sentence
-  // as text.
-  // Composed here rather than shipped in two pieces: the word is only ever seen
-  // inside this sentence, so the sentence is what the table carries.
-  const unlimited = { zh: '不限', en: 'no limit' }
-  const note = {
-    zh: S['access.note'].zh.replace('{0}', ceiling ?? unlimited.zh),
-    en: S['access.note'].en.replace('{0}', ceiling ?? unlimited.en),
-  }
+  // Two sentences rather than one with a hole in it. With a hole, the
+  // no-limit case read "ceiling: no limit — enter 0 for no limit", which is
+  // the sentence explaining itself back to the reader.
+  const noteKey = ceiling === undefined ? 'access.note.uncapped' : 'access.note.capped'
+  const note = ceiling === undefined
+    ? S[noteKey]
+    : {
+      zh: S[noteKey].zh.replace('{0}', ceiling),
+      en: S[noteKey].en.replace('{0}', ceiling),
+    }
 
   // Everything the console says: the static strings the row helpers share, plus
   // the one sentence that has a number in it and whatever the banner is saying.
@@ -130,9 +130,7 @@ export function adminPage(state) {
   }
 
   const tfaHint = security.enabled
-    ? security.source === 'environment'
-      ? '<span data-t="tfa.env">由环境变量配置</span>'
-      : `<span data-t="tfa.on">已开启</span>${security.updatedAt === undefined ? '' : ` · ${when(security.updatedAt)}`}`
+    ? `<span data-t="tfa.on">已开启</span>${security.updatedAt === undefined ? '' : ` · ${when(security.updatedAt)}`}`
     : '<span data-t="tfa.off">未开启</span>'
 
   const tfaBody = security.freshCodes !== undefined
@@ -152,9 +150,7 @@ export function adminPage(state) {
       </form>
       <form method="post" action="/security/cancel"><button type="submit" class="quiet" data-t="tfa.cancel">取消</button></form>`
       : security.enabled
-        ? security.source === 'environment'
-          ? `<p class="note" data-t="tfa.env.note">密钥来自 ADMIN_TOTP_SECRET，由部署方在环境里管理，这里不能改。删掉那一行并重启，就可以在这里自助开启。</p>`
-          : `<p class="note" data-t="tfa.on.note">${escapeHtml(tfaOnNote.zh)}</p>
+        ? `<p class="note" data-t="tfa.on.note">${escapeHtml(tfaOnNote.zh)}</p>
           <form method="post" action="/security/recovery" class="creds">
             <input name="password" type="password" required autocomplete="current-password" data-tp="tfa.password" placeholder="当前密码" aria-label="当前密码">
             <button type="submit" class="save" data-t="tfa.remint">重新生成备用码</button>
@@ -169,7 +165,7 @@ export function adminPage(state) {
           <button type="submit" class="save" data-t="tfa.begin">开启两步验证</button>
         </form>`
 
-  const table = { ...CONSOLE_NOTICES, ...S, 'access.note': note, 'tfa.on.note': tfaOnNote, 'doc.title': { zh: '用户管理 · HamsterHQ', en: 'Console · HamsterHQ' }, ...toastEntry(undefined, notice) }
+  const table = { ...CONSOLE_NOTICES, ...S, [noteKey]: note, 'tfa.on.note': tfaOnNote, 'doc.title': { zh: '用户管理 · HamsterHQ', en: 'Console · HamsterHQ' }, ...toastEntry(undefined, notice) }
 
   const inviteRows = invites.length === 0
     ? '<tr><td colspan="4" class="empty" data-t="empty.invites">还没有邀请码。</td></tr>'
@@ -482,7 +478,7 @@ ${langToggle(table)}
       </label>
       <button type="submit" class="save" data-t="save">保存</button>
     </form>
-    <p class="note" data-t="access.note">${escapeHtml(note.zh)}</p>
+    <p class="note" data-t="${noteKey}">${escapeHtml(note.zh)}</p>
   </section>
 
   <section class="card">
@@ -835,9 +831,13 @@ const S = {
   'access.h':      { zh: '接入', en: 'Access' },
   'access.invite': { zh: '注册需要邀请码', en: 'Registration needs an invite code' },
   'access.limit':  { zh: '沙箱上限', en: 'Sandbox ceiling' },
-  'access.note':   {
-    zh: '沙箱上限 {0}。填 0 表示不限；达到上限后，手上没有沙箱的账号既不能注册也不能登录，已在运行的租户不受影响。当前在线数由平台侧统计，这里不显示。',
-    en: 'Sandbox ceiling: {0}. A ceiling of 0 means no limit. Once it is reached, an account without a sandbox can neither register nor sign in; tenants already running are unaffected. How many are running is counted where machines are managed, not here.',
+  'access.note.capped': {
+    zh: '沙箱上限 {0}。达到上限后，手上没有沙箱的账号既不能注册也不能登录，已在运行的租户不受影响。当前在线数由平台侧统计，这里不显示。',
+    en: 'Sandbox ceiling: {0}. Once it is reached, an account without a sandbox can neither register nor sign in; tenants already running are unaffected. How many are running is counted where machines are managed, not here.',
+  },
+  'access.note.uncapped': {
+    zh: '沙箱数量不限。填一个大于 0 的数即可设上限；当前在线数由平台侧统计，这里不显示。',
+    en: 'No sandbox ceiling. Enter a number above 0 to set one. How many are running is counted where machines are managed, not here.',
   },
 
   'model.h':   { zh: '模型密钥', en: 'Model credential' },
@@ -847,7 +847,6 @@ const S = {
   'tfa.h':   { zh: '两步验证', en: 'Two-step verification' },
   'tfa.on':  { zh: '已开启', en: 'on' },
   'tfa.off': { zh: '未开启', en: 'off' },
-  'tfa.env': { zh: '由环境变量配置', en: 'set in the environment' },
   'tfa.off.note': {
     zh: '现在只有一个密码挡在这个控制台前面，而这个控制台能改动每一个账户。开启后，登录还需要验证器 App 上的 6 位数字。',
     en: 'One password is all that stands in front of this console, and this console can change every account. With this on, signing in also takes the six digits from an authenticator app.',
@@ -855,10 +854,6 @@ const S = {
   'tfa.on.note': {
     zh: '登录时会要求输入验证器上的 6 位数字。剩余备用码：{0}。',
     en: 'Signing in asks for the six digits from your authenticator. Recovery codes left: {0}.',
-  },
-  'tfa.env.note': {
-    zh: '密钥来自 ADMIN_TOTP_SECRET，由部署方在环境里管理，这里不能改。删掉那一行并重启，就可以在这里自助开启。',
-    en: 'The secret comes from ADMIN_TOTP_SECRET, managed by the deployment rather than here. Remove that line and restart to enrol from this page instead.',
   },
   'tfa.begin':    { zh: '开启两步验证', en: 'Turn on two-step verification' },
   'tfa.password': { zh: '当前密码', en: 'Current password' },

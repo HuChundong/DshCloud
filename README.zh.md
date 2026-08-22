@@ -44,9 +44,12 @@ DSH 本身是依赖，从 npm 安装，从不打补丁。本项目要加给它�
 
 ![租户的个人资料](docs/assets/screenshot-profile.webp)
 
-### 管理后台
+### 运营控制台
 
-![管理后台](docs/assets/screenshot-admin.webp)
+独立部署，独立域名，独立凭据——用户名、密码，加上在控制台里扫码绑定的第二因素。租户那一侧
+没有任何入口通向它。账户、套餐、邀请码、模型密钥都在这里。
+
+![运营控制台](docs/assets/screenshot-admin.webp)
 
 ## 架构
 
