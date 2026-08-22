@@ -26,7 +26,7 @@
 import { createHmac } from 'node:crypto'
 import process from 'node:process'
 
-process.env.ADMIN_TOTP_SECRET = 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ'
+const SECRET = 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ'
 const { accepts } = await import('../admin/totp.js')
 
 /**
@@ -71,7 +71,7 @@ const realNow = Date.now
 function at(seconds, code) {
   Date.now = () => seconds * 1000
   try {
-    return accepts(code)
+    return accepts(SECRET, code)
   } finally {
     Date.now = realNow
   }

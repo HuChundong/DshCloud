@@ -48,13 +48,14 @@ function when(at) {
  * @param {{baseUrl: string, apiKey: string, source: string, updatedAt: number | undefined, updatedBy: string | undefined}} state.credential - the model credential in force, described rather than shown.
  * @param {{inviteRequired: boolean, sandboxLimit: number, source: string, updatedAt: number | undefined, updatedBy: string | undefined}} state.access - the gate in force: who may register, and how many sandboxes may run.
  * @param {number} state.live - how many sandboxes are running right now, which is what the ceiling is measured against.
+ * @param {{enabled: boolean, source: string, recoveryLeft: number, updatedAt: number|undefined, updatedBy: string|undefined, qr: string|undefined, secret: string|undefined, freshCodes: string[]|undefined}} state.security - the second factor: whether one is in force, and any enrolment half-finished.
  * @param {string} state.viewer - the administrator's own address, so the page can refuse to offer them their own delete button.
  * @param {string | {code: string, params?: object}} [state.notice] - the outcome of the action that led here, as a message code rather than a sentence.
  * @param {string} [state.version] - the dsh release this deployment runs.
  * @returns {string} the HTML document.
  */
 export function adminPage(state) {
-  const { accounts, invites, credential, access, live, viewer, notice, version } = state
+  const { accounts, invites, credential, access, security, live, viewer, notice, version } = state
   const release = version === undefined || version === '' ? '' : ` · v${escapeHtml(version)}`
   // A toast rather than a block in the page. It reports an action that has
   // already happened, so it dismisses itself — and being out of the layout, it
@@ -104,7 +105,61 @@ export function adminPage(state) {
   // the server answers an action with a CODE, and the code has to be lookup-able
   // on the page that shows it. Entries nobody names cost a line of JSON each and
   // are what lets a message be added to that table alone.
-  const table = { ...CONSOLE_NOTICES, ...S, 'access.note': note, 'doc.title': { zh: '用户管理 · HamsterHQ', en: 'Console · HamsterHQ' }, ...toastEntry(undefined, notice) }
+
+  // The second factor, in whichever of its three states it is. Enrolling is a
+  // state and not a separate page on purpose: the square being scanned and the
+  // field that proves it was scanned belong beside each other, and a page that
+  // navigated between them would be a page you can be halfway through when the
+  // enrolment times out.
+  // The remaining-codes count is substituted the way `access.note` is: the
+  // string carries a placeholder so both languages keep one sentence.
+  const left = String(security.recoveryLeft)
+  const tfaOnNote = {
+    zh: S['tfa.on.note'].zh.replace('{0}', left),
+    en: S['tfa.on.note'].en.replace('{0}', left),
+  }
+
+  const tfaHint = security.enabled
+    ? security.source === 'environment'
+      ? '<span data-t="tfa.env">由环境变量配置</span>'
+      : `<span data-t="tfa.on">已开启</span>${security.updatedAt === undefined ? '' : ` · ${when(security.updatedAt)}`}`
+    : '<span data-t="tfa.off">未开启</span>'
+
+  const tfaBody = security.freshCodes !== undefined
+    // Shown once, and this is the once. They are stored as digests, so this
+    // page is the only place they will ever exist in a readable form.
+    ? `<p class="note" data-t="tfa.codes.note">备用码。每个只能用一次，用于手机丢失时登录。现在保存好——离开这个页面后无法再看到。</p>
+    <ol class="codes">${security.freshCodes.map((code) => `<li>${escapeHtml(code)}</li>`).join('')}</ol>
+    <form method="post" action="/security/dismiss"><button type="submit" class="save" data-t="tfa.codes.done">我已保存</button></form>`
+    : security.qr !== undefined
+      ? `<p class="note" data-t="tfa.scan">用验证器 App 扫描下面的二维码，然后输入它显示的 6 位数字。验证通过后才会真正开启。</p>
+      <div class="qr">${security.qr}</div>
+      <p class="secret" data-t="tfa.manual">扫不上可以手动输入：</p>
+      <p class="secret-value">${escapeHtml(security.secret ?? '')}</p>
+      <form method="post" action="/security/activate" class="creds">
+        <input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required autocomplete="one-time-code" data-tp="tfa.code" placeholder="6 位验证码" aria-label="6 位验证码">
+        <button type="submit" class="save" data-t="tfa.verify">验证并开启</button>
+      </form>
+      <form method="post" action="/security/cancel"><button type="submit" class="quiet" data-t="tfa.cancel">取消</button></form>`
+      : security.enabled
+        ? security.source === 'environment'
+          ? `<p class="note" data-t="tfa.env.note">密钥来自 ADMIN_TOTP_SECRET，由部署方在环境里管理，这里不能改。删掉那一行并重启，就可以在这里自助开启。</p>`
+          : `<p class="note" data-t="tfa.on.note">${escapeHtml(tfaOnNote.zh)}</p>
+          <form method="post" action="/security/recovery" class="creds">
+            <input name="password" type="password" required autocomplete="current-password" data-tp="tfa.password" placeholder="当前密码" aria-label="当前密码">
+            <button type="submit" class="save" data-t="tfa.remint">重新生成备用码</button>
+          </form>
+          <form method="post" action="/security/disable" class="creds">
+            <input name="password" type="password" required autocomplete="current-password" data-tp="tfa.password" placeholder="当前密码" aria-label="当前密码">
+            <button type="submit" class="danger" data-t="tfa.disable" data-confirm="tfa.confirm">关闭两步验证</button>
+          </form>`
+        : `<p class="note" data-t="tfa.off.note">现在只有一个密码挡在这个控制台前面，而这个控制台能改动每一个账户。开启后，登录还需要验证器 App 上的 6 位数字。</p>
+        <form method="post" action="/security/begin" class="creds">
+          <input name="password" type="password" required autocomplete="current-password" data-tp="tfa.password" placeholder="当前密码" aria-label="当前密码">
+          <button type="submit" class="save" data-t="tfa.begin">开启两步验证</button>
+        </form>`
+
+  const table = { ...CONSOLE_NOTICES, ...S, 'access.note': note, 'tfa.on.note': tfaOnNote, 'doc.title': { zh: '用户管理 · HamsterHQ', en: 'Console · HamsterHQ' }, ...toastEntry(undefined, notice) }
 
   const inviteRows = invites.length === 0
     ? '<tr><td colspan="4" class="empty" data-t="empty.invites">还没有邀请码。</td></tr>'
@@ -286,6 +341,61 @@ ${TOAST_CSS}
   .creds input[type="number"] { flex: 0 0 6rem; }
   .card .note { margin: 0 0 1rem; color: var(--muted); font-size: .8125rem; line-height: 1.6; }
 
+  /* The enrolment square. A white ground in both themes, and that is not an
+     oversight: a scanner reads dark modules on a light one, so inverting it
+     for the dark page would make the console tidier and the code unreadable.
+     The same reason the tenants' sign-in page keeps its WeChat code white. */
+  .qr {
+    display: inline-block;
+    padding: 10px;
+    margin: 0 0 1rem;
+    border-radius: 10px;
+    background: #fff;
+    line-height: 0;
+  }
+  .qr svg { display: block; width: 168px; height: 168px; }
+
+  /* The secret in readable form, for a phone that cannot use its camera.
+     Monospace and spaced out, because it is going to be typed by hand. */
+  .secret { margin: 0 0 .25rem; color: var(--muted); font-size: .8125rem; }
+  .secret-value {
+    margin: 0 0 1rem;
+    font-family: var(--mono);
+    font-size: .875rem;
+    letter-spacing: .08em;
+    word-break: break-all;
+    user-select: all;
+  }
+
+  /* Recovery codes, shown once. Two columns so ten of them are one glance
+     rather than one scroll, and tabular figures so they line up. */
+  .codes {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .375rem 1rem;
+    margin: 0 0 1rem;
+    padding: 1rem;
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius-field);
+    background: var(--bg);
+    list-style: none;
+    counter-reset: code;
+    font-family: var(--mono);
+    font-size: .875rem;
+    font-variant-numeric: tabular-nums;
+    user-select: all;
+  }
+  .codes li::before {
+    counter-increment: code;
+    content: counter(code) '. ';
+    color: var(--faint);
+  }
+
+  /* The way out of an enrolment, beside the way through it. Quiet, because
+     one of the two is the thing you came here to do. */
+  button.quiet { border-color: transparent; color: var(--muted); }
+  button.quiet:hover { border-color: var(--line); color: var(--fg); }
+
   .mint { display: flex; align-items: center; gap: .5rem; margin-bottom: 1.25rem; }
   .mint input {
     width: 5rem;
@@ -340,7 +450,11 @@ ${langToggle(table)}
   <div class="brand">
     <img src="${asset('hamster.svg')}" alt="">
     ${WORDMARK}
-    <span class="here">${escapeHtml(viewer)} · <a href="/" data-t="back">返回应用</a></span>
+    <!-- Sign out, not "back to the app". This console has its own hostname,
+         where the root is this page — the old link pointed at the page it was
+         on. And an operator console with no way out is a session left open on
+         whatever machine it was opened from. -->
+    <span class="here">${escapeHtml(viewer)} · <a href="/sign-out" data-t="back">退出</a></span>
   </div>
 
   <h1 data-t="h">管理</h1>
@@ -368,6 +482,11 @@ ${langToggle(table)}
       <input name="apiKey" type="password" data-tp="model.key" placeholder="新密钥（留空则不改动）" aria-label="新密钥" autocomplete="new-password">
       <button type="submit" class="save" data-t="save">保存</button>
     </form>
+  </section>
+
+  <section class="card">
+    <h2><span data-t="tfa.h">两步验证</span> <span class="hint">${tfaHint}</span></h2>
+${tfaBody}
   </section>
 
   <section class="card">
@@ -692,7 +811,7 @@ function action(action, subject, label, field = 'email', confirm, args = []) {
  */
 const S = {
   h:      { zh: '管理', en: 'Console' },
-  back:   { zh: '返回应用', en: 'Back to the app' },
+  back:   { zh: '退出', en: 'Sign out' },
   save:   { zh: '保存', en: 'Save' },
   cancel: { zh: '取消', en: 'Cancel' },
   env:    { zh: '环境变量', en: 'environment' },
@@ -714,6 +833,44 @@ const S = {
   'model.h':   { zh: '模型密钥', en: 'Model credential' },
   'model.url': { zh: '接口地址', en: 'Endpoint' },
   'model.key': { zh: '新密钥（留空则不改动）', en: 'New key (leave empty to keep the current one)' },
+
+  'tfa.h':   { zh: '两步验证', en: 'Two-step verification' },
+  'tfa.on':  { zh: '已开启', en: 'on' },
+  'tfa.off': { zh: '未开启', en: 'off' },
+  'tfa.env': { zh: '由环境变量配置', en: 'set in the environment' },
+  'tfa.off.note': {
+    zh: '现在只有一个密码挡在这个控制台前面，而这个控制台能改动每一个账户。开启后，登录还需要验证器 App 上的 6 位数字。',
+    en: 'One password is all that stands in front of this console, and this console can change every account. With this on, signing in also takes the six digits from an authenticator app.',
+  },
+  'tfa.on.note': {
+    zh: '登录时会要求输入验证器上的 6 位数字。剩余备用码：{0}。',
+    en: 'Signing in asks for the six digits from your authenticator. Recovery codes left: {0}.',
+  },
+  'tfa.env.note': {
+    zh: '密钥来自 ADMIN_TOTP_SECRET，由部署方在环境里管理，这里不能改。删掉那一行并重启，就可以在这里自助开启。',
+    en: 'The secret comes from ADMIN_TOTP_SECRET, managed by the deployment rather than here. Remove that line and restart to enrol from this page instead.',
+  },
+  'tfa.begin':    { zh: '开启两步验证', en: 'Turn on two-step verification' },
+  'tfa.password': { zh: '当前密码', en: 'Current password' },
+  'tfa.scan': {
+    zh: '用验证器 App 扫描下面的二维码，然后输入它显示的 6 位数字。验证通过后才会真正开启。',
+    en: 'Scan this with an authenticator app, then type the six digits it shows. Nothing is turned on until those digits check out.',
+  },
+  'tfa.manual': { zh: '扫不上可以手动输入：', en: 'Or type the secret in by hand:' },
+  'tfa.code':   { zh: '6 位验证码', en: 'Six-digit code' },
+  'tfa.verify': { zh: '验证并开启', en: 'Verify and turn on' },
+  'tfa.cancel': { zh: '取消', en: 'Cancel' },
+  'tfa.remint': { zh: '重新生成备用码', en: 'Replace recovery codes' },
+  'tfa.disable': { zh: '关闭两步验证', en: 'Turn two-step verification off' },
+  'tfa.confirm': {
+    zh: '关闭后，只要有密码就能进入这个控制台。确定关闭？',
+    en: 'With this off, the password alone opens this console. Turn it off?',
+  },
+  'tfa.codes.note': {
+    zh: '备用码。每个只能用一次，用于手机丢失时登录。现在保存好——离开这个页面后无法再看到。',
+    en: 'Recovery codes. Each works once, for signing in when the phone is not to hand. Save them now — they are stored hashed and this page is the only place they are readable.',
+  },
+  'tfa.codes.done': { zh: '我已保存', en: 'Saved them' },
 
   'admins.h': { zh: '管理员', en: 'Administrators' },
   'users.h':  { zh: '用户', en: 'Tenants' },

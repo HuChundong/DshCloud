@@ -1,14 +1,21 @@
 /**
- * The second factor, because the first one is on the public internet.
+ * RFC 6238, which is what an authenticator app computes.
  *
- * A password alone in front of a console that can rotate every tenant's model
- * credential is a single secret that never changes, guessable forever by
- * anyone who finds the address — and the address announces itself: a
- * certificate for a name is published to certificate transparency logs the
- * moment it is issued, which is a matter of minutes and is not reversible.
+ * Implemented here rather than depended on. It is one HMAC and a truncation —
+ * no wire format, no negotiation, no versioning — and a dependency for that is
+ * more supply chain than arithmetic. The price of the exception is
+ * `scripts/check-totp.mjs`, which tests this against the vectors printed in
+ * the RFC rather than against a second reading of it: an authenticator app is
+ * an offline calculator, so nothing between it and this service can report a
+ * disagreement.
  *
- * RFC 6238, implemented here rather than depended on. It is one HMAC and a
- * truncation; a dependency for it is more supply chain than arithmetic.
+ * ## Nothing here decides anything
+ *
+ * This module knows the algorithm and not the deployment. Whether a second
+ * factor is asked for, which secret is in force, and where that secret is kept
+ * all belong to `second-factor.js` — because those change at runtime now, and
+ * an algorithm that read them from the environment could only ever answer for
+ * the environment it started in.
  *
  * ## Why the window is small
  *
@@ -27,11 +34,7 @@
  * @module totp
  */
 
-import { createHmac, timingSafeEqual } from 'node:crypto'
-import process from 'node:process'
-
-/** The shared secret, base32 as every authenticator app prints it. */
-const SECRET = (process.env.ADMIN_TOTP_SECRET ?? '').replaceAll(/[\s=]/g, '').toUpperCase()
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 
 /** RFC 6238's defaults, which every authenticator app assumes. */
 const STEP_SECONDS = 30
@@ -40,29 +43,97 @@ const DIGITS = 6
 /** How far either side of now a code is accepted. */
 const DRIFT_STEPS = 1
 
-/** Codes already spent, by the step they belonged to. */
+/** The alphabet these secrets are always written in. */
+const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
+
+/**
+ * Codes already spent, by the secret and step they belonged to.
+ *
+ * Keyed by the secret as well as the step, so a code spent against one
+ * enrolment says nothing about another — which matters while a new secret is
+ * being verified beside the one still in force.
+ */
 const spent = new Set()
 
 /**
- * Whether this deployment asks for a second factor at all.
- * @returns {boolean} whether a secret is configured.
+ * A fresh secret, printed once and never again.
+ *
+ * Twenty bytes, which is the length RFC 4226 recommends and what every
+ * authenticator app is used to reading.
+ *
+ * @returns {string} base32, as every authenticator app prints it.
  */
-export function required() {
-  return SECRET.length >= 16
+export function generateSecret() {
+  let bits = 0
+  let carry = 0
+  let secret = ''
+  for (const byte of randomBytes(20)) {
+    carry = (carry << 8) | byte
+    bits += 8
+    while (bits >= 5) {
+      bits -= 5
+      secret += ALPHABET[(carry >> bits) & 31]
+    }
+  }
+  return secret
 }
 
 /**
- * Decode base32, which is how these secrets are always written.
+ * The enrolment URI an authenticator app reads out of a QR code.
+ *
+ * @param {string} secret - the shared secret, base32.
+ * @param {string} account - what the app should call this entry.
+ * @param {string} issuer - what the app should file it under.
+ * @returns {string} the `otpauth://` URI.
+ */
+export function enrolmentUri(secret, account, issuer) {
+  // The label carries the issuer as well as the account, which is the older
+  // convention; the `issuer` parameter is the newer one. Apps read both, and
+  // the ones that read only the label are the reason to keep it.
+  const label = encodeURIComponent(`${issuer}:${account}`)
+  const query = new URLSearchParams({
+    secret: normalize(secret),
+    issuer,
+    algorithm: 'SHA1',
+    digits: String(DIGITS),
+    period: String(STEP_SECONDS),
+  })
+  return `otpauth://totp/${label}?${query.toString()}`
+}
+
+/**
+ * Tidy a secret as somebody might have typed or pasted it.
+ *
+ * @param {string} value - the secret.
+ * @returns {string} the same secret, in the one form the rest of this uses.
+ */
+export function normalize(value) {
+  return String(value ?? '').replaceAll(/[\s=]/g, '').toUpperCase()
+}
+
+/**
+ * Whether a secret is long enough to be one.
+ *
+ * @param {string} value - the secret.
+ * @returns {boolean} whether it can be used.
+ */
+export function usable(value) {
+  const secret = normalize(value)
+  return secret.length >= 16 && [...secret].every((character) => ALPHABET.includes(character))
+}
+
+/**
+ * Decode base32.
+ *
  * @param {string} value - the secret.
  * @returns {Buffer} its bytes.
  */
 function base32(value) {
-  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
   let bits = 0
   let carry = 0
   const bytes = []
   for (const character of value) {
-    const index = alphabet.indexOf(character)
+    const index = ALPHABET.indexOf(character)
     if (index < 0) continue
     carry = (carry << 5) | index
     bits += 5
@@ -76,6 +147,7 @@ function base32(value) {
 
 /**
  * The code for one time step.
+ *
  * @param {Buffer} key - the secret's bytes.
  * @param {number} step - which step.
  * @returns {string} the code, zero-padded.
@@ -90,17 +162,19 @@ function codeFor(key, step) {
 }
 
 /**
- * Whether this code is the one on the operator's phone right now.
+ * Whether this code is the one on the phone holding that secret right now.
  *
+ * @param {string} secret - the shared secret, base32.
  * @param {string} offered - what was typed.
  * @returns {boolean} whether to accept it.
  */
-export function accepts(offered) {
-  if (!required()) return true
+export function accepts(secret, offered) {
+  const shared = normalize(secret)
+  if (!usable(shared)) return false
   const typed = String(offered ?? '').replaceAll(/\D/g, '')
   if (typed.length !== DIGITS) return false
 
-  const key = base32(SECRET)
+  const key = base32(shared)
   const now = Math.floor(Date.now() / 1000 / STEP_SECONDS)
   for (let drift = -DRIFT_STEPS; drift <= DRIFT_STEPS; drift += 1) {
     const step = now + drift
@@ -108,7 +182,7 @@ export function accepts(offered) {
     const given = Buffer.from(typed)
     if (expected.length !== given.length || !timingSafeEqual(expected, given)) continue
     // Spent, and remembered for as long as it could still be offered again.
-    const ticket = `${String(step)}:${typed}`
+    const ticket = `${shared}:${String(step)}:${typed}`
     if (spent.has(ticket)) return false
     spent.add(ticket)
     setTimeout(() => spent.delete(ticket), (DRIFT_STEPS * 2 + 1) * STEP_SECONDS * 1000).unref?.()

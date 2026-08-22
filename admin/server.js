@@ -39,7 +39,7 @@ import { Settings } from '../gateway/src/settings.js'
 import { USERNAME, canSignIn, failed, mayAttempt, succeeded, verify } from './auth.js'
 import { canIssue, cookie, issue, signedIn } from './session.js'
 import * as challenge from './challenge.js'
-import { accepts, required as totpRequired } from './totp.js'
+import { SecondFactor } from './second-factor.js'
 import { handleConsole } from './console.js'
 import { signInPage } from './sign-in-page.js'
 
@@ -54,20 +54,21 @@ if (!canIssue()) {
   console.error('admin: ADMIN_SESSION_SECRET must be set and at least 16 characters')
   process.exit(1)
 }
-if (!totpRequired()) {
+const db = await connect()
+const accounts = new Accounts(db)
+const invites = new Invites(db)
+const settings = new Settings(db)
+const secondFactor = new SecondFactor(db)
+
+if (!await secondFactor.required()) {
   // Loud, and every start. A console published anywhere a stranger can reach
   // it, behind one password that never changes, is the shape of the breaches
   // this service exists to make less likely — and the address announces
   // itself, since a certificate for a name is published to transparency logs
   // the moment it is issued.
-  console.warn('admin: ADMIN_TOTP_SECRET is not set — a single password is the only thing between the internet and every account')
-  console.warn('admin: run `node admin/totp-secret.mjs` and set it')
+  console.warn('admin: no second factor — a single password is the only thing between the internet and every account')
+  console.warn('admin: sign in and turn one on, which takes a phone and about thirty seconds')
 }
-
-const db = await connect()
-const accounts = new Accounts(db)
-const invites = new Invites(db)
-const settings = new Settings(db)
 
 /**
  * Who is asking, for the attempt limit.
@@ -136,7 +137,7 @@ const tellGateway = async (event, email) => {
   }
 }
 
-const deps = { accounts, invites, settings, readBody, tellGateway, version: process.env.DSH_VERSION }
+const deps = { accounts, invites, settings, secondFactor, readBody, tellGateway, version: process.env.DSH_VERSION }
 
 /**
  * The headers every response here carries.
@@ -209,7 +210,7 @@ const server = createServer((req, res) => {
 
       // ---- second step: the code, from somebody who cleared the first ----
       if (open !== undefined) {
-        if (!accepts(form.get('code') ?? '')) {
+        if (!await secondFactor.accepts(form.get('code') ?? '')) {
           // Two counters, and they answer different questions. The address
           // limiter asks how hard this caller is trying; the challenge counter
           // asks how many guesses one correct password is worth.
@@ -248,7 +249,7 @@ const server = createServer((req, res) => {
       // Nothing to ask for. `succeeded` only here and at the end of the second
       // step — resetting the address counter after the password would make one
       // correct password buy a fresh budget of code guesses.
-      if (!totpRequired()) {
+      if (!await secondFactor.required()) {
         succeeded(address)
         console.log(`admin: ${USERNAME} signed in from ${address} (no second factor configured)`)
         res.writeHead(303, { Location: '/', 'Set-Cookie': cookie(await issue(), isSecure(req)) })

@@ -17,7 +17,9 @@
  * @module console
  */
 
-import { USERNAME as OPERATOR } from './auth.js'
+import { USERNAME as OPERATOR, verify } from './auth.js'
+import { toString as qrSvg } from 'qrcode'
+import { enrolmentUri } from './totp.js'
 import { adminPage } from './admin-page.js'
 import { normalizeEmail } from '../gateway/src/accounts.js'
 import { eraseAccount } from '../gateway/src/erase.js'
@@ -50,6 +52,25 @@ import { isPlan } from '../gateway/src/plans.js'
  * @param {import('node:http').ServerResponse} res - the response.
  * @returns {Promise<void>} resolves once the response is complete.
  */
+/**
+ * Recovery codes waiting to be read, once.
+ *
+ * They are stored as digests, so the only moment they exist in a readable form
+ * is between being minted and being rendered. That is a moment, not a place —
+ * it is deliberately in memory and deliberately cleared by the next render, so
+ * a refresh does not show them again and a restart does not keep them.
+ */
+let unread
+
+/**
+ * Hold codes for the next render, or clear what is held.
+ *
+ * @param {string[]|undefined} codes - the codes, or nothing to forget them.
+ */
+function showCodes(codes) {
+  unread = codes
+}
+
 export async function handleConsole(path, req, res, deps) {
   // No caller to resolve. Whoever reaches this function has already been
   // admitted by the service around it, with a credential that belongs to this
@@ -96,6 +117,77 @@ export async function handleConsole(path, req, res, deps) {
     backToConsole(res, 'model.saved', req)
     return
   }
+  // ---- the second factor ------------------------------------------------
+  //
+  // Everything that turns it on, off, or reissues its recovery codes asks for
+  // the password again first. A signed-in session is not enough: the whole
+  // point of a second factor is what happens when a session or a password has
+  // been taken, and a stolen session that can quietly re-enrol its own phone
+  // is that protection removed by the thing that was supposed to provide it.
+  if (path.startsWith('/security/')) {
+    const reauthorised = path === '/security/activate' || path === '/security/cancel' || path === '/security/dismiss'
+      ? true
+      : await verify(OPERATOR, form.get('password') ?? '')
+    if (!reauthorised) {
+      console.warn(`admin: ${OPERATOR} failed to confirm the password for ${path}`)
+      backToConsole(res, 'tfa.badpassword', req)
+      return
+    }
+
+    if (path === '/security/begin') {
+      deps.secondFactor.begin(OPERATOR, 'HamsterHQ')
+      console.log(`admin: ${OPERATOR} started enrolling a second factor`)
+      backToConsole(res, undefined, req)
+      return
+    }
+
+    if (path === '/security/cancel') {
+      deps.secondFactor.abandon()
+      backToConsole(res, undefined, req)
+      return
+    }
+
+    if (path === '/security/activate') {
+      const codes = await deps.secondFactor.activate(form.get('code') ?? '', OPERATOR)
+      if (codes === undefined) {
+        // Wrong code, or the enrolment timed out while the phone was being
+        // found. Either way nothing was turned on, which is the entire reason
+        // this step exists.
+        backToConsole(res, 'tfa.badcode', req)
+        return
+      }
+      showCodes(codes)
+      console.log(`admin: ${OPERATOR} turned on a second factor`)
+      backToConsole(res, 'tfa.on', req)
+      return
+    }
+
+    if (path === '/security/recovery') {
+      const codes = await deps.secondFactor.remintRecovery(OPERATOR)
+      if (codes === undefined) {
+        backToConsole(res, 'tfa.notenrolled', req)
+        return
+      }
+      showCodes(codes)
+      console.log(`admin: ${OPERATOR} replaced the recovery codes`)
+      backToConsole(res, 'tfa.reminted', req)
+      return
+    }
+
+    if (path === '/security/dismiss') {
+      showCodes(undefined)
+      backToConsole(res, undefined, req)
+      return
+    }
+
+    if (path === '/security/disable') {
+      await deps.secondFactor.forget()
+      console.warn(`admin: ${OPERATOR} turned the second factor off`)
+      backToConsole(res, 'tfa.off', req)
+      return
+    }
+  }
+
   if (path === '/access') {
     // A checkbox absent from the body is a checkbox that was unticked, which is
     // how HTML says "off" and the only reason this reads presence rather than
@@ -263,12 +355,29 @@ function backToConsole(res, notice, req) {
  * @returns {Promise<void>} resolves once the response is complete.
  */
 async function renderConsole(res, notice, deps) {
-  const [listed, invited, credential, access] = await Promise.all([
+  const [listed, invited, credential, access, factor] = await Promise.all([
     deps.accounts.list(),
     deps.invites.list(),
     deps.settings.modelCredential(),
     deps.settings.access(),
+    deps.secondFactor.state(),
   ])
+
+  // An enrolment in progress becomes a square to scan. Drawn here rather than
+  // fetched: the CSP on this service allows nothing from anywhere else, and
+  // handing a TOTP secret to a public QR service to be drawn would be giving
+  // away the very thing being enrolled.
+  const enrolling = deps.secondFactor.inProgress()
+  const uri = enrolling === undefined
+    ? undefined
+    : enrolmentUri(enrolling, OPERATOR, 'HamsterHQ')
+  const qr = uri === undefined
+    ? undefined
+    : await qrSvg(uri, { type: 'svg', margin: 0, errorCorrectionLevel: 'M' })
+
+  // Read once. The next render of this page has nothing to show.
+  const freshCodes = unread
+  unread = undefined
   // No sandbox state. Whether a tenant's machine is up, and how many are, is
   // the platform's to answer and the gateway's to ask — this service does not
   // hold a connection to either, and a column here showing a state it learned
@@ -280,6 +389,7 @@ async function renderConsole(res, notice, deps) {
     invites: invited,
     credential,
     access,
+    security: { ...factor, qr, secret: enrolling, freshCodes },
     viewer: OPERATOR,
     notice,
     version: deps.version,

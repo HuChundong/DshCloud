@@ -339,6 +339,12 @@ export const CONSOLE_NOTICES = {
   'sandbox.reclaimed':  { zh: '{email} 的沙箱已回收，下次请求会重建一个。', en: 'The sandbox for {email} was reclaimed; the next request builds a new one.' },
   'plan.moved':         { zh: '{email} 的套餐已更新。', en: 'The plan for {email} has been updated.' },
   'plan.unknown':       { zh: '没有这个套餐。', en: 'No such plan.' },
+  'tfa.badpassword':    { zh: '密码不正确，没有做任何改动。', en: 'That password is not correct. Nothing was changed.' },
+  'tfa.badcode':        { zh: '验证码不正确，或注册已超时。两步验证没有开启，请重新扫码。', en: 'That code is not correct, or the enrolment timed out. Nothing was turned on — scan again.' },
+  'tfa.on':             { zh: '两步验证已开启。请保存下面的备用码。', en: 'Two-step verification is on. Save the recovery codes below.' },
+  'tfa.off':            { zh: '两步验证已关闭。现在只有密码挡在这个控制台前面。', en: 'Two-step verification is off. The password alone now opens this console.' },
+  'tfa.reminted':       { zh: '备用码已重新生成，旧的全部作废。', en: 'New recovery codes. Every earlier one has stopped working.' },
+  'tfa.notenrolled':    { zh: '这里没有可用的注册记录。', en: 'There is no enrolment here to reissue codes for.' },
 }
 
 /**

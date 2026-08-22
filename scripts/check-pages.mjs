@@ -78,6 +78,7 @@ async function pages() {
         ],
         credential: { baseUrl: 'https://api.example.com', apiKey: 'set', source: 'database', updatedAt: 0, updatedBy: 'root@example.com' },
         access: { inviteRequired: true, sandboxLimit: 10, source: 'database', updatedAt: 0, updatedBy: 'root@example.com' },
+        security: { enabled: true, source: 'console', recoveryLeft: 7, updatedAt: 0, updatedBy: 'root@example.com', qr: undefined, secret: undefined, freshCodes: undefined },
         live: 1, viewer: 'root@example.com', notice: undefined, version: '1.2.3',
       }),
     },
@@ -91,7 +92,56 @@ async function pages() {
         invites: [],
         credential: { baseUrl: '', apiKey: '', source: 'environment', updatedAt: undefined, updatedBy: undefined },
         access: { inviteRequired: false, sandboxLimit: 0, source: 'environment', updatedAt: undefined, updatedBy: undefined },
+        security: { enabled: false, source: 'none', recoveryLeft: 0, updatedAt: undefined, updatedBy: undefined, qr: undefined, secret: undefined, freshCodes: undefined },
         live: 0, viewer: 'root@example.com', notice: 'code.wrong', version: '1.2.3',
+      }),
+    },
+    // The two states the console only reaches mid-enrolment. Rendered here
+    // because they are the states nobody looks at until they are enrolling,
+    // which is the worst moment to find out the page does not render.
+    {
+      name: 'admin (enrolling a second factor)',
+      group: 'admin',
+      html: adminPage({
+        accounts: [], invites: [],
+        credential: { baseUrl: '', apiKey: '', source: 'environment', updatedAt: undefined, updatedBy: undefined },
+        access: { inviteRequired: false, sandboxLimit: 0, source: 'environment', updatedAt: undefined, updatedBy: undefined },
+        security: {
+          enabled: false, source: 'none', recoveryLeft: 0, updatedAt: undefined, updatedBy: undefined,
+          qr: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"></svg>',
+          secret: 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ',
+          freshCodes: undefined,
+        },
+        live: 0, viewer: 'root@example.com', notice: undefined, version: '1.2.3',
+      }),
+    },
+    {
+      name: 'admin (second factor set in the environment)',
+      group: 'admin',
+      html: adminPage({
+        accounts: [], invites: [],
+        credential: { baseUrl: '', apiKey: '', source: 'environment', updatedAt: undefined, updatedBy: undefined },
+        access: { inviteRequired: false, sandboxLimit: 0, source: 'environment', updatedAt: undefined, updatedBy: undefined },
+        security: {
+          enabled: true, source: 'environment', recoveryLeft: 0, updatedAt: undefined, updatedBy: undefined,
+          qr: undefined, secret: undefined, freshCodes: undefined,
+        },
+        live: 0, viewer: 'root@example.com', notice: undefined, version: '1.2.3',
+      }),
+    },
+    {
+      name: 'admin (recovery codes, shown once)',
+      group: 'admin',
+      html: adminPage({
+        accounts: [], invites: [],
+        credential: { baseUrl: '', apiKey: '', source: 'environment', updatedAt: undefined, updatedBy: undefined },
+        access: { inviteRequired: false, sandboxLimit: 0, source: 'environment', updatedAt: undefined, updatedBy: undefined },
+        security: {
+          enabled: true, source: 'console', recoveryLeft: 10, updatedAt: 0, updatedBy: 'root@example.com',
+          qr: undefined, secret: undefined,
+          freshCodes: ['abcde-fghjk', 'mnpqr-stuvw', 'xyz23-45678'],
+        },
+        live: 0, viewer: 'root@example.com', notice: 'tfa.on', version: '1.2.3',
       }),
     },
   )
