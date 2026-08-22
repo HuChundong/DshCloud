@@ -30,7 +30,6 @@ import { WebSocketServer } from 'ws'
 import { Accounts, hasProfile } from './accounts.js'
 import { authenticate, isSecureRequest } from './auth.js'
 import { entitlementsOf } from './entitlements.js'
-import { request as cubeRequest } from './e2b.js'
 import { connect } from './db.js'
 import { canSendEmail } from './email.js'
 import { Invites } from './invites.js'
@@ -222,7 +221,7 @@ const profileDeps = {
   // things.
   tokens,
   sandboxes,
-  destroyVolume: async (accountId) => { await destroyVolume(cubeRequest, accountId) },
+  destroyVolume: async (accountId) => { await destroyVolume(accountId) },
   version: DSH_VERSION,
 }
 

@@ -653,6 +653,9 @@ COPY packages/tunnel-protocol /packages/tunnel-protocol
 # module table for the harness's components the way a plugin can, because there
 # is no shell here to ask.
 COPY packages/dsh-icons /packages/dsh-icons
+# The CubeSandbox SDK, built from its source and carried here because it is not
+# published to npm. See vendor/README.md for the provenance and the rebuild.
+COPY vendor /vendor
 COPY gateway/package.json ./
 RUN npm install --omit=dev --no-audit --no-fund && rm -rf /root/.npm
 COPY gateway ./gateway

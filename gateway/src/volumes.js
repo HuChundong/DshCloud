@@ -21,6 +21,8 @@
 
 import process from 'node:process'
 
+import { createVolume, destroyVolume as removeVolume } from './platform-cube.js'
+
 /** The driver CubeMaster routes create/destroy/attach/detach to. */
 const DRIVER = process.env.SANDBOX_VOLUME_DRIVER ?? 'juicefs'
 
@@ -76,26 +78,19 @@ function volumeIdFor(accountId) {
  * outlives every sandbox that used it, so the second call is the ordinary case
  * rather than the exception.
  *
- * @param {(method: string, path: string, body?: object) => Promise<{status: number, body: string}>} request - the CubeSandbox API caller.
+ * A map of mount path to volume, which is the shape both SDKs take. It used to
+ * be a list of `{name, path}` — the platform's own shape, hand-built here
+ * because this file hand-built the request too. The client converts now.
+ *
  * @param {string} accountId - the tenant's stable account id.
- * @returns {Promise<Array<{name: string, path: string}>>} the mounts to pass at sandbox creation, or none when volumes are off.
+ * @returns {Promise<Record<string, string>>} the mounts to pass at sandbox creation, or none when volumes are off.
  * @throws {Error} when the volume cannot be created.
  */
-export async function volumeMountsFor(request, accountId) {
-  if (!volumesEnabled()) return []
+export async function volumeMountsFor(accountId) {
+  if (!volumesEnabled()) return {}
   const volumeId = volumeIdFor(accountId)
-
-  const { status, body } = await request('POST', '/volumes', {
-    volumeID: volumeId,
-    name: volumeId,
-    driver: DRIVER,
-  })
-  // 409 is "it is already there", which is what a returning tenant looks like.
-  if (status !== 200 && status !== 201 && status !== 409) {
-    throw new Error(`e2b: creating volume ${volumeId} failed (${status}): ${body}`)
-  }
-
-  return [{ name: volumeId, path: MOUNT_PATH }]
+  await createVolume(volumeId, DRIVER)
+  return { [MOUNT_PATH]: volumeId }
 }
 
 /**
@@ -105,15 +100,10 @@ export async function volumeMountsFor(request, accountId) {
  * reclaimed sandbox must leave the volume alone, since keeping it is the whole
  * point of having one.
  *
- * @param {(method: string, path: string, body?: object) => Promise<{status: number, body: string}>} request - the CubeSandbox API caller.
  * @param {string} accountId - the tenant's stable account id.
  * @returns {Promise<void>} resolves once the volume is gone or was never there.
- * @throws {Error} when the API refuses for any reason other than absence.
+ * @throws {Error} when the platform refuses for any reason other than absence.
  */
-export async function destroyVolume(request, accountId) {
-  const volumeId = volumeIdFor(accountId)
-  const { status, body } = await request('DELETE', `/volumes/${encodeURIComponent(volumeId)}`)
-  if (status !== 200 && status !== 204 && status !== 404) {
-    throw new Error(`e2b: destroying volume ${volumeId} failed (${status}): ${body}`)
-  }
+export async function destroyVolume(accountId) {
+  await removeVolume(volumeIdFor(accountId))
 }

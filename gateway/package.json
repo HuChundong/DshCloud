@@ -6,6 +6,7 @@
   "description": "The authenticating front door: sessions, accounts, and one sandbox per tenant.",
   "main": "src/server.js",
   "dependencies": {
+    "@cubesandbox/sdk": "file:../vendor/cubesandbox-sdk-0.3.0.tgz",
     "dsh-icons": "file:../packages/dsh-icons",
     "dsh-tunnel-protocol": "file:../packages/tunnel-protocol",
     "e2b": "^2.45.0",

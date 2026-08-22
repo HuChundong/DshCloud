@@ -13,7 +13,7 @@
 
 import process from 'node:process'
 import { createContainer, listContainers, removeContainer, startContainer } from './docker.js'
-import { TEMPLATE, createSandbox, listSandboxes, removeSandbox, request } from './e2b.js'
+import { TEMPLATE, createSandbox, listSandboxes, removeSandbox } from './platform-cube.js'
 import { protectedEgress } from './egress.js'
 import { startBackend } from './envd.js'
 import { volumeMountsFor } from './volumes.js'
@@ -50,7 +50,7 @@ const cube = {
     const sandboxId = await createSandbox(
       { [OWNER_KEY]: owner.username },
       protectedRun.network,
-      await volumeMountsFor(request, owner.accountId),
+      await volumeMountsFor(owner.accountId),
       owner.machine,
     )
     try {
