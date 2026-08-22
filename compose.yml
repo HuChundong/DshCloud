@@ -140,6 +140,10 @@ services:
       # they have. Set it to the development mailbox below and mail arrives on
       # this machine instead; nothing else about signing in changes.
       EMAIL_API_URL: ${EMAIL_API_URL:-}
+      # What the operator's console presents when it reports an account change.
+      # Unset means every such call is refused, which is the safe default for a
+      # deployment that has not deployed a console.
+      INTERNAL_SHARED_SECRET: ${INTERNAL_SHARED_SECRET:-}
       REFRESH_TTL_SECONDS: ${REFRESH_TTL_SECONDS:-2592000}
       # Whether an invite is needed to register. `open` lets anyone who can
       # receive mail in, which is what a deployment on a reachable address
@@ -190,6 +194,43 @@ services:
         TZ: ${DEPLOYMENT_TZ:-UTC}
     image: hamsterhq-sandbox:latest
     profiles: [build]
+    networks: [hamsterhq-net]
+
+  # The operator's console, deployed apart from everything a tenant reaches.
+  #
+  # Bound to loopback, and that is the point rather than a default to relax: one
+  # credential here opens every account and rotates the model key every tenant's
+  # agent calls with. A password is a lock on a door; this door should not be on
+  # a public street. Publish it through whatever reaches the office — a VPN, an
+  # SSH tunnel, a reverse proxy on an internal name — and never by widening this
+  # line.
+  admin:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: admin
+      args:
+        DSH_VERSION:
+    image: hamsterhq-admin:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-dsh}:${POSTGRES_PASSWORD:?set a database password}@postgres:5432/${POSTGRES_DB:-dsh}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      # Produced by `node admin/hash-password.mjs`. Without it the service
+      # refuses to start, rather than starting with a default — which is a
+      # published password.
+      ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH:-}
+      ADMIN_SESSION_SECRET: ${ADMIN_SESSION_SECRET:-}
+      # How it tells the gateway about an account it changed. Both halves empty
+      # means it tells nothing and the gateway reaches the same state on its
+      # own, more slowly.
+      GATEWAY_INTERNAL_URL: ${GATEWAY_INTERNAL_URL:-http://gateway:8080}
+      INTERNAL_SHARED_SECRET: ${INTERNAL_SHARED_SECRET:-}
+    ports:
+      - "127.0.0.1:8091:8091"
+    restart: unless-stopped
     networks: [hamsterhq-net]
 
   # A place for a sign-in code to land while developing.

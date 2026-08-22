@@ -658,3 +658,36 @@ ENV DSH_VERSION=${DSH_VERSION}
 ENV PORT=8080
 EXPOSE 8080
 CMD ["node", "gateway/src/server.js"]
+
+# ----------------------------------------------------------------- admin ----
+# The operator's console, built as its own image because it is deployed as its
+# own service — its own port, its own domain, its own credential, and an
+# expectation that tenants cannot reach it at all. It used to be a route on the
+# gateway, kept private by answering 404 to everyone else, which is hiding
+# rather than isolating.
+#
+# It carries the gateway's source because it shares the modules that own
+# accounts, invites, settings and the pages' chrome. One codebase, two entry
+# points, two images — which is what makes the split real without duplicating
+# the things both sides read.
+#
+# What it does NOT carry is any way to reach a sandbox: no tunnel protocol, no
+# E2B client, no websockets. Its dependency list is `jose`, `pg` and the icons,
+# and that shortness is the separation showing up somewhere it can be checked.
+FROM node:24-alpine AS admin
+ENV NODE_ENV=production
+WORKDIR /app
+COPY packages/dsh-icons /packages/dsh-icons
+COPY admin/package.json ./
+RUN npm install --omit=dev --no-audit --no-fund && rm -rf /root/.npm
+COPY admin ./admin
+COPY gateway/src ./gateway/src
+# The marks and faces the pages inline. `page-assets.js` hashes them at boot
+# and throws on one it cannot find, so a missing file here is a service that
+# does not start rather than a page with a hole in it.
+COPY gateway/assets ./gateway/assets
+ARG DSH_VERSION
+ENV DSH_VERSION=${DSH_VERSION}
+ENV ADMIN_PORT=8091
+EXPOSE 8091
+CMD ["node", "admin/server.js"]

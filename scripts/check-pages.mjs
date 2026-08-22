@@ -37,7 +37,7 @@ async function pages() {
   const { policyPage, POLICY_SLUGS } = await import('../gateway/src/policy-page.js')
   const { loginPage } = await import('../gateway/src/login-page.js')
   const { profilePage } = await import('../gateway/src/profile-page.js')
-  const { adminPage } = await import('../gateway/src/admin-page.js')
+  const { adminPage } = await import('../admin/admin-page.js')
 
   const rendered = []
   for (const slug of POLICY_SLUGS) {

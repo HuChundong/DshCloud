@@ -19,11 +19,11 @@
  * and its sandbox with it.
  */
 
-import { BRAND_CSS, CONSOLE_NOTICES, FONT_PRELOAD, PALETTE_CSS, THEME_TOGGLE, TOAST_CSS, WORDMARK, escapeHtml, langToggle, toast, toastEntry } from './page-chrome.js'
-import { asset } from './page-assets.js'
+import { BRAND_CSS, CONSOLE_NOTICES, FONT_PRELOAD, PALETTE_CSS, THEME_TOGGLE, TOAST_CSS, WORDMARK, escapeHtml, langToggle, toast, toastEntry } from '../gateway/src/page-chrome.js'
+import { asset } from '../gateway/src/page-assets.js'
 import { cssUrl } from 'dsh-icons'
-import { PLANS } from './plans.js'
-import { describeKey } from './settings.js'
+import { PLANS } from '../gateway/src/plans.js'
+import { describeKey } from '../gateway/src/settings.js'
 
 /**
  * Render an epoch timestamp the way an operator reads one.
@@ -386,7 +386,6 @@ ${adminRows}
           <th class="hide-narrow" data-t="th.created">注册于</th>
           <th class="hide-narrow" data-t="th.seen">最近登录</th>
           <th data-t="th.plan">套餐</th>
-          <th data-t="th.sandbox">沙箱</th>
           <th></th>
         </tr>
       </thead>
@@ -555,18 +554,15 @@ ${inviteRows}
  * more. Offering either would be offering an action that does not do what it
  * says.
  *
- * @param {import('./accounts.js').Account & {sandbox: string}} account - the account and the state of its sandbox.
+ * @param {import('../gateway/src/accounts.js').Account} account - the account.
  * @param {string} viewer - the administrator's own address.
  * @returns {string} the row markup.
  */
 function adminRow(account, viewer) {
-  const sandbox = account.sandbox === 'running'
-    ? `<span class="tag live" data-t="tag.live">运行中</span> ${action('/admin/release', account.email, 'act.release')}`
-    : '<span class="sub" data-t="tag.idle">未运行</span>'
   return `      <tr>
         <td><div class="email">${escapeHtml(account.email)}</div></td>
         <td class="hide-narrow sub"><span data-t="seen">最近登录</span> ${when(account.lastSeenAt)}</td>
-        <td class="actions">${account.email === viewer ? '<span class="sub" data-t="self.sep">当前登录 · </span>' : ''}${sandbox}</td>
+        <td class="actions">${account.email === viewer ? '<span class="sub" data-t="self.sep">当前登录</span>' : ''}</td>
       </tr>`
 }
 
@@ -601,7 +597,7 @@ function inviteRow(invite) {
  * Takes no viewer, because it cannot be one: this renders the accounts that are
  * NOT administrators, and the only person reading this page is.
  *
- * @param {import('./accounts.js').Account & {sandbox: string}} account - the account and the state of its sandbox.
+ * @param {import('../gateway/src/accounts.js').Account} account - the account.
  * @returns {string} the row markup.
  */
 function row(account) {
@@ -611,15 +607,10 @@ function row(account) {
   // decides who is one — the administrators went to `adminRow`.
   const tags = account.disabled ? '<span class="tag off" data-t="tag.off">已停用</span>' : ''
 
-  const sandbox = account.sandbox === 'running'
-    ? '<span class="tag live" data-t="tag.live">运行中</span>'
-    : '<span class="sub" data-t="tag.idle">未运行</span>'
-
   // No guard for the viewer's own row here, and none needed: an administrator
   // looking at this page is not in this table. `adminRow` is where their row is
   // drawn, and that is where the refusal to offer a self-delete lives.
   const actions = `${action('/admin/toggle', account.email, account.disabled ? 'act.enable' : 'act.disable')}
-      ${account.sandbox === 'running' ? action('/admin/release', account.email, 'act.release') : ''}
       ${action('/admin/delete', account.email, 'act.delete', 'email', 'confirm.account', [account.email])}`
 
   return `      <tr>
@@ -627,7 +618,6 @@ function row(account) {
         <td class="hide-narrow sub">${when(account.createdAt)}</td>
         <td class="hide-narrow sub">${when(account.lastSeenAt)}</td>
         <td>${planPicker(account)}</td>
-        <td>${sandbox}</td>
         <td class="actions">${actions}</td>
       </tr>`
 }
@@ -732,7 +722,6 @@ const S = {
   'th.created':  { zh: '注册于', en: 'Registered' },
   'th.seen':     { zh: '最近登录', en: 'Last seen' },
   'th.plan':     { zh: '套餐', en: 'Plan' },
-  'th.sandbox':  { zh: '沙箱', en: 'Sandbox' },
   'th.code':     { zh: '邀请码', en: 'Code' },
   'th.minted':   { zh: '生成于', en: 'Created' },
   'th.status':   { zh: '状态', en: 'Status' },
@@ -761,12 +750,8 @@ const S = {
   // in their own sidebar and an operator read `running` for the same sandbox.
   // The lowercase fragments below (`env`, `key.set`, `self.sep`) stay lowercase
   // because they are read INSIDE a sentence rather than as a label of their own.
-  'tag.live':   { zh: '运行中', en: 'Running' },
-  'tag.idle':   { zh: '未运行', en: 'Not running' },
   'tag.off':    { zh: '已停用', en: 'Disabled' },
   'tag.unused': { zh: '未使用', en: 'Unused' },
-
-  'act.release': { zh: '回收沙箱', en: 'Reclaim sandbox' },
   'act.delete':  { zh: '删除', en: 'Delete' },
   'act.enable':  { zh: '恢复', en: 'Enable' },
   'act.disable': { zh: '停用', en: 'Disable' },

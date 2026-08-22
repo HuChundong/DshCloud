@@ -77,6 +77,36 @@ ALTER TABLE accounts ADD COLUMN IF NOT EXISTS agreed_policy text;
 -- between the tiers yet — this records what someone is on, and that is all.
 ALTER TABLE accounts ADD COLUMN IF NOT EXISTS plan text NOT NULL DEFAULT 'free';
 
+-- What a privileged action did, and who did it.
+--
+-- Append-only, and nothing here ever updates or deletes a row: an audit trail
+-- that can be edited is a record of what somebody was willing to leave behind.
+-- It is written beside the action rather than derived from it, because the
+-- things worth auditing — a model credential rotated, an account suspended,
+-- somebody's tier changed — leave no other trace at all. settings carries an
+-- updated_by, which says who touched it last and nothing about what it was
+-- before or how many times.
+--
+-- subject is who it was done TO, and is null for an action about the
+-- deployment rather than about a person. detail is jsonb so an action can
+-- record what it changed without a migration per action; nothing queries
+-- inside it today, and nothing should be put in it that a reader would need
+-- to query.
+--
+-- No foreign key to accounts on purpose: erasing an account must not erase
+-- the record that it was erased.
+CREATE TABLE IF NOT EXISTS audit (
+  id         bigserial   PRIMARY KEY,
+  at         timestamptz NOT NULL DEFAULT now(),
+  actor      text        NOT NULL,
+  action     text        NOT NULL,
+  subject    text,
+  detail     jsonb       NOT NULL DEFAULT '{}'::jsonb
+);
+
+-- Read newest-first, always, which is the only way anyone reads one of these.
+CREATE INDEX IF NOT EXISTS audit_at_idx ON audit (at DESC);
+
 -- Cascades from the account: a deleted account must not leave a token that
 -- still renews, and the database is a better place to guarantee that than a
 -- sequence of calls that can be interrupted halfway.

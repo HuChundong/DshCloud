@@ -12,11 +12,12 @@
  * @module console
  */
 
+import { USERNAME as OPERATOR } from './auth.js'
 import { adminPage } from './admin-page.js'
-import { normalizeEmail } from './accounts.js'
-import { eraseAccount } from './erase.js'
-import { normalizeInvite } from './invites.js'
-import { isPlan } from './plans.js'
+import { normalizeEmail } from '../gateway/src/accounts.js'
+import { eraseAccount } from '../gateway/src/erase.js'
+import { normalizeInvite } from '../gateway/src/invites.js'
+import { isPlan } from '../gateway/src/plans.js'
 
 /**
  * What the console needs from the rest of the gateway.
@@ -45,21 +46,15 @@ import { isPlan } from './plans.js'
  * @returns {Promise<void>} resolves once the response is complete.
  */
 export async function handleConsole(path, req, res, deps) {
-  const caller = await deps.callerOf(req, res)
-  // Re-read the account rather than trusting the access token's own claim. The
-  // claim is fixed when the token is minted, so an address added to
-  // `GATEWAY_ADMINS` would not reach this console until its token expired —
-  // and one removed from it would keep reaching it for as long.
-  const account = caller === undefined ? undefined : await deps.accounts.read(caller.email)
-  if (account === undefined || !account.admin) {
-    res.writeHead(404, { 'Content-Type': 'text/plain' })
-    res.end('not found')
-    return
-  }
+  // No caller to resolve. Whoever reaches this function has already been
+  // admitted by the service around it, with a credential that belongs to this
+  // deployment rather than to any account — which is what stopped an operator
+  // from having to be a tenant, and stopped a tenant from being one path
+  // traversal away from being an operator.
 
   if (path === '/admin' && req.method === 'GET') {
     const done = new URL(req.url ?? '/', 'http://gateway').searchParams.get('done') ?? undefined
-    await renderConsole(account, res, readNotice(done), deps)
+    await renderConsole(res, readNotice(done), deps)
     return
   }
 
@@ -74,8 +69,8 @@ export async function handleConsole(path, req, res, deps) {
   // The invite actions act on a code rather than on an account, so they are
   // taken before the self-protection below, which has no account to protect.
   if (path === '/admin/invites') {
-    const minted = await deps.invites.mint(Number(form.get('count') ?? 1), account.email)
-    console.log(`gateway: ${account.email} minted ${minted.length} invite(s)`)
+    const minted = await deps.invites.mint(Number(form.get('count') ?? 1), OPERATOR)
+    console.log(`admin: ${OPERATOR} minted ${minted.length} invite(s)`)
     backToConsole(res, { code: 'invites.minted', params: { count: minted.length } }, req)
     return
   }
@@ -91,8 +86,8 @@ export async function handleConsole(path, req, res, deps) {
       backToConsole(res, 'model.incomplete', req)
       return
     }
-    await deps.settings.setModelCredential(baseUrl, apiKey, account.email)
-    console.log(`gateway: ${account.email} updated the model credential`)
+    await deps.settings.setModelCredential(baseUrl, apiKey, OPERATOR)
+    console.log(`admin: ${OPERATOR} updated the model credential`)
     backToConsole(res, 'model.saved', req)
     return
   }
@@ -107,8 +102,8 @@ export async function handleConsole(path, req, res, deps) {
       return
     }
     const limit = Number.isInteger(typed) && typed > 0 ? typed : 0
-    await deps.settings.setAccess(wantsInvite, limit, account.email)
-    console.log(`gateway: ${account.email} set registration to ${wantsInvite ? 'invite-only' : 'open'}, sandbox limit ${limit === 0 ? 'unlimited' : limit}`)
+    await deps.settings.setAccess(wantsInvite, limit, OPERATOR)
+    console.log(`admin: ${OPERATOR} set registration to ${wantsInvite ? 'invite-only' : 'open'}, sandbox limit ${limit === 0 ? 'unlimited' : limit}`)
     // Four codes rather than one sentence with two holes: both of the parts
     // that vary are words, and a word chosen here would be a word in whichever
     // language this process picked rather than the one the reader is in.
@@ -128,7 +123,7 @@ export async function handleConsole(path, req, res, deps) {
   const email = normalizeEmail(form.get('email') ?? '')
   // An administrator acting on their own account can lock the deployment out of
   // its own console, so the page does not offer it and this refuses it.
-  if (email === account.email) {
+  if (email === OPERATOR) {
     backToConsole(res, 'self.refused', req)
     return
   }
@@ -143,7 +138,13 @@ export async function handleConsole(path, req, res, deps) {
       // the next sign-in while the open tab keeps working.
       if (updated?.disabled === true) {
         await deps.tokens.revokeAll(email)
-        await deps.sandboxes.release(email).catch(() => {})
+        // Said, not done. Whether a suspended tenant's machine keeps running
+        // for a moment is the runtime plane's to decide; what this service
+        // owns is the account's state, and it has already changed. The
+        // gateway reaches the same place on its own if this never arrives —
+        // the tokens are gone, so nothing reaches the machine, and the idle
+        // sweep takes it.
+        await deps.tellGateway('suspended', email)
       }
       notice = { code: updated?.disabled === true ? 'account.suspended' : 'account.restored', params: { email } }
       break
@@ -167,13 +168,6 @@ export async function handleConsole(path, req, res, deps) {
       notice = { code: 'plan.moved', params: { email } }
       break
     }
-    case '/admin/release': {
-      await deps.sandboxes.release(email).catch((error) => {
-        console.error(`gateway: releasing ${email} failed: ${error.message}`)
-      })
-      notice = { code: 'sandbox.reclaimed', params: { email } }
-      break
-    }
     case '/admin/delete': {
       const doomed = await deps.accounts.read(email)
       // The same sequence a tenant's own deletion runs, from the same place:
@@ -191,7 +185,7 @@ export async function handleConsole(path, req, res, deps) {
   }
   // The code, not the sentence: the sentence has a language now, and a log line
   // that picked one would be picking it for whoever reads the logs.
-  console.log(`gateway: ${account.email} — ${notice === undefined ? `no such account ${email}` : `${notice.code} ${email}`}`)
+  console.log(`admin: ${OPERATOR} — ${notice === undefined ? `no such account ${email}` : `${notice.code} ${email}`}`)
   backToConsole(res, notice, req)
 }
 
@@ -263,21 +257,25 @@ function backToConsole(res, notice, req) {
  * @param {string} [notice] - the outcome of the action that led here.
  * @returns {Promise<void>} resolves once the response is complete.
  */
-async function renderConsole(caller, res, notice, deps) {
-  const [listed, invited, credential, access, live] = await Promise.all([
+async function renderConsole(res, notice, deps) {
+  const [listed, invited, credential, access] = await Promise.all([
     deps.accounts.list(),
     deps.invites.list(),
     deps.settings.modelCredential(),
     deps.settings.access(),
-    deps.sandboxes.live(),
   ])
+  // No sandbox state. Whether a tenant's machine is up, and how many are, is
+  // the platform's to answer and the gateway's to ask — this service does not
+  // hold a connection to either, and a column here showing a state it learned
+  // some seconds ago from a third party is worse than a column that is not
+  // there. The page renders the accounts; the machines are looked at where
+  // machines are managed.
   const html = adminPage({
-    accounts: listed.map((account) => ({ ...account, sandbox: deps.sandboxes.stateOf(account.email) })),
+    accounts: listed,
     invites: invited,
     credential,
     access,
-    live,
-    viewer: caller.email,
+    viewer: OPERATOR,
     notice,
     version: deps.version,
   })

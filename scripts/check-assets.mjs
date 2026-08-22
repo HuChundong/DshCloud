@@ -70,10 +70,17 @@ if (!gateway.includes('immutable')) {
 // A hand-written `/login-assets/hamster.svg` still resolves — to a 404 now,
 // since only hashed names are served — but the failure is a missing image on a
 // page nobody reloads. Better said here.
-for (const page of ['login-page', 'profile-page', 'policy-page', 'admin-page']) {
-  const text = readFileSync(join(root, `gateway/src/${page}.js`), 'utf8')
+// Paths rather than names joined onto one directory: the console lives in its
+// own service now, and a bare name would have quietly stopped covering it.
+for (const page of [
+  'gateway/src/login-page.js',
+  'gateway/src/profile-page.js',
+  'gateway/src/policy-page.js',
+  'admin/admin-page.js',
+]) {
+  const text = readFileSync(join(root, page), 'utf8')
   for (const match of text.matchAll(/["']\/login-assets\/[^"']+["']/g)) {
-    problems.push(`gateway/src/${page}.js: ${match[0]} is written by hand; call asset() so it carries the hash`)
+    problems.push(`${page}: ${match[0]} is written by hand; call asset() so it carries the hash`)
   }
 }
 

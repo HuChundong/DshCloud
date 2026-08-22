@@ -32,7 +32,6 @@ import { WebSocketServer } from 'ws'
 import { Accounts, hasProfile } from './accounts.js'
 import { authenticate, isSecureRequest } from './auth.js'
 import { entitlementsOf } from './entitlements.js'
-import { handleConsole } from './console.js'
 import { request as cubeRequest } from './e2b.js'
 import { connect } from './db.js'
 import { canSendEmail } from './email.js'
@@ -217,17 +216,6 @@ const profileDeps = {
   // delete uses, because both hand them to `eraseAccount`.
   tokens,
   sandboxes,
-  destroyVolume: async (accountId) => { await destroyVolume(cubeRequest, accountId) },
-  version: DSH_VERSION,
-}
-const consoleDeps = {
-  accounts,
-  invites,
-  tokens,
-  settings,
-  sandboxes,
-  callerOf,
-  readBody,
   destroyVolume: async (accountId) => { await destroyVolume(cubeRequest, accountId) },
   version: DSH_VERSION,
 }
@@ -458,8 +446,39 @@ async function handleRequest(req, res) {
     return
   }
 
-  if (path === '/admin' || path.startsWith('/admin/')) {
-    await handleConsole(path, req, res, consoleDeps)
+  // What the operator's console tells this process about an account it
+  // changed.
+  //
+  // The console is a service of its own now, on its own port and its own
+  // credential, and it owns accounts, tiers, invites and settings. What it
+  // does not own is a machine: whether a suspended tenant's sandbox keeps
+  // running for another minute is this plane's decision, taken with a
+  // registry the console has no connection to. So the console says what
+  // happened and this acts on it.
+  //
+  // Guarded by a shared secret and expected to be unreachable from outside —
+  // it is not on the tenant surface by accident, and a deployment that leaves
+  // `INTERNAL_SHARED_SECRET` unset refuses every call rather than trusting
+  // whoever asks.
+  if (path === '/_internal/account' && req.method === 'POST') {
+    const expected = process.env.INTERNAL_SHARED_SECRET ?? ''
+    if (expected === '' || req.headers['x-internal-secret'] !== expected) {
+      res.writeHead(404, { 'Content-Type': 'text/plain' })
+      res.end('not found')
+      return
+    }
+    const body = await readBody(req, 4096)
+    let told
+    try { told = JSON.parse(body?.toString('utf8') ?? '{}') } catch { told = {} }
+    const email = typeof told.email === 'string' ? told.email : ''
+    if (email !== '') {
+      console.log(`gateway: the console reports ${email} ${String(told.event)}`)
+      await sandboxes.release(email).catch((error) => {
+        console.error(`gateway: releasing ${email} after ${String(told.event)} failed: ${error.message}`)
+      })
+    }
+    res.writeHead(204)
+    res.end()
     return
   }
 

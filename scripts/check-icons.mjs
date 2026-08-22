@@ -168,10 +168,21 @@ check(
   !/stroke-width/.test(landing),
   'web/landing/index.html has a stroked <svg> again — icons come from `dsh-icons`',
 )
-for (const page of ['page-chrome.js', 'admin-page.js', 'login-page.js', 'profile-page.js', 'policy-page.js', 'panel.js']) {
+// Paths, not bare names joined onto one directory. The operator's console
+// moved to a service of its own and a name-only list followed it nowhere —
+// the check went on passing while the page it was meant to hold was no longer
+// where it looked.
+for (const page of [
+  'gateway/src/page-chrome.js',
+  'gateway/src/login-page.js',
+  'gateway/src/profile-page.js',
+  'gateway/src/policy-page.js',
+  'gateway/src/panel.js',
+  'admin/admin-page.js',
+]) {
   check(
-    !/stroke-width/.test(read(`gateway/src/${page}`)),
-    `gateway/src/${page} has a stroked <svg> again — icons come from \`dsh-icons\``,
+    !/stroke-width/.test(read(page)),
+    `${page} has a stroked <svg> again — icons come from \`dsh-icons\``,
   )
 }
 
