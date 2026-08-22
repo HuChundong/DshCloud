@@ -200,6 +200,35 @@ window.__ModuleLoader__.load({
         --dsw-specific-bubble-highlight: var(--dsw-static-neutral-bluish-800);
         --dsw-specific-sidebar-nav-item-active-accent: var(--dsw-static-neutral-bluish-800);
       }
+
+      /* The send button's glyph, which the fills above broke.
+
+         Upstream draws that button as \`background: var(--dsw-alias-button-info-fill)\`
+         with \`color: rgb(255, 255, 255)\` — a literal, not a token, and a
+         correct one for the fill it was written against: DeepSeek's blue is
+         dark in both schemes, so a white glyph always read. The fills above
+         make that fill the mark's own ink, which is near-black on light and
+         near-WHITE on dark — so in the dark theme the button became #f4f4f2
+         with a #ffffff glyph, and the arrow disappeared into it.
+
+         It is a token here rather than a second literal, and it is stated for
+         both schemes rather than only for the dark one: the pair is
+         "whatever contrasts with the primary fill", which is #fbfbfa on light
+         and #0f1115 on dark, and that is exactly the flip the fill makes. One
+         rule then follows the theme the way the fill does, and there is no
+         second copy of white to keep true.
+
+         The hook is the composer's published slot plus upstream's own local
+         class name. Class names are content hashes — \`uV2eYG_primary\` — and
+         the hash half changes between builds while the local half does not, so
+         the substring is the stable part of it. Written to fail by doing
+         nothing: it sets a colour and nothing else, so a build that renames
+         the class leaves the button exactly as upstream draws it, and the
+         worst an over-match can reach is the stop button that replaces this
+         one mid-stream — which has the same fill and needs the same glyph. */
+      html body [data-slot='conversation.composer.bar'] button[class*='_primary'] {
+        color: var(--dsw-alias-label-primary-foreground);
+      }
     `
 
     /**
