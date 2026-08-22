@@ -58,6 +58,13 @@ services:
       # is available over plain HTTP to localhost, so there is nothing to
       # redirect for, and a self-signed certificate would only add a warning.
       HTTPS_PORT: ${PUBLIC_HTTPS_PORT:-}
+      # The name the operator's console answers on. Unset means it is not
+      # published at all — the vhost is not written and nginx serves no such
+      # server, which is the right default for a deployment that has not
+      # decided to put a console on the internet.
+      ADMIN_DOMAIN: ${ADMIN_DOMAIN:-}
+      ADMIN_TLS_CERT: ${ADMIN_TLS_CERT:-}
+      ADMIN_TLS_KEY: ${ADMIN_TLS_KEY:-}
     volumes:
       # Keeps the generated certificate across a recreate, so returning
       # browsers do not meet a new one every time. Mount a real certificate
@@ -223,6 +230,11 @@ services:
       # published password.
       ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH:-}
       ADMIN_SESSION_SECRET: ${ADMIN_SESSION_SECRET:-}
+      # The second factor. Produced by `node admin/totp-secret.mjs`. Unset, the
+      # service starts and says on every boot that one password is the only
+      # thing in front of every account — which is a warning worth repeating
+      # rather than a default worth accepting.
+      ADMIN_TOTP_SECRET: ${ADMIN_TOTP_SECRET:-}
       # How it tells the gateway about an account it changed. Both halves empty
       # means it tells nothing and the gateway reaches the same state on its
       # own, more slowly.

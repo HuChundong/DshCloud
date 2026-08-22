@@ -37,6 +37,7 @@ import { Invites } from '../gateway/src/invites.js'
 import { Settings } from '../gateway/src/settings.js'
 import { USERNAME, canSignIn, failed, mayAttempt, succeeded, verify } from './auth.js'
 import { canIssue, cookie, issue, signedIn } from './session.js'
+import { accepts, required as totpRequired } from './totp.js'
 import { handleConsole } from './console.js'
 import { signInPage } from './sign-in-page.js'
 
@@ -50,6 +51,15 @@ if (!canSignIn()) {
 if (!canIssue()) {
   console.error('admin: ADMIN_SESSION_SECRET must be set and at least 16 characters')
   process.exit(1)
+}
+if (!totpRequired()) {
+  // Loud, and every start. A console published anywhere a stranger can reach
+  // it, behind one password that never changes, is the shape of the breaches
+  // this service exists to make less likely — and the address announces
+  // itself, since a certificate for a name is published to transparency logs
+  // the moment it is issued.
+  console.warn('admin: ADMIN_TOTP_SECRET is not set — a single password is the only thing between the internet and every account')
+  console.warn('admin: run `node admin/totp-secret.mjs` and set it')
 }
 
 const db = await connect()
@@ -126,24 +136,63 @@ const tellGateway = async (event, email) => {
 
 const deps = { accounts, invites, settings, readBody, tellGateway, version: process.env.DSH_VERSION }
 
+/**
+ * The headers every response here carries.
+ *
+ * Set by this service and not only by whatever proxies it, because a header
+ * that only exists in the proxy is a header that is missing the moment
+ * somebody reaches the container directly — which is exactly the situation
+ * they are for.
+ *
+ * `frame-ancestors 'none'` and `X-Frame-Options` say the same thing twice on
+ * purpose: clickjacking a console that suspends accounts is worth the
+ * duplication, and the two are read by different vintages of browser.
+ */
+const HARDENING = {
+  'Content-Security-Policy':
+    "default-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; "
+    + "script-src 'self' 'unsafe-inline'; font-src 'self' data:; form-action 'self'; "
+    + "base-uri 'none'; frame-ancestors 'none'",
+  'X-Frame-Options': 'DENY',
+  'X-Content-Type-Options': 'nosniff',
+  'Referrer-Policy': 'no-referrer',
+  // Nothing here needs a camera, a microphone or a location, and saying so is
+  // cheaper than auditing what a future page might ask for.
+  'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), interest-cohort=()',
+  // Never indexed, and said in a header as well as in a meta tag: a crawler
+  // that only fetches headers still learns to stay away.
+  'X-Robots-Tag': 'noindex, nofollow, noarchive',
+  'Cache-Control': 'no-store',
+}
+
 const server = createServer((req, res) => {
   void (async () => {
+    for (const [name, value] of Object.entries(HARDENING)) res.setHeader(name, value)
+    // Told only over TLS, because a browser must not be taught to insist on
+    // https by something it reached over http.
+    if (isSecure(req)) res.setHeader('Strict-Transport-Security', 'max-age=63072000; includeSubDomains')
+
     const path = (req.url ?? '/').split('?')[0]
 
     if (path === '/sign-in' && req.method === 'POST') {
       const address = callerAddress(req)
       if (!mayAttempt(address)) {
         res.writeHead(429, { 'Content-Type': 'text/html; charset=utf-8' })
-        res.end(signInPage({ error: 'too-many' }))
+        res.end(signInPage({ error: 'too-many', totp: totpRequired() }))
         return
       }
       const form = new URLSearchParams((await readBody(req, 4096))?.toString('utf8') ?? '')
-      const admitted = await verify(form.get('username') ?? '', form.get('password') ?? '')
+      // Both factors checked before either verdict is acted on, so the time
+      // this takes says nothing about which one was wrong — and a wrong
+      // password costs an attacker a code as well.
+      const passwordOk = await verify(form.get('username') ?? '', form.get('password') ?? '')
+      const codeOk = accepts(form.get('code') ?? '')
+      const admitted = passwordOk && codeOk
       if (!admitted) {
         failed(address)
         console.warn(`admin: refused a sign-in from ${address}`)
         res.writeHead(401, { 'Content-Type': 'text/html; charset=utf-8' })
-        res.end(signInPage({ error: 'refused' }))
+        res.end(signInPage({ error: 'refused', totp: totpRequired() }))
         return
       }
       succeeded(address)
@@ -163,7 +212,7 @@ const server = createServer((req, res) => {
       // The sign-in form, whatever was asked for. There is nothing here to
       // show an operator who is not one, and no reason to say what exists.
       res.writeHead(path === '/sign-in' ? 200 : 401, { 'Content-Type': 'text/html; charset=utf-8' })
-      res.end(signInPage({}))
+      res.end(signInPage({ totp: totpRequired() }))
       return
     }
 

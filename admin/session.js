@@ -83,7 +83,12 @@ export async function signedIn(req) {
  * @returns {string} the `Set-Cookie` value.
  */
 export function cookie(token, secure) {
-  const attributes = `HttpOnly;${secure ? ' Secure;' : ''} SameSite=Lax; Path=/`
+  // `Strict`, not `Lax`. `Lax` exists so a link from elsewhere still arrives
+  // signed in, which is a courtesy for a product and a liability for a
+  // console: there is no legitimate journey into this service from another
+  // site, and refusing to send the cookie on one closes the whole class of
+  // cross-site request forgery without a token anywhere.
+  const attributes = `HttpOnly;${secure ? ' Secure;' : ''} SameSite=Strict; Path=/`
   return token === undefined
     ? `${COOKIE}=; ${attributes}; Max-Age=0`
     : `${COOKIE}=${token}; ${attributes}; Max-Age=${String(TTL_SECONDS)}`

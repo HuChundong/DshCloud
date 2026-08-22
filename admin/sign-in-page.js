@@ -24,7 +24,7 @@ const REASONS = {
 /**
  * The sign-in page.
  *
- * @param {{error?: string}} state - why they are seeing it again, if they are.
+ * @param {{error?: string, totp?: boolean}} state - why they are seeing it again, and whether a second factor is asked for.
  * @returns {string} the page.
  */
 export function signInPage(state = {}) {
@@ -73,6 +73,9 @@ ${BRAND_CSS}
   <label>密码
     <input name="password" type="password" autocomplete="current-password" required>
   </label>
+  ${state.totp === true ? `<label>验证码
+    <input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required>
+  </label>` : ''}
   <button type="submit">进入</button>
   <p class="note">仅限内部访问</p>
 </form>

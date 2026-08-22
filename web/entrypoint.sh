@@ -52,4 +52,59 @@ else
   : > "$REDIRECT"
 fi
 
+# The operator's console, on its own name.
+#
+# Written here rather than kept in the image, for the same reason the redirect
+# is: the deployment decides whether it is published at all and under what
+# name, and a deployment that decided nothing gets an empty file and no vhost.
+#
+# It is a separate server block rather than a path on the main one, and that is
+# the point: a request for any other name never reaches it, so the console is
+# not one path traversal or one misordered location away from the surface every
+# tenant is on.
+ADMIN=/etc/nginx/admin.inc
+if [ -n "${ADMIN_DOMAIN:-}" ]; then
+  echo "web: the operator console answers on https://${ADMIN_DOMAIN}" >&2
+  # `$` escaped where it belongs to nginx and not to this shell.
+  cat > "$ADMIN" <<EOF
+upstream admin_console { server ${ADMIN_UPSTREAM:-admin:8091}; keepalive 4; }
+
+server {
+  listen 443 ssl;
+  http2 on;
+  server_name ${ADMIN_DOMAIN};
+  ssl_certificate ${ADMIN_TLS_CERT:+$ADMIN_TLS_CERT}${ADMIN_TLS_CERT:-/etc/nginx/tls/server.crt};
+  ssl_certificate_key ${ADMIN_TLS_KEY:+$ADMIN_TLS_KEY}${ADMIN_TLS_KEY:-/etc/nginx/tls/server.key};
+  ssl_protocols TLSv1.2 TLSv1.3;
+  ssl_session_cache shared:SSL:10m;
+
+  # Nothing here is for a crawler, and nothing here is large.
+  client_max_body_size 64k;
+  add_header X-Robots-Tag "noindex, nofollow, noarchive" always;
+
+  # Refused before the console does any work. \`nodelay\` is deliberately
+  # absent: a burst of six is allowed to queue rather than be rejected, so a
+  # person who mistypes twice is slowed rather than locked out, while anything
+  # automated meets the rate rather than the burst.
+  location = /sign-in {
+    limit_req zone=admin_signin burst=6;
+    proxy_pass http://admin_console;
+    proxy_set_header Host \$host;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto \$scheme;
+  }
+
+  location / {
+    proxy_pass http://admin_console;
+    proxy_http_version 1.1;
+    proxy_set_header Host \$host;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto \$scheme;
+  }
+}
+EOF
+else
+  : > "$ADMIN"
+fi
+
 exec nginx -g 'daemon off;'
