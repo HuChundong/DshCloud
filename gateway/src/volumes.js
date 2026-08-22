@@ -83,7 +83,7 @@ export async function volumeMountsFor(request, accountId) {
   })
   // 409 is "it is already there", which is what a returning tenant looks like.
   if (status !== 200 && status !== 201 && status !== 409) {
-    throw new Error(`cubesandbox: creating volume ${volumeId} failed (${status}): ${body}`)
+    throw new Error(`e2b: creating volume ${volumeId} failed (${status}): ${body}`)
   }
 
   return [{ name: volumeId, path: MOUNT_PATH }]
@@ -105,6 +105,6 @@ export async function destroyVolume(request, accountId) {
   const volumeId = volumeIdFor(accountId)
   const { status, body } = await request('DELETE', `/volumes/${encodeURIComponent(volumeId)}`)
   if (status !== 200 && status !== 204 && status !== 404) {
-    throw new Error(`cubesandbox: destroying volume ${volumeId} failed (${status}): ${body}`)
+    throw new Error(`e2b: destroying volume ${volumeId} failed (${status}): ${body}`)
   }
 }

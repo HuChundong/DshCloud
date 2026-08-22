@@ -1,16 +1,41 @@
 /**
- * CubeSandbox client: the sandbox runtime the Docker simulation stood in for.
+ * The sandbox management API, which is E2B's.
  *
- * CubeSandbox serves an E2B-compatible API, so this speaks that: `POST
- * /sandboxes` against a template, `DELETE /sandboxes/{id}` to reclaim. This is
- * the management plane only; addressing anything *into* a sandbox is
- * CubeProxy's, and lives in `envd.js`.
+ * Not "the CubeSandbox client", which is what this file used to be called and
+ * was never quite true: the endpoints are `POST /sandboxes`, `DELETE
+ * /sandboxes/{id}`, `GET /sandboxes`, the credential rides in `X-API-Key`, and
+ * the fallback key is spelled `e2b_000000`. This has always spoken the
+ * standard; only its name said otherwise. Pointing it at another vendor of
+ * that API is two environment variables.
  *
- * The template is generic — one image, no tenant baked in. What makes a sandbox
- * one tenant's is the environment the backend is started with (`SANDBOX_ID` and
- * `SANDBOX_TOKEN`, the identity it presents when it dials, and
- * `GATEWAY_TUNNEL_URL`, where it dials), and that is handed over at start time
- * rather than at creation.
+ * ## Why the official client is not used here
+ *
+ * It is used for everything reaching INTO a sandbox — see `envd.js`, where it
+ * replaced a protocol implemented by experiment. It is not used for creation,
+ * and the reason is narrow and worth stating so nobody assumes it was an
+ * oversight.
+ *
+ * Creation carries two fields the platform under this deployment shapes
+ * differently from the standard:
+ *
+ * - `network` — the egress rules that inject the model credential on the way
+ *   out. The standard keys rules by host (`{"api.example.com": [{transform:
+ *   {headers}}]}`); this platform takes an ordered list matched first-wins
+ *   (`[{match, action: {allow, audit, inject}}]`) which can also match on
+ *   method and path and can deny. Offering the standard shape is refused with
+ *   a 422, measured rather than assumed — `check-e2b-conformance.mjs`.
+ * - `volumeMounts` — a list of `{name, path}` where the standard takes a map.
+ *
+ * The client builds its own request body and has no way to carry either. So
+ * creation stays here, in the one place where this deployment's platform is
+ * visibly not the standard, and `kill`/`list` stay beside it rather than
+ * splitting the management plane across two clients for the sake of two calls
+ * of plain REST.
+ *
+ * When the platform accepts the standard shapes, the conformance check says
+ * so and this file can go.
+ *
+ * Addressing anything INTO a sandbox is the proxy's, and lives in `envd.js`.
  */
 
 import process from 'node:process'
@@ -80,12 +105,12 @@ export async function createSandbox(metadata, network, volumeMounts, template) {
     timeout: SANDBOX_TIMEOUT_SECONDS,
   })
   if (status !== 200 && status !== 201) {
-    throw new Error(`cubesandbox: create failed (${status}): ${body}`)
+    throw new Error(`e2b: create failed (${status}): ${body}`)
   }
   const parsed = JSON.parse(body)
   const id = parsed.sandboxID ?? parsed.sandboxId ?? parsed.id
   if (typeof id !== 'string') {
-    throw new Error(`cubesandbox: create returned no sandbox id: ${body}`)
+    throw new Error(`e2b: create returned no sandbox id: ${body}`)
   }
   return id
 }
@@ -99,7 +124,7 @@ export async function createSandbox(metadata, network, volumeMounts, template) {
 export async function removeSandbox(sandboxId) {
   const { status, body } = await request('DELETE', `/sandboxes/${encodeURIComponent(sandboxId)}`)
   if (status !== 200 && status !== 204 && status !== 404) {
-    throw new Error(`cubesandbox: remove ${sandboxId} failed (${status}): ${body}`)
+    throw new Error(`e2b: remove ${sandboxId} failed (${status}): ${body}`)
   }
 }
 
@@ -118,7 +143,7 @@ export async function removeSandbox(sandboxId) {
  */
 export async function listSandboxes(owner) {
   const { status, body } = await request('GET', '/sandboxes')
-  if (status !== 200) throw new Error(`cubesandbox: list failed (${status}): ${body}`)
+  if (status !== 200) throw new Error(`e2b: list failed (${status}): ${body}`)
   const parsed = JSON.parse(body)
   if (!Array.isArray(parsed)) return []
   return parsed

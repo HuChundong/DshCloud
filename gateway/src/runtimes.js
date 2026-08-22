@@ -13,7 +13,7 @@
 
 import process from 'node:process'
 import { createContainer, listContainers, removeContainer, startContainer } from './docker.js'
-import { TEMPLATE, createSandbox, listSandboxes, removeSandbox, request } from './cubesandbox.js'
+import { TEMPLATE, createSandbox, listSandboxes, removeSandbox, request } from './e2b.js'
 import { protectedEgress } from './egress.js'
 import { startBackend } from './envd.js'
 import { volumeMountsFor } from './volumes.js'
