@@ -82,12 +82,13 @@ server {
   client_max_body_size 64k;
   add_header X-Robots-Tag "noindex, nofollow, noarchive" always;
 
-  # Refused before the console does any work. \`nodelay\` is deliberately
-  # absent: a burst of six is allowed to queue rather than be rejected, so a
-  # person who mistypes twice is slowed rather than locked out, while anything
-  # automated meets the rate rather than the burst.
+  # Refused before the console does any work, and \`nodelay\` so that refusing
+  # is what it does. Without it nginx queues an over-rate request instead of
+  # rejecting it — which sounds gentler and is not: it delayed every step of a
+  # legitimate sign-in to the configured interval, and signing in is three
+  # requests, so the console appeared to hang rather than to be busy.
   location = /sign-in {
-    limit_req zone=admin_signin burst=6;
+    limit_req zone=admin_signin burst=10 nodelay;
     proxy_pass http://admin_console;
     proxy_set_header Host \$host;
     proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
