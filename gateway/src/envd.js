@@ -43,7 +43,7 @@
 
 import process from 'node:process'
 
-import { Sandbox as CubeSandbox } from '@cubesandbox/sdk'
+import { NEVER_TIMEOUT, Sandbox as CubeSandbox } from '@cubesandbox/sdk'
 import { Sandbox as E2bSandbox } from 'e2b'
 
 /** The port envd listens on inside every sandbox. */
@@ -158,7 +158,7 @@ async function cubeSandbox(handle) {
       makeDir: async (path) => await sandbox.files.makeDir(path),
     },
     run: async (command, envs) => {
-      const result = await sandbox.commands.run(command, { user: ENVD_USER, envs, timeoutMs: 0 })
+      const result = await sandbox.commands.run(command, { user: ENVD_USER, envs, timeoutMs: NEVER_TIMEOUT })
       return { exitCode: result.exitCode ?? 0, stdout: result.stdout ?? '', stderr: result.stderr ?? '' }
     },
     pty: {
@@ -167,10 +167,14 @@ async function cubeSandbox(handle) {
           user: ENVD_USER,
           cwd,
           envs,
-          // No deadline. A terminal ends when the person closes it or the
-          // shell exits, and a timeout here would close a window somebody
-          // left open.
-          timeoutMs: 0,
+          // No deadline, said the way THIS client says it. `0` is how the
+          // other one spells it, and passing it here sent envd a
+          // `Connect-Timeout-Ms` of zero — a deadline that had already
+          // expired, so the response never came and every command in every
+          // sandbox timed out waiting for a header. The two clients do not
+          // read the same number the same way, which is the whole reason this
+          // adapter exists and was the first thing it got wrong.
+          timeoutMs: NEVER_TIMEOUT,
         })
         // Output arrives through `wait`, which settles on exit. Both halves of
         // that are this one call.
