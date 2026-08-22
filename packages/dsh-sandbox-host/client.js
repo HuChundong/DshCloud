@@ -477,7 +477,6 @@ window.__ModuleLoader__.load({
     const DICTIONARY = {
       zh: {
         'attach.group': '附件',
-        'attach.item': '上传文件…',
         'attach.item.about': '从这台电脑选择文件，送进你的沙箱',
         'attach.drop': '松手即可上传到你的沙箱',
         'attach.uploading': '上传中 {sent} / {size}',
@@ -522,7 +521,6 @@ window.__ModuleLoader__.load({
       },
       en: {
         'attach.group': 'Attachments',
-        'attach.item': 'Upload a file…',
         'attach.item.about': 'Choose a file on this computer and send it to your sandbox',
         'attach.drop': 'Drop to upload to your sandbox',
         'attach.uploading': 'Uploading {sent} / {size}',
@@ -1104,7 +1102,13 @@ window.__ModuleLoader__.load({
                 pickAndSend()
               },
             },
-            React.createElement('span', { className: look.name }, t('attach.item')),
+            // The same name the `/` menu's candidate carries, because it is
+            // the same command — and because this panel is the shell's own,
+            // with the shell's commands listed under it: `compact`, `export`,
+            // `goal`. A Chinese label in that column read as a different kind
+            // of thing from its neighbours, and made the one command this
+            // deployment adds the only one nobody could type.
+            React.createElement('span', { className: look.name }, UPLOAD),
             React.createElement('span', { className: look.description }, t('attach.item.about')),
           ),
         ),
