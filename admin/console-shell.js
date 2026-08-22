@@ -87,6 +87,19 @@ const CONSOLE_DARK_NEUTRALS = `
  */
 const CONSOLE_NEUTRALS_CSS = `
   :root {
+    /* The application's own stack, which is the platform's. The front door
+       sets DM Sans, and that is right for a page somebody reads once: a
+       typeface is most of what a landing page says before a word of it is
+       read. A console is read every day, in tables, at 13px — and beside the
+       application's own lists, a second typeface was the loudest thing on the
+       screen. So the door keeps DM Sans and the room behind it does not. */
+    --sans: -apple-system, "system-ui", "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    /* The application's corners. Its controls are 12px, its surfaces 16px, and
+       its chips and toggles are pills — where this page had 8px controls and
+       14px cards, which is a different hand drawing the same shapes. */
+    --radius-field: 12px;
+    --radius-card: 16px;
+    --radius-pill: 999px;
     --fg: #101113;
     --ink: #101113;
     --on-ink: #ffffff;
@@ -218,7 +231,9 @@ ${TOAST_CSS}
     background: var(--bg);
     color: var(--fg);
     font-family: var(--sans);
-    font-size: 15px;
+    /* 14px, which is the application's UI size. 15px was half a step above it
+       and nothing else on the screen was set there. */
+    font-size: 14px;
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
   }
@@ -245,7 +260,7 @@ ${TOAST_CSS}
     display: flex;
     padding: .2rem;
     border: 0;
-    border-radius: 8px;
+    border-radius: 10px;
     background: none;
   }
   :root:not([data-rail="folded"]) .rail .brand .mark { pointer-events: none; }
@@ -261,7 +276,7 @@ ${TOAST_CSS}
     align-items: center;
     gap: .6rem;
     padding: .45rem .6rem;
-    border-radius: 8px;
+    border-radius: var(--radius-field);
     color: var(--muted);
     text-decoration: none;
     font-size: .875rem;
@@ -297,7 +312,7 @@ ${icons}
     width: 1.65rem;
     height: 1.65rem;
     border: 0;
-    border-radius: 8px;
+    border-radius: var(--radius-field);
     background: none;
     color: var(--faint);
   }
@@ -340,7 +355,7 @@ ${icons}
     gap: .55rem;
     padding: .75rem;
     margin: auto .5rem .5rem;
-    border-radius: 10px;
+    border-radius: var(--radius-field);
     border: 1px solid transparent;
   }
   .rail .who:hover { border-color: var(--line); background: var(--bg); }
@@ -350,7 +365,9 @@ ${icons}
     place-items: center;
     width: 1.75rem;
     height: 1.75rem;
-    border-radius: 8px;
+    /* Round, like the account's own face in the application's footer — a
+       12px-cornered square beside it read as a different kind of object. */
+    border-radius: 50%;
     background: var(--ink);
     color: var(--on-ink);
     font-size: .75rem;
@@ -375,7 +392,7 @@ ${icons}
     place-items: center;
     width: 1.6rem;
     height: 1.6rem;
-    border-radius: 8px;
+    border-radius: var(--radius-field);
     color: var(--muted);
   }
   .rail .who .out:hover { background: var(--surface); color: var(--fg); }
@@ -452,13 +469,15 @@ ${icons}
   .sub { color: var(--muted); font-size: .8125rem; }
   .actions { text-align: right; white-space: nowrap; }
 
+  /* A pill, which is what a badge is in the application — and one step larger
+     than it was: .6875rem beside 13px rows read as a footnote rather than as a
+     state. */
   .tag {
     display: inline-block;
-    padding: .1rem .4rem;
-    border-radius: 4px;
-    font-size: .6875rem;
-    font-weight: 600;
-    letter-spacing: .02em;
+    padding: .15rem .5rem;
+    border-radius: var(--radius-pill);
+    font-size: .75rem;
+    font-weight: 500;
   }
   .tag.admin { background: var(--ink); color: var(--on-ink); }
   /* Mixed from the tokens rather than written out, so both survive the theme. */
@@ -466,14 +485,20 @@ ${icons}
   .tag.live { background: var(--surface); color: var(--fg); }
 
   form { display: inline; }
+  /* 32px tall and set in the medium weight, which is how the application
+     draws a control with a word in it: its own buttons are 14px/500 at 38px,
+     and a console's are one notch down from that because there are six of them
+     on a row. */
   button {
-    padding: .35rem .7rem;
+    min-height: 32px;
+    padding: .35rem .75rem;
     border: 1px solid var(--line);
-    border-radius: 8px;
+    border-radius: var(--radius-field);
     background: var(--bg);
     color: var(--fg);
     font: inherit;
     font-size: .8125rem;
+    font-weight: 500;
     cursor: pointer;
   }
   button:hover { border-color: var(--muted); }
@@ -487,7 +512,7 @@ ${icons}
     margin-bottom: 1.5rem;
     padding: 1.25rem 1.25rem .5rem;
     border: 1px solid var(--line);
-    border-radius: 14px;
+    border-radius: var(--radius-card);
     background: var(--bg);
     box-shadow: 0 1px 2px var(--shadow);
   }
@@ -514,9 +539,12 @@ ${icons}
   .pager .range { font-variant-numeric: tabular-nums; }
   .pager .steps { display: flex; gap: .375rem; }
   .pager .step {
-    padding: .3rem .65rem;
+    display: inline-flex;
+    align-items: center;
+    min-height: 32px;
+    padding: .3rem .7rem;
     border: 1px solid var(--line);
-    border-radius: 8px;
+    border-radius: var(--radius-field);
     color: var(--fg);
     text-decoration: none;
   }
@@ -529,10 +557,10 @@ ${icons}
   .creds { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-bottom: 1rem; }
   .creds input {
     flex: 1 1 14rem;
-    height: 2.15rem;
+    height: 2.125rem;
     padding: 0 .7rem;
     border: 1px solid var(--line);
-    border-radius: 8px;
+    border-radius: var(--radius-field);
     background: var(--bg);
     color: var(--fg);
     font: inherit;
@@ -552,9 +580,10 @@ ${icons}
   .plan { display: inline-flex; align-items: center; gap: .4rem; }
   .plan select {
     appearance: none;
-    padding: .35rem 1.6rem .35rem .7rem;
+    min-height: 32px;
+    padding: .35rem 1.6rem .35rem .75rem;
     border: 1px solid var(--line);
-    border-radius: 8px;
+    border-radius: var(--radius-field);
     background: var(--bg);
     color: var(--fg);
     font: inherit;
@@ -576,10 +605,10 @@ ${icons}
   .mint { display: flex; align-items: center; gap: .5rem; margin-bottom: 1.25rem; }
   .mint input {
     width: 5rem;
-    height: 2.15rem;
+    height: 2.125rem;
     padding: 0 .7rem;
     border: 1px solid var(--line);
-    border-radius: 8px;
+    border-radius: var(--radius-field);
     background: var(--bg);
     color: var(--fg);
     font: inherit;
@@ -626,7 +655,7 @@ ${icons}
     max-width: min(90vw, 26rem);
     padding: 1.25rem;
     border: 1px solid var(--line);
-    border-radius: 14px;
+    border-radius: var(--radius-card);
     background: var(--bg);
     color: var(--fg);
     box-shadow: 0 1px 2px var(--shadow), 0 24px 48px var(--shadow);
