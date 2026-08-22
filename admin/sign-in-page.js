@@ -64,7 +64,6 @@ const REASONS = {
 /** Everything on the page, in both languages the console speaks. */
 const TABLE = {
   'doc.title': { zh: '运营控制台', en: 'Operator console' },
-  badge: { zh: '运营', en: 'OPS' },
   title: { zh: '运营控制台', en: 'Operator console' },
   lede: {
     zh: '这里管理账户、套餐与部署设置。仅限内部访问。',
@@ -168,24 +167,6 @@ ${GROUND_CSS}
   /* Height, not width: the mark is a hamster standing rather than a disc, so it
      is wider than it is tall and a square box would letterbox it. */
   .brand img { height: 26px; width: auto; display: block; }
-  /* The one mark that says this is not the tenants' door.
-
-     Outlined rather than filled, and that is the whole point of it: the
-     wordmark already ends in a filled chip, and a second one beside it read as
-     a stutter — two blocks of the same weight where the lockup is supposed to
-     be "Hamster HQ" and this is supposed to be an annotation on it. Quiet, it
-     sits outside the mark instead of competing with its last letter. */
-  .badge {
-    align-self: center;
-    margin-left: .125rem;
-    padding: .15rem .4rem;
-    border: 1px solid var(--line);
-    border-radius: 4px;
-    color: var(--muted);
-    font-size: .625rem;
-    font-weight: 600;
-    letter-spacing: .08em;
-  }
 
   /* The landing page's panel recipe, which the tenant sign-in card is also
      built from: --panel, a hairline, and lifted off the ground rather than
@@ -301,7 +282,6 @@ ${GROUND_HTML}
   <div class="brand">
     <img src="${asset('hamster.svg')}" alt="">
     ${WORDMARK}
-    <span class="badge" data-t="badge">运营</span>
   </div>
 
   <div class="card">

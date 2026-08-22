@@ -607,6 +607,14 @@ COPY --from=shell /shell /usr/share/nginx/html
 # served from `/landing/`, and a directory of that name here would have to be
 # reached at `landing/landing`.
 COPY --from=landing /src/web/landing/dist /usr/share/nginx/front-door
+# The three faces the server-rendered pages ask for. The landing build carries
+# its own hashed copies; these are the same files at a fixed address, because
+# a stylesheet written by hand cannot name a hash a bundler chose.
+#
+# They were addressed at /welcome/fonts/, which this deployment redirects to /
+# — so every @font-face resolved to an HTML document and every page the gateway
+# renders has been drawn in the fallback stack since that redirect was added.
+COPY web/landing/fonts /usr/share/nginx/html/fonts
 # This deployment's own mark and tab icon for the application shell, whose brand
 # plugin points at it.
 # And the same file again for the application shell, whose brand plugin points

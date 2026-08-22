@@ -113,6 +113,22 @@ reason that outlives whoever reads this:
 does, rather than what it says it does, and names the divergences already
 adapted to. A new one fails it.
 
+### No backticks inside a rendered template
+
+Every page in this repository is one `return \`…\`` holding markup, CSS and
+script. A backtick in prose inside that template — a comment naming a CSS
+property, a path, a variable — ends the string there. What follows is parsed as
+expressions, so the function stops returning a document and starts returning
+whatever that arithmetic came to: `NaN`, or a `SyntaxError` if you are lucky.
+
+It has cost an hour of this repository's life, twelve times, always the same
+way: write a comment, name a thing in backticks out of habit, discover it from
+a blank page. Say the name without them.
+
+`check-pages.mjs` catches it — it renders every page and a page that came back
+as a number is not a string — but only once it is run. `node --check` catches
+the loud half sooner.
+
 ### The one protocol written out here
 
 TOTP, in `admin/totp.js`. RFC 6238 has no wire format, no negotiation and no

@@ -95,6 +95,16 @@ server {
     proxy_set_header X-Forwarded-Proto \$scheme;
   }
 
+  # Served here rather than proxied: the console asks for the same three faces
+  # the tenants' pages do, and they are files in this image. Proxying them
+  # would ask the console for a font it has no reason to hold.
+  location /fonts/ {
+    root /usr/share/nginx/html;
+    access_log off;
+    expires 30d;
+    add_header Cache-Control "public, max-age=2592000, immutable" always;
+  }
+
   location / {
     proxy_pass http://admin_console;
     proxy_http_version 1.1;

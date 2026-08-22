@@ -162,25 +162,25 @@ ${TOAST_CSS}
     background: var(--surface);
     transition: width .16s;
   }
-  .rail .brand { display: flex; align-items: center; gap: .5rem; padding: 1.15rem 1rem 1rem; }
-  .rail .brand img { height: 20px; width: auto; display: block; flex: none; }
+  .rail .brand { display: flex; align-items: center; gap: .5rem; padding: 1.15rem .75rem 1rem 1rem; }
+  .rail .brand img { height: 20px; width: auto; display: block; }
+  /* A button around the mark, and unpressable while the rail is open: there,
+     it is a logo and a logo that collapsed the page under the pointer would be
+     a surprise. Folded, it is the only thing left and it is the way back. */
+  .rail .brand .mark {
+    flex: none;
+    display: flex;
+    padding: .2rem;
+    border: 0;
+    border-radius: 8px;
+    background: none;
+  }
+  :root:not([data-rail="folded"]) .rail .brand .mark { pointer-events: none; }
+  :root[data-rail="folded"] .rail .brand .mark:hover { background: var(--bg); }
   /* Smaller than the wordmark's own size. At 1.5rem the lockup measured 238px
      inside a 232px rail and the badge was clipped off the end — the wordmark is
      sized for a page it is the largest thing on, and here it is a label. */
   .rail .brand .word { font-size: 1.125rem; }
-  /* Outlined, not filled: the wordmark already ends in a solid chip, and a
-     second one beside it reads as a stutter rather than as an annotation. */
-  .rail .badge {
-    align-self: center;
-    margin-left: .125rem;
-    padding: .1rem .35rem;
-    border: 1px solid var(--line-strong);
-    border-radius: 4px;
-    color: var(--muted);
-    font-size: .5625rem;
-    font-weight: 600;
-    letter-spacing: .08em;
-  }
 
   .rail nav { display: flex; flex-direction: column; gap: 2px; padding: .25rem .5rem; overflow-y: auto; }
   .rail nav a {
@@ -212,30 +212,31 @@ ${TOAST_CSS}
   }
 ${icons}
 
-  /* The trigger, above the page's own heading. Every dashboard people already
-     use puts it here rather than on the rail, and the reason is mechanical: a
-     control on the rail has to survive the rail closing. */
-  .fold {
-    margin: 0 0 .75rem;
-    padding: .35rem;
+  /* The fold, at the end of the brand row. It closes the rail it sits on, and
+     what reopens it is the mark beside it — which is why this one disappears
+     with the rest of the row's width and that one does not. */
+  .rail .fold {
+    margin-left: auto;
+    padding: .3rem;
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 1.9rem;
-    height: 1.9rem;
+    width: 1.65rem;
+    height: 1.65rem;
     border: 0;
     border-radius: 8px;
     background: none;
-    color: var(--muted);
+    color: var(--faint);
   }
-  .fold:hover { background: var(--surface); color: var(--fg); border-color: transparent; }
-  .fold i {
-    width: 17px;
-    height: 17px;
+  .rail .fold:hover { background: var(--bg); color: var(--fg); border-color: transparent; }
+  .rail .fold i {
+    width: 16px;
+    height: 16px;
     background: currentColor;
-    mask: ${cssUrl('panel', '#000', 17)} center/17px no-repeat;
-    -webkit-mask: ${cssUrl('panel', '#000', 17)} center/17px no-repeat;
+    mask: ${cssUrl('panel', '#000', 16)} center/16px no-repeat;
+    -webkit-mask: ${cssUrl('panel', '#000', 16)} center/16px no-repeat;
   }
+  :root[data-rail="folded"] .rail .fold { display: none; }
 
   /* Folded: the glyphs stay, everything that needs width goes. Written against
      the root rather than the rail so the state is set before first paint, which
@@ -243,7 +244,6 @@ ${icons}
   :root[data-rail="folded"] .rail { width: 60px; }
   :root[data-rail="folded"] .rail .brand { justify-content: center; padding-left: 0; padding-right: 0; }
   :root[data-rail="folded"] .rail .brand .word,
-  :root[data-rail="folded"] .rail .brand .badge,
   :root[data-rail="folded"] .rail nav a span,
   :root[data-rail="folded"] .rail .who .name { display: none; }
   :root[data-rail="folded"] .rail nav a { justify-content: center; padding-left: 0; padding-right: 0; }
@@ -321,9 +321,11 @@ ${icons}
     min-width: 0;
     overflow-y: auto;
     padding: 2.25rem clamp(1.25rem, 4vw, 2.5rem) 3rem;
-    /* Clears the two controls fixed in the corner. */
-    padding-right: max(clamp(1.25rem, 4vw, 2.5rem), 7.5rem);
   }
+  /* The corner controls are cleared by the heading rather than by the pane.
+     Reserving the width on the pane took it from every row of every table for
+     the sake of two buttons that overlap nothing below the first line. */
+  .page h1, .page .lede { padding-right: 7rem; }
   /* A section holding a list does not scroll: the rows do, inside their card,
      with the pager underneath them where it can be reached without scrolling
      past the thing it pages.
@@ -355,7 +357,10 @@ ${icons}
     z-index: 1;
     background: var(--bg);
   }
-  .page { max-width: 60rem; }
+  /* No reading width. This is a console rather than a document: the columns
+     are dates and controls that were being squeezed into 60rem while the rest
+     of a wide window sat empty beside them. */
+  .page { width: 100%; }
   h1 { margin: 0 0 .35rem; font-size: 1.25rem; font-weight: 600; letter-spacing: -.01em; }
   .lede { margin: 0 0 1.75rem; color: var(--muted); font-size: .875rem; }
 
@@ -573,8 +578,7 @@ ${icons}
        would take the strip down to 60px of horizontal scroll. */
     :root[data-rail="folded"] .rail { width: 100%; }
     :root[data-rail="folded"] .rail .brand .word,
-    :root[data-rail="folded"] .rail .brand .badge,
-    :root[data-rail="folded"] .rail nav a span { display: revert; }
+      :root[data-rail="folded"] .rail nav a span { display: revert; }
     :root[data-rail="folded"] .rail nav a { justify-content: flex-start; padding-left: .6rem; padding-right: .6rem; }
     main { padding-top: 1.5rem; overflow-y: visible; }
     body { height: auto; overflow: auto; }
@@ -591,9 +595,15 @@ ${langToggle(table)}
 
 <aside class="rail">
   <div class="brand">
-    <img src="${asset('hamster.svg')}" alt="">
+    <!-- The mark is the way back. Folded, the rail has room for nothing else,
+         and a control that only exists while the rail is open cannot be the
+         one that opens it — so the logo takes that job, and only while it is
+         the only thing there. Open, it is a logo again. -->
+    <button type="button" class="mark" data-ta="rail.toggle" aria-label="展开侧栏">
+      <img src="${asset('hamster.svg')}" alt="">
+    </button>
     ${WORDMARK}
-    <span class="badge">OPS</span>
+    <button type="button" class="fold" data-ta="rail.toggle" aria-label="收起侧栏"><i aria-hidden="true"></i></button>
   </div>
   <nav>
 ${rail}
@@ -616,10 +626,6 @@ ${rail}
 
 <main>
   <div class="page">
-    <!-- The trigger sits with the page it opens onto, not on the rail it
-         closes: it has to be reachable when the rail is shut, and every
-         dashboard people already use puts it here. -->
-    <button type="button" class="fold" data-ta="rail.toggle" aria-label="收起 / 展开侧栏"><i aria-hidden="true"></i></button>
     <h1 data-t="nav.${section.id}">${escapeHtml(section.label.zh)}</h1>
     <p class="lede" data-t="lede.${section.id}">${escapeHtml(section.lede.zh)}</p>
 ${body}
@@ -653,8 +659,13 @@ ${body}
     // Delegated, because the trigger lives inside the part of the page every
     // action replaces — bound to the button, it would stop working after the
     // first suspend.
+    // Two ways in, one way out: the control at the end of the brand row closes
+    // the rail, and the mark it sits beside opens it again. The mark is inert
+    // while the rail is open — there it is a logo, and a logo that collapsed
+    // the page under the pointer would be a surprise.
     document.addEventListener('click', function (event) {
-      if (event.target.closest && event.target.closest('.fold')) toggleRail()
+      if (!event.target.closest) return
+      if (event.target.closest('.rail .fold, .rail .brand .mark')) toggleRail()
     })
 
     // The shortcut every dashboard with a rail uses. Ignored while something is
@@ -730,27 +741,75 @@ ${body}
       }).catch(function () { form.submit() })
     }
 
-    // The section re-read from the server rather than patched here, so what is
-    // on screen is what it would serve — one description of the page, not two.
+    // One way in and out of a section, used by an action re-reading its own
+    // page and by a link going to another one.
     //
-    // The current path, not the root: every section is its own route now, and
-    // re-reading the root would answer an action taken under /invites with the
-    // tenants page.
-    function refresh(notice) {
-      return fetch(location.pathname, { headers: { Accept: 'text/html' } })
-        .then(function (response) { return response.text() })
+    // Only the page area is replaced. The rail, the toggles and the dialog are the
+    // same on every section — replacing them would rebuild controls the reader
+    // is pointing at, and reattach nothing, because everything here is
+    // delegated on the document.
+    function load(where, push) {
+      return fetch(where, { headers: { Accept: 'text/html' } })
+        .then(function (response) {
+          if (!response.ok) throw new Error('not ok')
+          return response.text()
+        })
         .then(function (html) {
           var fresh = new DOMParser().parseFromString(html, 'text/html')
           var page = fresh.querySelector('main .page')
-          if (page) {
-            document.querySelector('main .page').replaceWith(page)
-            // The replacement arrived as the server writes it: Chinese, with
-            // every picker's button visible. Neither is what this visit is in.
-            window.dshApply()
-            hidePlanButtons(page)
+          if (!page) throw new Error('no page')
+
+          // The arriving section's words, before its markup: every section
+          // ships only the strings its own markup names, so the vocabulary
+          // travels with the page or the new markup is applied against the old
+          // one's dictionary.
+          var words = fresh.getElementById('dsh-strings')
+          if (words && window.dshVocabulary) window.dshVocabulary(JSON.parse(words.textContent))
+
+          document.querySelector('main .page').replaceWith(page)
+
+          if (push) history.pushState({}, '', where)
+          var here = new URL(where, location.href).pathname
+          var links = document.querySelectorAll('.rail nav a')
+          for (var i = 0; i < links.length; i += 1) {
+            if (new URL(links[i].href).pathname === here) links[i].setAttribute('aria-current', 'page')
+            else links[i].removeAttribute('aria-current')
           }
-          announce(notice)
+
+          // The replacement arrived as the server writes it: Chinese, with
+          // every picker's button visible. Neither is what this visit is in.
+          window.dshApply()
+          hidePlanButtons(page)
+          document.querySelector('main').scrollTop = 0
         })
+    }
+
+    // A navigation that fails falls back to the browser's own. Whatever went
+    // wrong — offline, a session that expired, markup this does not recognise
+    // — a full load either fixes it or shows the sign-in page, and both are
+    // better than a rail whose links stopped working.
+    function go(where, push) {
+      load(where, push).catch(function () { location.href = where })
+    }
+
+    // The rail and the pagers. Modified clicks and middle clicks are left
+    // alone: those are somebody opening a section in another tab, and
+    // preventing them would be taking away a browser rather than adding a
+    // console.
+    document.addEventListener('click', function (event) {
+      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+      var link = event.target.closest && event.target.closest('.rail nav a, .pager a.step')
+      if (!link) return
+      event.preventDefault()
+      go(link.getAttribute('href'), true)
+    })
+
+    window.addEventListener('popstate', function () {
+      go(location.pathname + location.search, false)
+    })
+
+    function refresh(notice) {
+      return load(location.pathname + location.search, false).then(function () { announce(notice) })
     }
 
     // The toast the server would have rendered, raised here because the page

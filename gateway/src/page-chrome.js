@@ -53,15 +53,15 @@ export function escapeHtml(text) {
 const FONT_CSS = `
   @font-face {
     font-family: "Host Grotesk"; font-style: normal; font-weight: 500 700;
-    font-display: optional; src: url("/welcome/fonts/host-grotesk-latin.woff2") format("woff2");
+    font-display: optional; src: url("/fonts/host-grotesk-latin.woff2") format("woff2");
   }
   @font-face {
     font-family: "DM Sans"; font-style: normal; font-weight: 400 500;
-    font-display: optional; src: url("/welcome/fonts/dm-sans-latin.woff2") format("woff2");
+    font-display: optional; src: url("/fonts/dm-sans-latin.woff2") format("woff2");
   }
   @font-face {
     font-family: "Fragment Mono"; font-style: normal; font-weight: 400;
-    font-display: optional; src: url("/welcome/fonts/fragment-mono-latin.woff2") format("woff2");
+    font-display: optional; src: url("/fonts/fragment-mono-latin.woff2") format("woff2");
   }
 `
 
@@ -78,7 +78,7 @@ export const FONT_PRELOAD = [
   'host-grotesk-latin',
   'dm-sans-latin',
   'fragment-mono-latin',
-].map((face) => `<link rel="preload" href="/welcome/fonts/${face}.woff2" as="font" type="font/woff2" crossorigin>`).join('\n')
+].map((face) => `<link rel="preload" href="/fonts/${face}.woff2" as="font" type="font/woff2" crossorigin>`).join('\n')
 
 /**
  * The dark half of the palette, stated once and emitted twice.
@@ -595,9 +595,14 @@ export function langToggle(table) {
   <button type="button" data-lang="zh" aria-pressed="true">中文</button>
   <button type="button" data-lang="en" aria-pressed="false">EN</button>
 </div>
+<script type="application/json" id="dsh-strings">${json}</script>
 <script>
   (function () {
-    var T = ${json}
+    // Read from an element rather than written into the script, so a page that
+    // swaps its content for another section's can hand over that section's
+    // vocabulary with it. Inlined, the words a page had at load were the only
+    // words it could ever say.
+    var T = JSON.parse(document.getElementById('dsh-strings').textContent)
     function apply(next) {
       document.documentElement.lang = next === 'zh' ? 'zh-CN' : 'en'
       if (T['doc.title']) document.title = T['doc.title'][next]
@@ -654,6 +659,15 @@ export function langToggle(table) {
     // version that took a root would have to be told the right one by every
     // caller that swaps markup.
     window.dshApply = function () { apply(current) }
+
+    // For a page that navigated without reloading. Every section ships only
+    // the strings its own markup names — which is what keeps the check that a
+    // page names everything it carries sharp — so arriving at another section
+    // means arriving with another vocabulary.
+    window.dshVocabulary = function (next) {
+      T = next
+      apply(current)
+    }
     var stored = null
     try { stored = localStorage.getItem('dsh-lang') } catch (error) { /* as above */ }
     // No stored choice falls back to the browser's own, which for this

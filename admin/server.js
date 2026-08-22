@@ -166,10 +166,15 @@ const deps = { accounts, invites, settings, secondFactor, db, readBody, tellGate
  * duplication, and the two are read by different vintages of browser.
  */
 const HARDENING = {
+  // `connect-src 'self'` is not a loosening: without it `default-src 'none'`
+  // refuses every fetch this page makes, which is every action it takes in
+  // place and every section it navigates to without reloading. Both fell back
+  // to a full page load and neither said why — the console worked, slowly, and
+  // the reason was in the browser's console rather than in any log here.
   'Content-Security-Policy':
     "default-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; "
-    + "script-src 'self' 'unsafe-inline'; font-src 'self' data:; form-action 'self'; "
-    + "base-uri 'none'; frame-ancestors 'none'",
+    + "script-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self'; "
+    + "form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
   'X-Frame-Options': 'DENY',
   'X-Content-Type-Options': 'nosniff',
   'Referrer-Policy': 'no-referrer',

@@ -96,11 +96,16 @@ async function pages() {
  * @returns {{table: Record<string, {en: string, zh: string}>, rest: string}} the table, and the page without it.
  */
 function embedded(html) {
-  const at = html.indexOf('var T = ')
+  // The vocabulary travels as a JSON island rather than as a line of script,
+  // so a page can be handed another section's without reloading. Read the same
+  // way the browser reads it.
+  const open = '<script type="application/json" id="dsh-strings">'
+  const at = html.indexOf(open)
   if (at === -1) return { table: undefined, rest: html }
-  const end = html.indexOf('\n', at)
-  const table = JSON.parse(html.slice(at + 'var T = '.length, end))
-  return { table, rest: html.slice(0, at) + html.slice(end) }
+  const from = at + open.length
+  const to = html.indexOf('</script>', from)
+  const table = JSON.parse(html.slice(from, to).replaceAll('\\u003c', '<'))
+  return { table, rest: html.slice(0, at) + html.slice(to) }
 }
 
 /**

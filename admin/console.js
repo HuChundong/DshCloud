@@ -95,8 +95,12 @@ export async function handleConsole(path, req, res, deps) {
   }
 
   if (req.method !== 'POST') {
-    res.writeHead(405, { 'Content-Type': 'text/plain' })
-    res.end('method not allowed')
+    // 404, not 405. This service answers five GET routes and a handful of
+    // POSTs, and everything else is a path it does not have — a 405 says the
+    // path exists and the method is wrong, which sent three font requests
+    // looking like a routing bug rather than like the missing files they were.
+    res.writeHead(404, { 'Content-Type': 'text/plain' })
+    res.end('not found')
     return
   }
 
