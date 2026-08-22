@@ -114,7 +114,6 @@ window.__ModuleLoader__.load({
         'panel.collapse': '收起侧边栏',
         'panel.reveal': '打开侧边栏',
 
-        'empty.title': '打开一个工具',
         'empty.opened': '已打开',
         'stub.title': '「{name}」还没有接上',
         'stub.note': '这一步只有界面，没有数据。',
@@ -207,7 +206,6 @@ window.__ModuleLoader__.load({
         'panel.collapse': 'Collapse the panel',
         'panel.reveal': 'Open the panel',
 
-        'empty.title': 'Open a tool',
         'empty.opened': 'open',
         'stub.title': '“{name}” is not wired up yet',
         'stub.note': 'This step is the interface only; there is no data behind it.',
@@ -1139,38 +1137,66 @@ window.__ModuleLoader__.load({
       /* The empty state. The panel opens with no tabs, so this is the first
          thing anyone sees — it lists what can be opened rather than showing a
          blank surface with a `+` somewhere in a corner. */
+      /* Nothing but the cards, centred in the panel.
+         
+         The row above them said "Open a tool" over three cards that are each
+         a tool with its name on it — a caption for a picture of itself. What
+         is left is the choice, and with the caption gone there is no reading
+         order to anchor to the left edge: the cards centre, in both axes, in
+         the space the panel is not otherwise using. */
       .${NS}-empty {
         display: flex;
         flex-direction: column;
+        align-items: center;
         justify-content: center;
-        gap: 8px;
         height: 100%;
         padding: 24px;
         box-sizing: border-box;
       }
-      .${NS}-empty-title {
-        margin-bottom: 4px;
-        color: var(--dsw-alias-label-tertiary);
-        font-size: 12px;
-        line-height: 18px;
-      }
-      /* Cards in a row that wraps, not a stack of full-width bars.
-         auto-fit with a 118px floor puts three across the panel at its
-         narrowest — 480px less its padding leaves 432, which is three and the
-         gaps — and drops to two, then one, as it is dragged narrower. Nothing
-         here is pinned to a count: the floor is the promise, and the row
-         arranges itself. */
+      /* Two cards to a row, each the size of what is in it.
+
+         Two columns stated rather than a floor that fits as many as it can:
+         the panel is a column beside a conversation, and a row of three across
+         it read as a toolbar rather than as a choice between three things. The
+         columns are a width, not a fraction, so the cards stay the size the
+         content wants at every panel width instead of stretching into
+         whatever room the panel happens to have — a 400px-wide card holding an
+         icon and one word is a card that has lost track of what it is for.
+
+         Centred, which is where a choice with no caption over it belongs —
+         and because the cards are a width rather than a fraction, centring
+         moves them as a block instead of growing each one to swallow the
+         space. */
+      /* Two fixed columns, and the pair of them centred in the panel.
+         
+         Centring the BLOCK, not each line: a wrapped flex row centres its last
+         line too, which put a third card under the middle of the two above it
+         — a little pyramid, and a reading order that starts in a different
+         place on every row. A grid seats the odd card in the first column, so
+         the left edge of the group is a line all the way down. */
       .${NS}-choices {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+        grid-template-columns: repeat(2, 124px);
+        justify-content: center;
         gap: 8px;
       }
+      /* Two rows, centred on each other: the mark, then the name. The
+         sentence that used to sit under the name has moved to the card's
+         title — three lines of prose in a card the size of a stamp is a
+         paragraph with a border, and what the tool does is answered by
+         opening it. */
       .${NS}-choice {
         display: flex;
         flex-direction: column;
-        align-items: flex-start;
-        gap: 6px;
-        padding: 12px;
+        align-items: center;
+        justify-content: center;
+        flex: none;
+        width: 124px;
+        gap: 8px;
+        /* Deeper above and below than to either side. The card is two short
+           rows stacked, and even padding around them reads as a label with a
+           box drawn tight to it; the air is what makes it a card. */
+        padding: 18px 12px;
         box-sizing: border-box;
         border: 1px solid var(--dsw-alias-border-l1);
         border-radius: 10px;
@@ -1179,7 +1205,7 @@ window.__ModuleLoader__.load({
         font-family: var(--dsw-font-family);
         font-size: 13px;
         line-height: 20px;
-        text-align: left;
+        text-align: center;
         cursor: pointer;
       }
       .${NS}-choice:hover {
@@ -2442,20 +2468,22 @@ window.__ModuleLoader__.load({
     function EmptyState({ onOpen, open }) {
       const t = useT()
       return h('div', { className: `${NS}-empty` },
-        h('div', { className: `${NS}-empty-title` }, t('empty.title')),
         h('div', { className: `${NS}-choices` },
           TOOLS.map((tool) => h('button', {
             key: tool.id,
             type: 'button',
             className: `${NS}-choice`,
+            // The sentence the card used to carry as a third line. Kept, and
+            // kept where a sentence belongs on a control this small — it still
+            // says what the tool is for, and it still says when the tool is
+            // already open, which reads as a state rather than as a disabled
+            // control: the click works either way, it just focuses what is
+            // there.
+            title: open.some((tab) => tab.id === tool.id) ? t('empty.opened') : t(`tool.${tool.id}.note`),
             onClick: () => onOpen(tool),
           },
           h('span', { className: `${NS}-choice-icon` }, icon(tool.icon, 18)),
-          h('span', null, t(`tool.${tool.id}`)),
-          h('div', { className: `${NS}-choice-note` },
-            // Already open reads as a state, not as a disabled control: the
-            // click still works, it just focuses what is there.
-            open.some((tab) => tab.id === tool.id) ? t('empty.opened') : t(`tool.${tool.id}.note`))))),
+          h('span', null, t(`tool.${tool.id}`))))),
       )
     }
 
