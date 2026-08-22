@@ -55,6 +55,7 @@ export function when(at) {
 /** What the frame itself says, in both languages the console speaks. */
 const SHELL = {
   back: { zh: '退出', en: 'Sign out' },
+  'rail.collapse': { zh: '收起侧栏', en: 'Collapse the sidebar' },
   footer: { zh: 'HamsterHQ · 自建部署', en: 'HamsterHQ · self-hosted' },
   'confirm.title': { zh: '确认', en: 'Are you sure?' },
   'confirm.go': { zh: '确认删除', en: 'Delete' },
@@ -120,14 +121,28 @@ export function consolePage(state) {
 <meta name="robots" content="noindex, nofollow">
 <link rel="icon" href="${asset('favicon.svg')}">
 ${FONT_PRELOAD}
+<script>
+  // Before first paint, and in the head for that reason: read after the body
+  // exists, the rail would draw open and snap shut on every navigation.
+  try {
+    if (localStorage.getItem('hq-rail') === 'folded') document.documentElement.dataset.rail = 'folded'
+  } catch (error) { /* private mode: the rail simply does not remember */ }
+</script>
 <style>
 ${PALETTE_CSS}
 ${BRAND_CSS}
 ${TOAST_CSS}
   * { box-sizing: border-box; }
   html, body { height: 100%; }
+  /* Two panes, and the page itself does not scroll. The rail was sticky before,
+     which meant the document grew with the table and the whole thing moved: a
+     long list of tenants pushed the operator's own name and the sign-out below
+     the fold, and the browser scrollbar measured the table rather than the
+     page. Each pane owns its overflow now. */
   body {
     margin: 0;
+    height: 100%;
+    overflow: hidden;
     display: flex;
     background: var(--bg);
     color: var(--fg);
@@ -142,16 +157,19 @@ ${TOAST_CSS}
   .rail {
     flex: none;
     width: 232px;
-    height: 100vh;
-    position: sticky;
-    top: 0;
+    height: 100%;
     display: flex;
     flex-direction: column;
     border-right: 1px solid var(--line);
     background: var(--surface);
+    transition: width .16s;
   }
-  .rail .brand { display: flex; align-items: center; gap: .5rem; padding: 1.15rem 1.25rem 1rem; }
-  .rail .brand img { height: 24px; width: auto; display: block; }
+  .rail .brand { display: flex; align-items: center; gap: .5rem; padding: 1.15rem 1rem 1rem; }
+  .rail .brand img { height: 20px; width: auto; display: block; flex: none; }
+  /* Smaller than the wordmark's own size. At 1.5rem the lockup measured 238px
+     inside a 232px rail and the badge was clipped off the end — the wordmark is
+     sized for a page it is the largest thing on, and here it is a label. */
+  .rail .brand .word { font-size: 1.125rem; }
   /* Outlined, not filled: the wordmark already ends in a solid chip, and a
      second one beside it reads as a stutter rather than as an annotation. */
   .rail .badge {
@@ -196,8 +214,53 @@ ${TOAST_CSS}
   }
 ${icons}
 
+  /* The fold. Its own row above the operator rather than a chevron floating on
+     the rail's edge: an edge control is invisible until you know it is there,
+     and this rail is read by one person who should not have to discover it. */
+  .rail .fold {
+    margin: auto .5rem .25rem;
+    padding: .4rem;
+    display: flex;
+    justify-content: center;
+    border: 0;
+    border-radius: 8px;
+    background: none;
+    color: var(--faint);
+  }
+  .rail .fold:hover { background: var(--bg); color: var(--fg); border-color: transparent; }
+  .rail .fold i {
+    width: 16px;
+    height: 16px;
+    background: currentColor;
+    mask: ${cssUrl('chevron-down', '#000', 16)} center/16px no-repeat;
+    -webkit-mask: ${cssUrl('chevron-down', '#000', 16)} center/16px no-repeat;
+    /* The chevron points down in the set; a rail folds sideways. */
+    transform: rotate(90deg);
+    transition: transform .16s;
+  }
+
+  /* Folded: the glyphs stay, everything that needs width goes. Written against
+     the root rather than the rail so the state is set before first paint, which
+     is what stops the rail unfolding for a frame on every navigation. */
+  :root[data-rail="folded"] .rail { width: 60px; }
+  :root[data-rail="folded"] .rail .brand { justify-content: center; padding-left: 0; padding-right: 0; }
+  :root[data-rail="folded"] .rail .brand .word,
+  :root[data-rail="folded"] .rail .brand .badge,
+  :root[data-rail="folded"] .rail nav a span,
+  :root[data-rail="folded"] .rail .who strong,
+  :root[data-rail="folded"] .rail .who a span,
+  :root[data-rail="folded"] .rail .who .build { display: none; }
+  /* The way out stays. Folded, it is the glyph alone — a rail with no sign-out
+     is a session left open on whatever machine opened it, and hiding the only
+     control that ends one is not a saving. */
+  :root[data-rail="folded"] .rail .who a { justify-content: center; }
+  :root[data-rail="folded"] .rail .who a i { display: block; }
+  :root[data-rail="folded"] .rail nav a { justify-content: center; padding-left: 0; padding-right: 0; }
+  :root[data-rail="folded"] .rail .fold i { transform: rotate(-90deg); }
+  :root[data-rail="folded"] .rail .who { padding: .875rem 0 1.15rem; text-align: center; }
+
   .rail .who {
-    margin-top: auto;
+    margin-top: 0;
     padding: .875rem 1.25rem 1.15rem;
     border-top: 1px solid var(--line);
     color: var(--muted);
@@ -205,18 +268,34 @@ ${icons}
     line-height: 1.5;
   }
   .rail .who strong { display: block; font-weight: 500; color: var(--fg); overflow-wrap: anywhere; }
-  .rail .who a { color: var(--muted); }
+  .rail .who a { display: flex; align-items: center; gap: .4rem; color: var(--muted); text-decoration: none; }
   .rail .who a:hover { color: var(--fg); }
+  .rail .who a span { border-bottom: 1px solid var(--line); }
+  .rail .who a i {
+    display: none;
+    width: 16px;
+    height: 16px;
+    background: currentColor;
+    mask: ${cssUrl('signout', '#000', 16)} center/16px no-repeat;
+    -webkit-mask: ${cssUrl('signout', '#000', 16)} center/16px no-repeat;
+  }
+  .rail .who .build { display: block; margin-top: .5rem; font-family: var(--mono); font-size: .6875rem; color: var(--faint); overflow-wrap: anywhere; }
 
   /* ---- the page --------------------------------------------------------- */
 
   main {
     flex: 1;
     min-width: 0;
+    overflow-y: auto;
     padding: 2.25rem clamp(1.25rem, 4vw, 2.5rem) 3rem;
     /* Clears the two controls fixed in the corner. */
     padding-right: max(clamp(1.25rem, 4vw, 2.5rem), 7.5rem);
   }
+  /* A table wider than the pane scrolls inside its own card rather than
+     widening the page. Nothing here is wide today; a section added later will
+     be, and finding out then means finding out from a sideways-scrolling
+     layout. */
+  .card { overflow-x: auto; }
   .page { max-width: 60rem; }
   h1 { margin: 0 0 .35rem; font-size: 1.25rem; font-weight: 600; letter-spacing: -.01em; }
   .lede { margin: 0 0 1.75rem; color: var(--muted); font-size: .875rem; }
@@ -401,8 +480,16 @@ ${icons}
     .rail { width: 100%; height: auto; border-right: 0; border-bottom: 1px solid var(--line); }
     .rail .brand { padding-bottom: .5rem; }
     .rail nav { flex-direction: row; overflow-x: auto; padding: 0 .75rem .6rem; }
-    .rail .who { display: none; }
-    main { padding-top: 1.5rem; }
+    .rail .who, .rail .fold { display: none; }
+    /* Nothing to fold when the rail is already a strip, and a folded width
+       would take the strip down to 60px of horizontal scroll. */
+    :root[data-rail="folded"] .rail { width: 100%; }
+    :root[data-rail="folded"] .rail .brand .word,
+    :root[data-rail="folded"] .rail .brand .badge,
+    :root[data-rail="folded"] .rail nav a span { display: revert; }
+    :root[data-rail="folded"] .rail nav a { justify-content: flex-start; padding-left: .6rem; padding-right: .6rem; }
+    main { padding-top: 1.5rem; overflow-y: visible; }
+    body { height: auto; overflow: auto; }
   }
   @media (max-width: 640px) {
     .hide-narrow { display: none; }
@@ -423,9 +510,15 @@ ${langToggle(table)}
   <nav>
 ${rail}
   </nav>
+  <button type="button" class="fold" data-ta="rail.collapse" aria-label="收起侧栏"><i aria-hidden="true"></i></button>
   <div class="who">
     <strong>${escapeHtml(viewer)}</strong>
-    <a href="/sign-out" data-t="back">退出</a>
+    <a href="/sign-out" data-ta="back" aria-label="退出"><i aria-hidden="true"></i><span data-t="back">退出</span></a>
+    <!-- The release, beside the deployment it belongs to rather than under the
+         table. It answers "what is running here", which is a fact about this
+         installation and not about the section being read — and at the foot of
+         a scrolling column it was a line nobody arrived at. -->
+    <span class="build"><span data-t="footer">HamsterHQ · 自建部署</span>${release}</span>
   </div>
 </aside>
 
@@ -434,7 +527,6 @@ ${rail}
     <h1 data-t="nav.${section.id}">${escapeHtml(section.label.zh)}</h1>
     <p class="lede" data-t="lede.${section.id}">${escapeHtml(section.lede.zh)}</p>
 ${body}
-    <footer class="sub" style="margin-top:2.5rem"><span data-t="footer">HamsterHQ · 自建部署</span>${release}</footer>
   </div>
 </main>
 
@@ -452,6 +544,19 @@ ${body}
   // misplaced click, not an authorisation step — the server decides that — so
   // losing it without JavaScript costs nothing that matters.
   (function () {
+    // The fold, remembered. A preference about how this console is read, like
+    // the theme and the language beside it — and kept in the same place, so a
+    // browser that forgets one forgets all three.
+    var fold = document.querySelector('.rail .fold')
+    if (fold) {
+      fold.addEventListener('click', function () {
+        var folded = document.documentElement.dataset.rail === 'folded'
+        if (folded) delete document.documentElement.dataset.rail
+        else document.documentElement.dataset.rail = 'folded'
+        try { localStorage.setItem('hq-rail', folded ? 'open' : 'folded') } catch (error) { /* as above */ }
+      })
+    }
+
     var dialog = document.getElementById('confirm')
     var text = document.getElementById('confirm-text')
 
