@@ -136,17 +136,22 @@ ${GROUND_CSS}
   /* Height, not width: the mark is a hamster standing rather than a disc, so it
      is wider than it is tall and a square box would letterbox it. */
   .brand img { height: 26px; width: auto; display: block; }
-  /* The one mark that says this is not the tenants' door. Filled rather than
-     outlined, so it reads as part of the lockup; --ink inverts with the theme
-     alongside everything else. */
+  /* The one mark that says this is not the tenants' door.
+
+     Outlined rather than filled, and that is the whole point of it: the
+     wordmark already ends in a filled chip, and a second one beside it read as
+     a stutter — two blocks of the same weight where the lockup is supposed to
+     be "Hamster HQ" and this is supposed to be an annotation on it. Quiet, it
+     sits outside the mark instead of competing with its last letter. */
   .badge {
     align-self: center;
+    margin-left: .125rem;
     padding: .15rem .4rem;
+    border: 1px solid var(--line);
     border-radius: 4px;
-    background: var(--ink);
-    color: var(--on-ink);
+    color: var(--muted);
     font-size: .625rem;
-    font-weight: 700;
+    font-weight: 600;
     letter-spacing: .08em;
   }
 
