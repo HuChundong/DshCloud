@@ -488,6 +488,7 @@ window.__ModuleLoader__.load({
 
         'status.running': '运行中',
         'status.starting': '连接中',
+        'status.claiming': '申请中',
         'status.unknown': '未知',
 
         memory: '内存',
@@ -532,6 +533,7 @@ window.__ModuleLoader__.load({
 
         'status.running': 'Running',
         'status.starting': 'Connecting',
+        'status.claiming': 'Requesting',
         'status.unknown': 'Unknown',
 
         memory: 'Memory',
@@ -1220,7 +1222,23 @@ window.__ModuleLoader__.load({
      * @returns {{status: string, stats: object|null}} the reading, as the bar draws it.
      */
     const useSandboxStats = () => {
-      const [state, setState] = React.useState({ status: 'unknown', stats: null })
+      // What is true before the first reading arrives, and it is not "unknown".
+      //
+      // Nothing is unknown here: this row is drawn by a page that has just
+      // been served to a signed-in tenant, and a tenant with a page has a
+      // sandbox being made for them — the gateway asks for one on the way in,
+      // and the first `/sandbox/stats` frame is a machine answering, not the
+      // question being put. Cold, that took a while, and the wait was spent
+      // showing a grey dot beside "Unknown": the deployment's own status bar
+      // saying it had no idea what was happening, on the one screen where
+      // somebody is waiting to find out.
+      //
+      // It is a third state rather than "starting" because they are not the
+      // same wait and the difference is the tenant's: `claiming` is nobody's
+      // machine yet, `starting` is theirs and coming up. `unknown` stays in
+      // the dictionary — the stats rows below still use it for a number that
+      // genuinely is not known.
+      const [state, setState] = React.useState({ status: 'claiming', stats: null })
 
       React.useEffect(() => {
         const source = new EventSource('/sandbox/stats')
@@ -1248,13 +1266,42 @@ window.__ModuleLoader__.load({
       return state
     }
 
+    /**
+     * The dot a state wears.
+     *
+     * Both waits are amber, because both are the same news to the person
+     * reading them: not yet, and nothing to do. Grey is kept for a state this
+     * bar can no longer reach — it says "no reading", and the two waits are
+     * readings.
+     *
+     * @param {string} status - the state.
+     * @returns {string} the colour.
+     */
+    const statusDot = (status) => (status === 'running'
+      ? 'var(--dsw-alias-state-success-primary, #22c55e)'
+      : status === 'starting' || status === 'claiming'
+        ? 'var(--dsw-alias-state-warn-label, #dd8629)'
+        : 'var(--dsw-alias-border-l2, rgb(0 0 0 / 25%))')
+
+    /**
+     * The dictionary key a state is said with.
+     *
+     * A table rather than a chain of conditionals, because there are two
+     * places that draw this state and a chain in each is how they came to
+     * disagree about a third one.
+     *
+     * @param {string} status - the state.
+     * @returns {string} the key.
+     */
+    const statusKey = (status) => (['running', 'starting', 'claiming'].includes(status)
+      ? `status.${status}`
+      : 'status.unknown')
+
     const SandboxStatus = ({ wide }) => {
       const t = useT()
       const { status, stats } = useSandboxStats()
-      const dot = status === 'running' ? 'var(--dsw-alias-state-success-primary, #22c55e)'
-        : status === 'starting' ? 'var(--dsw-alias-state-warn-label, #dd8629)'
-          : 'var(--dsw-alias-border-l2, rgb(0 0 0 / 25%))'
-      const text = t(status === 'running' ? 'status.running' : status === 'starting' ? 'status.starting' : 'status.unknown')
+      const dot = statusDot(status)
+      const text = t(statusKey(status))
 
       const pct = (part) => (part && part.totalBytes > 0 ? part.usedBytes / part.totalBytes : null)
       const gb = (bytes) => `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`
@@ -1471,12 +1518,10 @@ window.__ModuleLoader__.load({
           React.createElement('span', {
             style: {
               width: '6px', height: '6px', borderRadius: '50%',
-              background: status === 'running' ? 'var(--dsw-alias-state-success-primary, #22c55e)'
-                : status === 'starting' ? 'var(--dsw-alias-state-warn-label, #dd8629)'
-                  : 'var(--dsw-alias-border-l2, rgb(0 0 0 / 25%))',
+              background: statusDot(status),
             },
           }),
-          t(status === 'running' ? 'status.running' : status === 'starting' ? 'status.starting' : 'status.unknown'),
+          t(statusKey(status)),
           // Beside the state, because anything that acts on the machine is
           // answering the state. Empty here: ending a sandbox is the gateway's
           // to offer, and this plugin has no gateway to ask.
