@@ -66,10 +66,21 @@ function gatewayAddress(tunnelUrl) {
  */
 function injectionRules(baseUrl, apiKey) {
   if (apiKey === '' || baseUrl === '') return []
-  const { protocol, hostname } = new URL(baseUrl)
+  const { protocol, hostname, port } = new URL(baseUrl)
   if (protocol !== 'https:' && protocol !== 'http:') {
     throw new Error(`egress: DEEPSEEK_BASE_URL must be http or https, got ${JSON.stringify(baseUrl)}`)
   }
+  // Only what CubeEgress is fed can be injected into, and what it is fed is
+  // decided by destination port alone: the TPROXY rule matches `iif cube-dev`
+  // plus `tcp dport 80/443` and nothing else. An endpoint anywhere else never
+  // reaches the rule engine, and a rule written for it is accepted, stored,
+  // and never consulted — which is worse than no rule, because the sandbox
+  // would then be started with the placeholder and every request would go out
+  // carrying it. So the credential stays in the sandbox for those endpoints,
+  // where the harness can at least use it, and the deployment keeps the
+  // metering it gets from a per-tenant key.
+  const reachable = port === '' || port === '80' || port === '443'
+  if (!reachable) return []
   // The SNI is what CubeEgress mints its leaf certificate for, so it is the
   // match for a TLS endpoint and meaningless for a plaintext one — a rule that
   // named an SNI on an http endpoint would match nothing, because there is no
