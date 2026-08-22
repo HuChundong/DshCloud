@@ -399,6 +399,39 @@ window.__ModuleLoader__.load({
     const pickAndSend = () => { void pickFiles().then((files) => { sendFiles(files) }) }
 
     /**
+     * What this plugin's slash command is called.
+     *
+     * English, lowercase, one word, and NOT the translated label the `+` menu
+     * shows — because this string is not a label, it is what a person types.
+     * The menu matches a query against a candidate's `name`, so a Chinese name
+     * made the command unreachable from the keyboard in either language: `/up`
+     * matched nothing, and the row could only ever be clicked. The shell's own
+     * commands are named the same way for the same reason, and what a row says
+     * IN a language is the description beside it.
+     */
+    const UPLOAD = 'upload'
+
+    /**
+     * Whether a typed query still names this command.
+     *
+     * Subsequence rather than prefix, which is how the shell's command source
+     * ranks its own rows — `/upl`, `/uld` and `/u` all still find it, and a
+     * query that has run past the name (`/upx`) drops it. Case-folded because
+     * nothing about a command is case.
+     *
+     * @param {string} query - what has been typed after the trigger.
+     * @returns {boolean} whether the command survives it.
+     */
+    const named = (query) => {
+      const want = query.toLowerCase()
+      let at = 0
+      for (const ch of UPLOAD) {
+        if (at < want.length && want[at] === ch) at += 1
+      }
+      return at === want.length
+    }
+
+    /**
      * Subscribe a component to the store.
      * @returns {Array<object>} the current rows.
      */
@@ -1608,10 +1641,24 @@ window.__ModuleLoader__.load({
               // the name IS the heading.
               name: say()('attach.group'),
               order: 50,
-              candidates: () => Promise.resolve([{
-                name: say()('attach.item'),
-                description: say()('attach.item.about'),
-              }]),
+              /**
+               * The command, when the query still names it.
+               *
+               * Filtering here is not an optimisation — it is the contract.
+               * The menu asks every source for candidates and renders what
+               * comes back; nothing downstream drops a row. A source that
+               * ignores `req.query` therefore sits in the menu through every
+               * keystroke, which is what this one did: typing `/goal` left the
+               * upload row below the goal command, under a heading of its own,
+               * as though it were something `/goal` could still become.
+               *
+               * @param {object} _session - the session projection, unused.
+               * @param {{query: string}} req - the request, for its query.
+               * @returns {Promise<Array<object>>} the command, or nothing.
+               */
+              candidates: (_session, req) => Promise.resolve(named(req.query)
+                ? [{ name: UPLOAD, description: say()('attach.item.about') }]
+                : []),
               /**
                * Open the picker, and clear the trigger token.
                * @returns {{text: string}} the token's replacement.
