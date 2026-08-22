@@ -1,33 +1,29 @@
 /**
  * The confirmation dialog, driven in a real browser.
  *
- * Signs in over HTTP and hands the cookies to the browser, because what is
- * under test is the dialog rather than the form that leads to it — and a test
- * that fails at sign-in tells you nothing about the dialog.
+ * Takes a session rather than signing in for one: what is under test is the
+ * dialog, and a test that fails at the sign-in form tells you nothing about it.
+ * The suite mints the session against the admin service, which is where the
+ * console lives now — it used to be a path on the gateway, reached with a
+ * tenant administrator's cookie.
+ *
+ * Needs PROBE_COOKIES holding an operator session.
  */
 import process from 'node:process'
 import { chromium } from 'playwright'
 
-const { GATEWAY = 'https://chat.tempvm.com:8443', PROBE_EMAIL, PROBE_CODE } = process.env
+const admin = (process.env.ADMIN ?? 'http://localhost:8091').replace(/\/$/, '')
+const jar = process.env.PROBE_COOKIES
 
-const form = (body) => ({
-  method: 'POST',
-  headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-  body: new URLSearchParams(body),
-  redirect: 'manual',
-})
-// The version the form is asking people to accept, read off the form: signing
-// in over HTTP still has to say what a browser would have ticked.
-const agree = (await (await fetch(`${GATEWAY}/login`)).text()).match(/name="agree" value="([^"]*)"/)?.[1]
-const response = await fetch(`${GATEWAY}/login`, form({ email: PROBE_EMAIL, code: PROBE_CODE, agree }))
-const setCookie = response.headers.getSetCookie?.() ?? []
-if (setCookie.length === 0) throw new Error(`sign-in failed: HTTP ${response.status}`)
+if (jar === undefined || jar === '') {
+  console.error('verify-dialog: PROBE_COOKIES is required')
+  process.exit(1)
+}
 
-const { hostname } = new URL(GATEWAY)
-const cookies = setCookie.map((raw) => {
-  const [pair] = raw.split(';')
-  const index = pair.indexOf('=')
-  return { name: pair.slice(0, index), value: pair.slice(index + 1), domain: hostname, path: '/' }
+const { hostname } = new URL(admin)
+const cookies = jar.split(';').map((pair) => {
+  const [name, ...rest] = pair.trim().split('=')
+  return { name, value: rest.join('='), domain: hostname, path: '/' }
 })
 
 const browser = await chromium.launch()
@@ -49,8 +45,8 @@ for (const scheme of ['light', 'dark']) {
   let native = 0
   page.on('dialog', async (d) => { native += 1; await d.dismiss() })
 
-  await page.goto(`${GATEWAY}/admin`)
-  const remove = page.locator('form[action="/admin/delete"] button').first()
+  await page.goto(admin)
+  const remove = page.locator('form[action="/delete"] button').first()
   if (await remove.count() === 0) throw new Error('no deletable account on the console')
 
   await remove.click()
@@ -65,7 +61,7 @@ for (const scheme of ['light', 'dark']) {
 
   await page.locator('dialog[open] button[value=cancel]').click()
   await page.waitForTimeout(400)
-  check('cancelling submits nothing', new URL(page.url()).pathname === '/admin', page.url())
+  check('cancelling submits nothing', new URL(page.url()).pathname === '/', page.url())
   check('and closes', await page.locator('dialog[open]').count() === 0)
 
   // Escape must behave as cancel: the browser gives it for free on <dialog>,

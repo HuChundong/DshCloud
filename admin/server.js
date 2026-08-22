@@ -34,6 +34,7 @@ import process from 'node:process'
 import { Accounts } from '../gateway/src/accounts.js'
 import { connect } from '../gateway/src/db.js'
 import { Invites } from '../gateway/src/invites.js'
+import { ASSET_PREFIX, assetFor } from '../gateway/src/page-assets.js'
 import { Settings } from '../gateway/src/settings.js'
 import { USERNAME, canSignIn, failed, mayAttempt, succeeded, verify } from './auth.js'
 import { canIssue, cookie, issue, signedIn } from './session.js'
@@ -173,6 +174,27 @@ const server = createServer((req, res) => {
     if (isSecure(req)) res.setHeader('Strict-Transport-Security', 'max-age=63072000; includeSubDomains')
 
     const path = (req.url ?? '/').split('?')[0]
+
+    // The brand files, served before anyone is admitted: the sign-in page shows
+    // the wordmark and the mark, so a gate in front of these would put a broken
+    // image on the only page an operator sees before they are one. Nothing here
+    // is a secret — the landing page serves the same two files to the public.
+    //
+    // Answered here rather than by the proxy in front, because this service is
+    // the thing that knows the hashes.
+    if (path.startsWith(ASSET_PREFIX)) {
+      const file = assetFor(path)
+      if (file === undefined) {
+        res.writeHead(404, { 'Content-Type': 'text/plain' })
+        res.end('not found')
+        return
+      }
+      // The name carries the content hash, so it can be cached hard. This is
+      // the one thing here that overrides the no-store the hardening sets.
+      res.writeHead(200, { 'Content-Type': file.type, 'Cache-Control': 'public, max-age=31536000, immutable' })
+      res.end(file.body)
+      return
+    }
 
     if (path === '/sign-in' && req.method === 'POST') {
       const address = callerAddress(req)

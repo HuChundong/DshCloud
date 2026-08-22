@@ -1,12 +1,17 @@
 /**
  * The administrator's console, and the actions it offers.
  *
- * Every path here requires an administrator, and an ordinary caller is answered
- * 404 rather than 403: the console is not something a tenant needs to know
- * exists.
+ * Reached only through the service in `server.js`, which admits an operator
+ * before any path here runs. Nothing in this file checks a caller: it is not
+ * reachable without having been let in, and a second check here would be a
+ * second place for the two to disagree.
+ *
+ * The paths are the domain's own roots — `/`, `/invites`, `/plan` — because
+ * this console owns a hostname now. It used to live under the gateway's
+ * `/admin`, and carrying that prefix onto its own domain would only stutter.
  *
  * Every action answers with a redirect rather than a page, so the address bar
- * keeps saying `/admin` after a delete and a refresh reloads the console instead
+ * keeps saying `/` after a delete and a refresh reloads the console instead
  * of re-submitting.
  *
  * @module console
@@ -52,7 +57,7 @@ export async function handleConsole(path, req, res, deps) {
   // from having to be a tenant, and stopped a tenant from being one path
   // traversal away from being an operator.
 
-  if (path === '/admin' && req.method === 'GET') {
+  if (path === '/' && req.method === 'GET') {
     const done = new URL(req.url ?? '/', 'http://gateway').searchParams.get('done') ?? undefined
     await renderConsole(res, readNotice(done), deps)
     return
@@ -68,13 +73,13 @@ export async function handleConsole(path, req, res, deps) {
 
   // The invite actions act on a code rather than on an account, so they are
   // taken before the self-protection below, which has no account to protect.
-  if (path === '/admin/invites') {
+  if (path === '/invites') {
     const minted = await deps.invites.mint(Number(form.get('count') ?? 1), OPERATOR)
     console.log(`admin: ${OPERATOR} minted ${minted.length} invite(s)`)
     backToConsole(res, { code: 'invites.minted', params: { count: minted.length } }, req)
     return
   }
-  if (path === '/admin/model') {
+  if (path === '/model') {
     const baseUrl = (form.get('baseUrl') ?? '').trim()
     const current = await deps.settings.modelCredential()
     // An empty key field means "leave it alone", not "clear it": the field is
@@ -91,7 +96,7 @@ export async function handleConsole(path, req, res, deps) {
     backToConsole(res, 'model.saved', req)
     return
   }
-  if (path === '/admin/access') {
+  if (path === '/access') {
     // A checkbox absent from the body is a checkbox that was unticked, which is
     // how HTML says "off" and the only reason this reads presence rather than
     // value.
@@ -113,7 +118,7 @@ export async function handleConsole(path, req, res, deps) {
     }, req)
     return
   }
-  if (path === '/admin/invites/discard') {
+  if (path === '/invites/discard') {
     const code = normalizeInvite(form.get('code') ?? '')
     const discarded = await deps.invites.discard(code)
     backToConsole(res, discarded ? { code: 'invite.discarded', params: { code } } : 'invite.unknown', req)
@@ -130,7 +135,7 @@ export async function handleConsole(path, req, res, deps) {
 
   let notice
   switch (path) {
-    case '/admin/toggle': {
+    case '/toggle': {
       const account = await deps.accounts.read(email)
       if (account === undefined) break
       const updated = await deps.accounts.setDisabled(email, !account.disabled)
@@ -149,7 +154,7 @@ export async function handleConsole(path, req, res, deps) {
       notice = { code: updated?.disabled === true ? 'account.suspended' : 'account.restored', params: { email } }
       break
     }
-    case '/admin/plan': {
+    case '/plan': {
       const wanted = form.get('plan') ?? ''
       // Refused rather than normalized. Everywhere else a tier that is not a
       // tier becomes the default, because everywhere else something has to be
@@ -168,7 +173,7 @@ export async function handleConsole(path, req, res, deps) {
       notice = { code: 'plan.moved', params: { email } }
       break
     }
-    case '/admin/delete': {
+    case '/delete': {
       const doomed = await deps.accounts.read(email)
       // The same sequence a tenant's own deletion runs, from the same place:
       // two ways to delete an account that took different things away would be
@@ -216,7 +221,7 @@ function readNotice(done) {
  * Answer an administrative action by sending the browser back to the console.
  *
  * A redirect rather than the page itself, so the address bar keeps saying
- * `/admin` after a delete instead of `/admin/delete` — and so a refresh reloads
+ * `/admin` after a delete instead of `/delete` — and so a refresh reloads
  * the console rather than re-submitting the action. The outcome rides along as
  * a query parameter, which is the only part of it that has to survive a
  * redirect; it is rendered as escaped text by the page that reads it.
@@ -246,7 +251,7 @@ function backToConsole(res, notice, req) {
   }
   const said = typeof notice === 'object' ? JSON.stringify(notice) : notice
   const query = said === undefined ? '' : `?done=${encodeURIComponent(said)}`
-  res.writeHead(303, { Location: `/admin${query}` })
+  res.writeHead(303, { Location: `/${query}` })
   res.end()
 }
 

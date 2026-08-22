@@ -6,14 +6,17 @@
  * something that happened once. Only a browser can show that, so this drives
  * one — a status code cannot tell a navigation from a fetch.
  *
- * Needs PROBE_EMAIL and PROBE_COOKIES; run from the acceptance suite.
+ * Needs PROBE_COOKIES holding an operator session for the admin service; run
+ * from the acceptance suite, which mints one rather than signing in.
  */
 
 import assert from 'node:assert/strict'
 import process from 'node:process'
 import { chromium } from 'playwright'
 
-const gateway = process.env.GATEWAY ?? 'http://localhost:8080'
+// The console has its own service and its own hostname now, so this drives it
+// directly rather than through a path on the tenants' site.
+const admin = (process.env.ADMIN ?? 'http://localhost:8091').replace(/\/$/, '')
 const cookies = process.env.PROBE_COOKIES
 
 if (cookies === undefined || cookies === '') {
@@ -42,15 +45,15 @@ function check(label, expected, actual) {
 const browser = await chromium.launch()
 const context = await browser.newContext({ ignoreHTTPSErrors: true })
 
-const url = new URL(gateway)
+const url = new URL(admin)
 await context.addCookies(cookies.split(';').map((pair) => {
   const [name, ...rest] = pair.trim().split('=')
   return { name, value: rest.join('='), domain: url.hostname, path: '/' }
 }))
 
 const page = await context.newPage()
-await page.goto(`${gateway}/admin`, { waitUntil: 'domcontentloaded' })
-check('the console loads', true, page.url().endsWith('/admin'))
+await page.goto(admin, { waitUntil: 'domcontentloaded' })
+check('the console loads', '/', new URL(page.url()).pathname)
 
 // Minting invites is the reversible action, so it can be driven repeatedly
 // without asking anything of the accounts on the page.
@@ -67,14 +70,14 @@ page.on('framenavigated', (frame) => { if (frame === page.mainFrame()) navigatio
 await page.locator('form.mint button[type=submit]').first().click()
 await page.waitForTimeout(1500)
 
-check('the address bar did not change', `${gateway}/admin`, page.url())
+check('the address bar did not change', `${admin}/`, page.url())
 check('nothing navigated', 0, navigations.length)
 check('the outcome was announced', true, await page.locator('.toast').count() > 0)
 
 // The reason the query string mattered: it survives a refresh and says again
 // what was already said.
 await page.reload({ waitUntil: 'domcontentloaded' })
-check('a refresh lands on a clean console', `${gateway}/admin`, page.url())
+check('a refresh lands on a clean console', `${admin}/`, page.url())
 check('and repeats nothing', 0, await page.locator('.toast').count())
 
 await browser.close()

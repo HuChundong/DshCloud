@@ -347,7 +347,7 @@ ${langToggle(table)}
 
   <section class="card">
     <h2><span data-t="access.h">接入</span> <span class="hint">${accessHint}</span></h2>
-    <form method="post" action="/admin/access" class="creds">
+    <form method="post" action="/access" class="creds">
       <label class="check">
         <input type="checkbox" name="inviteRequired" value="on"${access.inviteRequired ? ' checked' : ''}>
         <span data-t="access.invite">注册需要邀请码</span>
@@ -363,7 +363,7 @@ ${langToggle(table)}
 
   <section class="card">
     <h2><span data-t="model.h">模型密钥</span> <span class="hint">${credentialHint}</span></h2>
-    <form method="post" action="/admin/model" class="creds">
+    <form method="post" action="/model" class="creds">
       <input name="baseUrl" value="${escapeHtml(credential.baseUrl)}" data-tp="model.url" placeholder="接口地址" aria-label="接口地址" autocomplete="off" spellcheck="false">
       <input name="apiKey" type="password" data-tp="model.key" placeholder="新密钥（留空则不改动）" aria-label="新密钥" autocomplete="new-password">
       <button type="submit" class="save" data-t="save">保存</button>
@@ -397,7 +397,7 @@ ${rows}
 
   <section class="card">
     <h2 data-t="invites.h">邀请码</h2>
-    <form method="post" action="/admin/invites" class="mint">
+    <form method="post" action="/invites" class="mint">
       <input type="number" name="count" value="5" min="1" max="200" data-ta="invites.count" aria-label="生成数量">
       <button type="submit" data-t="invites.mint">生成</button>
     </form>
@@ -503,7 +503,7 @@ ${inviteRows}
     // The console re-read from the server rather than patched here, so what is
     // on screen is what it would serve — one description of the page, not two.
     function refresh(notice) {
-      return fetch('/admin', { headers: { Accept: 'text/html' } })
+      return fetch('/', { headers: { Accept: 'text/html' } })
         .then(function (response) { return response.text() })
         .then(function (html) {
           var fresh = new DOMParser().parseFromString(html, 'text/html')
@@ -580,9 +580,9 @@ function inviteRow(invite) {
   // one erases that record rather than revoking anything — hence a confirmation
   // on that side and none on the other, where there is nothing to lose.
   const actions = spent
-    ? action('/admin/invites/discard', invite.code, 'act.delete', 'code',
+    ? action('/invites/discard', invite.code, 'act.delete', 'code',
         'confirm.invite', [invite.code, invite.redeemedBy ?? ''])
-    : action('/admin/invites/discard', invite.code, 'act.delete', 'code')
+    : action('/invites/discard', invite.code, 'act.delete', 'code')
   return `      <tr>
         <td><span class="code${spent ? ' spent' : ''}">${escapeHtml(invite.code)}</span></td>
         <td class="hide-narrow sub">${when(invite.createdAt)}</td>
@@ -610,8 +610,8 @@ function row(account) {
   // No guard for the viewer's own row here, and none needed: an administrator
   // looking at this page is not in this table. `adminRow` is where their row is
   // drawn, and that is where the refusal to offer a self-delete lives.
-  const actions = `${action('/admin/toggle', account.email, account.disabled ? 'act.enable' : 'act.disable')}
-      ${action('/admin/delete', account.email, 'act.delete', 'email', 'confirm.account', [account.email])}`
+  const actions = `${action('/toggle', account.email, account.disabled ? 'act.enable' : 'act.disable')}
+      ${action('/delete', account.email, 'act.delete', 'email', 'confirm.account', [account.email])}`
 
   return `      <tr>
         <td><div class="email">${email}</div>${tags === '' ? '' : `<div>${tags}</div>`}</td>
@@ -647,7 +647,7 @@ function planPicker(account) {
     const chosen = plan === account.plan ? ' selected' : ''
     return `<option value="${plan}"${chosen} data-t="plan.${plan}">${escapeHtml(S[`plan.${plan}`].zh)}</option>`
   }).join('')
-  return `<form method="post" action="/admin/plan" id="${id}" class="plan">
+  return `<form method="post" action="/plan" id="${id}" class="plan">
         <input type="hidden" name="email" value="${escapeHtml(account.email)}">
         <select name="plan" data-ta="th.plan" aria-label="套餐">${options}</select>
         <button type="submit" data-t="save">保存</button>

@@ -530,52 +530,41 @@ echo
 # so nothing enforces that it appears, cancels, or closes except a check that
 # drives it.
 #
-# The address is named by the operator and never inferred. Taking the
-# deployment's first administrator would mean this run signs in as whoever that
-# is — reading their code straight out of the database and leaving sessions
-# behind under their identity. It did exactly that until this was fixed.
+# The console is its own service now, with its own credential and its own
+# hostname. That retires the reason these two sections used to be opt-in: they
+# drove the gateway's `/admin` as a named tenant administrator, which meant
+# reading a real person's sign-in code straight out of the database and leaving
+# a session behind under their identity.
 #
-# `VERIFY_ADMIN` must already be in `GATEWAY_ADMINS`; the check below says so
-# rather than letting the browser meet an unexplained 403.
-ADMIN="${VERIFY_ADMIN:-}"
-if [ -n "$ADMIN" ] \
-   && ! docker compose exec -T gateway printenv GATEWAY_ADMINS 2>/dev/null | tr -d '\r' | tr ',' '\n' | grep -qxF "$ADMIN"; then
-  echo
-  echo "=== 15. The console asks before it deletes ==="
-  printf '  \033[31mFAIL\033[0m  VERIFY_ADMIN (%s) is not in GATEWAY_ADMINS\n' "$ADMIN"
-  NODE_FAIL=1
-  ADMIN=''
-elif [ -z "$ADMIN" ]; then
-  echo
-  echo '=== 15. The console asks before it deletes ==='
-  echo '     (skipped: set VERIFY_ADMIN to an address this deployment administers)'
-fi
-if [ -n "$ADMIN" ]; then
+# An operator session is minted inside the service instead. It belongs to the
+# deployment rather than to anybody, and minting beats driving the form: this
+# host holds the password hash and not the password, and the form asks for a
+# second factor besides.
+ADMIN_URL="${VERIFY_ADMIN_URL:-http://localhost:8091}"
+ADMIN_COOKIES=$(docker compose exec -T admin node -e "
+  const { COOKIE, canIssue, issue } = await import('/app/admin/session.js')
+  if (!canIssue()) process.exit(3)
+  console.log(\`\${COOKIE}=\${await issue()}\`)
+" 2>/dev/null | tr -d '\r' | tail -1)
+
+if [ -z "$ADMIN_COOKIES" ]; then
   echo
   echo '=== 15. The console asks before it deletes ==='
-  psql "DELETE FROM challenges WHERE email = '$ADMIN'" > /dev/null
-  curl -s -o /dev/null -X POST "$GATEWAY/login" --data-urlencode "email=$ADMIN" --data-urlencode "agree=$(policy_version)"
-  ADMIN_CODE=$(code_for "$ADMIN")
+  echo '     (skipped: no admin service running, or it has no session secret)'
+  echo
+  echo '=== 16. An action leaves the address bar alone ==='
+  echo '     (skipped: the same)'
+else
+  echo
+  echo '=== 15. The console asks before it deletes ==='
   # A tenant the console can offer to delete. Alice is registered by now and is
-  # not an administrator, so her row carries the button this drives.
-  "${BROWSER_RUN[@]}" -e "PROBE_EMAIL=$ADMIN" -e "PROBE_CODE=$ADMIN_CODE" "$BROWSER_IMAGE" \
+  # not an operator, so her row carries the button this drives.
+  "${BROWSER_RUN[@]}" -e "ADMIN=$ADMIN_URL" -e "PROBE_COOKIES=$ADMIN_COOKIES" "$BROWSER_IMAGE" \
     sh -c "$BROWSER_INSTALL && node verify-dialog.mjs" || NODE_FAIL=1
 
   echo
   echo '=== 16. An action leaves the address bar alone ==='
-  # A session minted here rather than signed in for: this drives the console
-  # repeatedly, and asking for a code each time spends real mail.
-  ADMIN_COOKIES=$(docker compose exec -T gateway node -e "
-    const { connect } = await import('/app/gateway/src/db.js')
-    const { Tokens } = await import('/app/gateway/src/tokens.js')
-    const { Accounts } = await import('/app/gateway/src/accounts.js')
-    const pool = await connect()
-    const account = await new Accounts(pool).read('$ADMIN')
-    const tokens = new Tokens(process.env.SESSION_SECRET, pool)
-    console.log(\`dsh_gw_access=\${await tokens.issueAccess(account)}; dsh_gw_refresh=\${await tokens.issueRefresh(account)}\`)
-    await pool.end()
-  " 2>/dev/null | tr -d '\r' | tail -1)
-  "${BROWSER_RUN[@]}" -e "PROBE_COOKIES=$ADMIN_COOKIES" "$BROWSER_IMAGE" \
+  "${BROWSER_RUN[@]}" -e "ADMIN=$ADMIN_URL" -e "PROBE_COOKIES=$ADMIN_COOKIES" "$BROWSER_IMAGE" \
     sh -c "$BROWSER_INSTALL && node verify-console-url.mjs" || NODE_FAIL=1
 fi
 

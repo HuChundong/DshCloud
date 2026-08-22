@@ -213,11 +213,16 @@ cd verify && SANDBOX_RUNTIME=cube COMPOSE_FILE=../compose.yml:../compose.cube.ym
   GATEWAY=https://host:8443 ./verify.sh
 ```
 
-It signs in as the addresses it is given and no others. `VERIFY_ADMIN` names an
-administrator for the console check and must already be in `GATEWAY_ADMINS`;
-leave it unset and that one check is skipped. **Never point it at a person's
-real address** — the suite reads verification codes straight out of the database,
-so doing so signs in as them and leaves sessions under their identity.
+It signs in as the addresses it is given and no others, and **never point one at
+a person's real address** — the suite reads verification codes straight out of
+the database, so doing so signs in as them and leaves sessions under their
+identity.
+
+The console checks no longer take an address at all. The console is its own
+service with its own credential, so the suite mints an operator session inside
+it rather than borrowing an administrator's. `VERIFY_ADMIN_URL` says where that
+service is, defaulting to `http://localhost:8091`; with no admin service running
+those two checks are skipped.
 
 It spends real model tokens and removes every sandbox, so it belongs on a
 deployment you are willing to disturb. CI cannot run it, which is exactly why a
