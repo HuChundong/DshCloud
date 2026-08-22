@@ -38,6 +38,7 @@ import { ASSET_PREFIX, assetFor } from '../gateway/src/page-assets.js'
 import { Settings } from '../gateway/src/settings.js'
 import { USERNAME, canSignIn, failed, mayAttempt, succeeded, verify } from './auth.js'
 import { canIssue, cookie, issue, signedIn } from './session.js'
+import * as challenge from './challenge.js'
 import { accepts, required as totpRequired } from './totp.js'
 import { handleConsole } from './console.js'
 import { signInPage } from './sign-in-page.js'
@@ -200,32 +201,77 @@ const server = createServer((req, res) => {
       const address = callerAddress(req)
       if (!mayAttempt(address)) {
         res.writeHead(429, { 'Content-Type': 'text/html; charset=utf-8' })
-        res.end(signInPage({ error: 'too-many', totp: totpRequired() }))
+        res.end(signInPage({ error: 'too-many' }))
         return
       }
       const form = new URLSearchParams((await readBody(req, 4096))?.toString('utf8') ?? '')
-      // Both factors checked before either verdict is acted on, so the time
-      // this takes says nothing about which one was wrong — and a wrong
-      // password costs an attacker a code as well.
-      const passwordOk = await verify(form.get('username') ?? '', form.get('password') ?? '')
-      const codeOk = accepts(form.get('code') ?? '')
-      const admitted = passwordOk && codeOk
-      if (!admitted) {
+      const open = await challenge.read(req)
+
+      // ---- second step: the code, from somebody who cleared the first ----
+      if (open !== undefined) {
+        if (!accepts(form.get('code') ?? '')) {
+          // Two counters, and they answer different questions. The address
+          // limiter asks how hard this caller is trying; the challenge counter
+          // asks how many guesses one correct password is worth.
+          failed(address)
+          const stillOpen = challenge.failed(open)
+          console.warn(`admin: wrong code from ${address}${stillOpen ? '' : ' — challenge burned'}`)
+          res.writeHead(401, {
+            'Content-Type': 'text/html; charset=utf-8',
+            ...stillOpen ? {} : { 'Set-Cookie': challenge.cookie(undefined, isSecure(req)) },
+          })
+          res.end(signInPage(stillOpen ? { step: 'code', error: 'code' } : { error: 'spent' }))
+          return
+        }
+        // Spent whether or not anything else goes wrong from here: a challenge
+        // is worth exactly one successful code.
+        challenge.spend(open)
+        succeeded(address)
+        console.log(`admin: ${USERNAME} signed in from ${address}`)
+        res.writeHead(303, {
+          Location: '/',
+          'Set-Cookie': [cookie(await issue(), isSecure(req)), challenge.cookie(undefined, isSecure(req))],
+        })
+        res.end()
+        return
+      }
+
+      // ---- first step: the password ----
+      if (!await verify(form.get('username') ?? '', form.get('password') ?? '')) {
         failed(address)
         console.warn(`admin: refused a sign-in from ${address}`)
         res.writeHead(401, { 'Content-Type': 'text/html; charset=utf-8' })
-        res.end(signInPage({ error: 'refused', totp: totpRequired() }))
+        res.end(signInPage({ error: 'refused' }))
         return
       }
-      succeeded(address)
-      console.log(`admin: ${USERNAME} signed in from ${address}`)
-      res.writeHead(303, { Location: '/', 'Set-Cookie': cookie(await issue(), isSecure(req)) })
-      res.end()
+
+      // Nothing to ask for. `succeeded` only here and at the end of the second
+      // step — resetting the address counter after the password would make one
+      // correct password buy a fresh budget of code guesses.
+      if (!totpRequired()) {
+        succeeded(address)
+        console.log(`admin: ${USERNAME} signed in from ${address} (no second factor configured)`)
+        res.writeHead(303, { Location: '/', 'Set-Cookie': cookie(await issue(), isSecure(req)) })
+        res.end()
+        return
+      }
+
+      res.writeHead(200, {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Set-Cookie': challenge.cookie(await challenge.issue(), isSecure(req)),
+      })
+      res.end(signInPage({ step: 'code' }))
       return
     }
 
     if (path === '/sign-out') {
-      res.writeHead(303, { Location: '/sign-in', 'Set-Cookie': cookie(undefined, isSecure(req)) })
+      // Both cookies. This is also the way back from the code step for
+      // somebody who started signing in and changed their mind, so it has to
+      // clear a half-finished sign-in as well as a finished one.
+      res.writeHead(303, {
+        Location: '/sign-in',
+        'Set-Cookie': [cookie(undefined, isSecure(req)), challenge.cookie(undefined, isSecure(req))],
+      })
       res.end()
       return
     }
@@ -233,8 +279,13 @@ const server = createServer((req, res) => {
     if (!await signedIn(req)) {
       // The sign-in form, whatever was asked for. There is nothing here to
       // show an operator who is not one, and no reason to say what exists.
+      //
+      // Shown at whichever step the caller has reached, so a reload during the
+      // second step does not silently drop them back to the first with a
+      // challenge cookie still open.
+      const open = await challenge.read(req)
       res.writeHead(path === '/sign-in' ? 200 : 401, { 'Content-Type': 'text/html; charset=utf-8' })
-      res.end(signInPage({ totp: totpRequired() }))
+      res.end(signInPage(open === undefined ? {} : { step: 'code' }))
       return
     }
 

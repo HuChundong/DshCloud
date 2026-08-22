@@ -113,6 +113,24 @@ reason that outlives whoever reads this:
 does, rather than what it says it does, and names the divergences already
 adapted to. A new one fails it.
 
+### The one protocol written out here
+
+TOTP, in `admin/totp.js`. RFC 6238 has no wire format, no negotiation and no
+versioning — it is one HMAC and a modulo — so a dependency for thirty lines of
+`node:crypto` would be the larger liability.
+
+The price of the exception is `check-totp.mjs`, and the reason it is not
+optional: an authenticator app is an offline calculator. Nothing between it and
+this service can report a disagreement, so an implementation that is subtly
+wrong is indistinguishable from a right one until somebody with a phone cannot
+get in. Testing it against a second implementation proves nothing — both can
+misread the same sentence the same way. It is tested against the vectors
+printed in the RFC, which is what "works with Google Authenticator" actually
+means.
+
+**If you write out somebody else's algorithm, test it against that
+specification's own published answers, not against your own reading of it.**
+
 ## Icons come from the harness
 
 **Do not draw an icon that `@deepseek-ai/dsh-client-ui-primitives` already

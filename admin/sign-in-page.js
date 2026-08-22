@@ -12,10 +12,12 @@
  * it is the console, which would only bounce a caller who is not signed in
  * back to here.
  *
- * Still deliberately silent. It names no deployment, says nothing about what is
- * behind it, and tells a failed attempt nothing about which half was wrong — a
- * console with one account gives away a great deal by distinguishing "no such
- * user" from "wrong password".
+ * Two steps, the same as the tenants' own sign-in and the same as every 2FA
+ * flow an operator has already used elsewhere: the password, then the code.
+ *
+ * Still deliberately quiet about what is behind it. It names no deployment and
+ * does not distinguish "no such user" from "wrong password" — with one account
+ * there is nothing to enumerate and no reason to help.
  *
  * @module admin/sign-in-page
  */
@@ -35,14 +37,27 @@ import {
 import { asset } from '../gateway/src/page-assets.js'
 
 /**
- * What a refusal says, which is as little as possible.
+ * What a refusal says.
  *
- * One sentence for a wrong username and a wrong password alike, and one for
- * having asked too often. Neither says which field, and neither says whether
- * the second factor was the part that failed.
+ * One sentence for a wrong username and a wrong password alike: with a single
+ * operator there is no directory to enumerate, and saying which of the two was
+ * wrong would still be a favour to somebody guessing.
+ *
+ * The second step says plainly that the code was wrong, and that is not a
+ * leak. Reaching it means the password was already right — which every 2FA
+ * system tells you, because the point of a second factor is that knowing the
+ * password is not supposed to be enough.
  */
 const REASONS = {
   refused: { zh: '用户名或密码不正确。', en: 'That username or password is not correct.' },
+  code: { zh: '验证码不正确，或已经用过了。', en: 'That code is not correct, or has already been used.' },
+  // Said plainly rather than hidden: whoever is reading this cleared the
+  // password step, so there is nothing left to withhold from them — and being
+  // dropped back to the first form without explanation reads as a bug.
+  spent: {
+    zh: '验证码错误次数过多，请重新输入密码。',
+    en: 'Too many wrong codes. Sign in with the password again.',
+  },
   'too-many': { zh: '尝试次数过多，请稍后再试。', en: 'Too many attempts. Try again shortly.' },
 }
 
@@ -57,16 +72,23 @@ const TABLE = {
   },
   username: { zh: '用户名', en: 'Username' },
   password: { zh: '密码', en: 'Password' },
-  code: { zh: '动态验证码', en: 'Authenticator code' },
-  submit: { zh: '进入', en: 'Sign in' },
+  submit: { zh: '继续', en: 'Continue' },
+  'title.code': { zh: '两步验证', en: 'Two-step verification' },
+  'lede.code': {
+    zh: '打开验证器应用，输入其中的 6 位动态验证码。',
+    en: 'Open your authenticator app and enter the six-digit code.',
+  },
+  'field.code': { zh: '6 位验证码', en: 'Six-digit code' },
+  'submit.code': { zh: '进入', en: 'Sign in' },
+  back: { zh: '用密码重新开始', en: 'Start over with the password' },
   footer: { zh: 'HamsterHQ · 运营控制台', en: 'HamsterHQ · Operator console' },
   ...REASONS,
 }
 
 /**
- * The sign-in page.
+ * The sign-in page, at whichever of its two steps the caller has reached.
  *
- * @param {{error?: string, totp?: boolean}} state - why they are seeing it again, and whether a second factor is asked for.
+ * @param {{step?: 'code', error?: string}} state - which step to show, and why they are seeing it again.
  * @returns {string} the page.
  */
 export function signInPage(state = {}) {
@@ -75,16 +97,26 @@ export function signInPage(state = {}) {
     ? ''
     : `<p class="error" role="alert" data-t="${reason}">${escapeHtml(REASONS[reason].zh)}</p>`
 
-  // Only when a secret is configured. Asked for as a field like the others
-  // rather than as a second step, because both factors are checked together —
-  // a page that asked for the code afterwards would be saying the password was
-  // right before it had decided to let anyone in.
-  const second = state.totp !== true
-    ? ''
-    : `<div class="field">
+  const asking = state.step === 'code'
+
+  // The code stands alone on its own step, which is what every 2FA flow people
+  // have already used does — and it is not only convention. A code is good for
+  // thirty seconds, so asking for it beside a password means it can expire
+  // while the password is being typed; and when the two were checked together,
+  // a mistyped password spent a perfectly good code.
+  const fields = asking
+    ? `<div class="field">
         <input name="code" inputmode="numeric" autocomplete="one-time-code"
-               pattern="[0-9]{6}" maxlength="6" required
-               placeholder="动态验证码" data-tp="code">
+               pattern="[0-9]{6}" maxlength="6" required autofocus
+               placeholder="6 位验证码" data-tp="field.code">
+      </div>`
+    : `<div class="field">
+        <input name="username" autocomplete="username" autofocus required
+               placeholder="用户名" data-tp="username">
+      </div>
+      <div class="field">
+        <input name="password" type="password" autocomplete="current-password" required
+               placeholder="密码" data-tp="password">
       </div>`
 
   return `<!doctype html>
@@ -241,6 +273,13 @@ ${GROUND_CSS}
     line-height: 1.5;
   }
 
+  /* The way out of a half-finished sign-in, for somebody who cannot reach
+     their authenticator. Quiet: it is the thing you press when the ordinary
+     thing has not worked, not an alternative to it. */
+  .back { margin: 1rem 0 0; text-align: center; font-size: .8125rem; }
+  .back a { color: var(--muted); text-decoration: none; border-bottom: 1px solid var(--line); padding-bottom: 1px; }
+  .back a:hover { color: var(--fg); border-color: var(--line-strong); }
+
   footer {
     display: grid;
     justify-items: center;
@@ -267,20 +306,15 @@ ${GROUND_HTML}
 
   <div class="card">
     <form method="post" action="/sign-in">
-      <h1 data-t="title">运营控制台</h1>
-      <p class="lede" data-t="lede">这里管理账户、套餐与部署设置。仅限内部访问。</p>
+      <h1 data-t="${asking ? 'title.code' : 'title'}">${asking ? '两步验证' : '运营控制台'}</h1>
+      <p class="lede" data-t="${asking ? 'lede.code' : 'lede'}">${asking
+        ? '打开验证器应用，输入其中的 6 位动态验证码。'
+        : '这里管理账户、套餐与部署设置。仅限内部访问。'}</p>
       ${message}
-      <div class="field">
-        <input name="username" autocomplete="username" autofocus required
-               placeholder="用户名" data-tp="username">
-      </div>
-      <div class="field">
-        <input name="password" type="password" autocomplete="current-password" required
-               placeholder="密码" data-tp="password">
-      </div>
-      ${second}
-      <button type="submit" data-t="submit">进入</button>
+      ${fields}
+      <button type="submit" data-t="${asking ? 'submit.code' : 'submit'}">${asking ? '进入' : '继续'}</button>
     </form>
+    ${asking ? `<p class="back"><a href="/sign-out" data-t="back">用密码重新开始</a></p>` : ''}
   </div>
 </main>
 <footer>
