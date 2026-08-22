@@ -1070,6 +1070,28 @@ window.__ModuleLoader__.load({
         color: var(--dsw-alias-label-primary);
       }
 
+      /* A control that asks for something again, turning once as it asks.
+
+         Half a second and one turn, on the gesture rather than on the work:
+         what these two buttons start — a directory listing, an iframe's own
+         fetch — usually settles faster than the eye can register a spinner
+         appearing and going, and tying the turn to the work would mean the
+         common case is a flicker. The turn is the acknowledgement; the result
+         arriving is its own answer.
+
+         On the glyph, not on the button: the button is a hover target with a
+         ground, and turning that turns the ground with it. */
+      @keyframes ${NS}-turn {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+      .${NS}-icon-button[data-turning] > * {
+        animation: ${NS}-turn 500ms var(--ds-ease-in-out, ease-in-out);
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .${NS}-icon-button[data-turning] > * { animation: none; }
+      }
+
       /* The shell draws an icon control as a round ghost, and the panel's sit
          in the same rows as the shell's. A squarer corner here read as a
          different kind of control rather than the same one. */
@@ -1988,6 +2010,22 @@ window.__ModuleLoader__.load({
      * @param {number} size - the square edge, in px.
      * @returns {object} the element.
      */
+    /**
+     * Turn a control once, now.
+     *
+     * The attribute is taken off and put back with a forced reflow between,
+     * because setting an attribute that is already there restarts nothing:
+     * pressing refresh twice in a row would turn the glyph once. Reading
+     * `offsetWidth` is what makes the removal land as its own style pass.
+     *
+     * @param {Element} button - the control that was pressed.
+     */
+    const turn = (button) => {
+      button.removeAttribute('data-turning')
+      void /** @type {HTMLElement} */ (button).offsetWidth
+      button.setAttribute('data-turning', '')
+    }
+
     const icon = (name, size = 16) => {
       const glyph = GLYPHS[name]
       if (glyph === undefined) return undefined
@@ -3239,7 +3277,8 @@ window.__ModuleLoader__.load({
             className: `${NS}-icon-button`,
             title: t('refresh'),
             'aria-label': t('refresh'),
-            onClick: () => { workspaceWatch.refresh() },
+            onClick: (event) => { turn(event.currentTarget); workspaceWatch.refresh() },
+            onAnimationEnd: (event) => { event.currentTarget.removeAttribute('data-turning') },
           }, icon('refresh', 15)),
           h(FoldButton, { kind: 'files', title: t('files.tree') })),
         h('div', { className: `${NS}-split` },
@@ -3327,7 +3366,11 @@ window.__ModuleLoader__.load({
             'aria-label': t('reload'),
             // Bumping the modified stamp remounts the frame below, which is a
             // fresh fetch: the route answers `no-store`.
-            onClick: () => setPage((current) => ({ ...current, modified: Date.now() / 1000 })),
+            onClick: (event) => {
+              turn(event.currentTarget)
+              setPage((current) => ({ ...current, modified: Date.now() / 1000 }))
+            },
+            onAnimationEnd: (event) => { event.currentTarget.removeAttribute('data-turning') },
           }, icon('refresh', 15))),
         // Keyed by path AND by write time, so a rewritten page is a new frame
         // rather than a stale one. The URL itself stays clean, which is what
