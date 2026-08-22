@@ -158,12 +158,18 @@ async function cubeSandbox(handle) {
       makeDir: async (path) => await sandbox.files.makeDir(path),
     },
     run: async (command, envs) => {
-      // No `timeoutMs` at all. This client forwards the number to envd as
-      // `Connect-Timeout-Ms`, and envd answers nothing for a deadline it reads
-      // as already past: `0` — the other client's way of saying "no deadline"
-      // — hung every command, and so does `NEVER_TIMEOUT`, which is this
-      // client's own constant for it. Measured both ways against a real
-      // sandbox. Omitted, a command answers in about twenty milliseconds.
+      // No deadline, said by not saying one.
+      //
+      // Not an idiom either client offers: `0` is how the e2b one spells it and
+      // this one forwarded the number to envd as `Connect-Timeout-Ms`, which
+      // envd reads as a deadline already past and answers nothing for. Its own
+      // `NEVER_TIMEOUT` is -1 and did the same. Both hung every command in
+      // every sandbox until the HTTP client gave up on headers.
+      //
+      // Fixed upstream in CubeSandbox PR #1485, which is the patch the vendored
+      // build carries — so passing a non-positive value would work now. This
+      // still passes none: it is what the argument means, and it does not
+      // depend on which build of the client is installed.
       const result = await sandbox.commands.run(command, { user: ENVD_USER, envs })
       return { exitCode: result.exitCode ?? 0, stdout: result.stdout ?? '', stderr: result.stderr ?? '' }
     },
