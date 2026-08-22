@@ -22,6 +22,7 @@ import { toString as qrSvg } from 'qrcode'
 import { enrolmentUri } from './totp.js'
 import { consolePage } from './console-shell.js'
 import { SECTIONS, sectionFor } from './sections/index.js'
+import { PAGE_SIZE, pageFrom, windowFor } from './sections/paging.js'
 import { record, recent } from '../gateway/src/audit.js'
 import { normalizeEmail } from '../gateway/src/accounts.js'
 import { normalizeInvite } from '../gateway/src/invites.js'
@@ -88,8 +89,8 @@ export async function handleConsole(path, req, res, deps) {
 
   const section = req.method === 'GET' ? sectionFor(path) : undefined
   if (section !== undefined) {
-    const done = new URL(req.url ?? '/', 'http://console').searchParams.get('done') ?? undefined
-    await renderSection(section, res, readNotice(done), deps)
+    const asked = new URL(req.url ?? '/', 'http://console').searchParams
+    await renderSection(section, res, readNotice(asked.get('done') ?? undefined), deps, pageFrom(asked.get('page')))
     return
   }
 
@@ -424,25 +425,40 @@ function backToConsole(res, notice, req, path) {
  * @param {string} [notice] - the outcome of the action that led here.
  * @returns {Promise<void>} resolves once the response is complete.
  */
-async function renderSection(section, res, notice, deps) {
+async function renderSection(section, res, notice, deps, page) {
   // Only what this section asks for. The console used to read every store on
   // every render because everything was on one page; a section that shows
   // invite codes has no reason to list accounts, and reading them anyway is a
   // query per visit that nothing looks at.
-  const state = {}
+  //
+  // And only one page of it. Every list here is paged in SQL — see
+  // `sections/paging.js` for why that is a rule rather than a nicety.
+  const state = { page }
   const needs = new Set(section.needs)
+  const rows = windowFor(page)
 
   if (needs.has('accounts')) {
     // No sandbox state. Whether a tenant's machine is up is the platform's to
     // answer and the gateway's to ask — this service holds a connection to
     // neither, and a column showing what it learned from a third party some
     // seconds ago is worse than a column that is not there.
-    state.accounts = await deps.accounts.list()
+    const listed = await deps.accounts.tenants(rows)
+    state.admins = await deps.accounts.admins()
+    state.tenants = listed.rows
+    state.total = listed.total
   }
-  if (needs.has('invites')) state.invites = await deps.invites.list()
+  if (needs.has('invites')) {
+    const listed = await deps.invites.list(rows)
+    state.invites = listed.rows
+    state.total = listed.total
+  }
   if (needs.has('access')) state.access = await deps.settings.access()
   if (needs.has('credential')) state.credential = await deps.settings.modelCredential()
-  if (needs.has('audit')) state.audit = await recent(deps.db)
+  if (needs.has('audit')) {
+    const listed = await recent(deps.db, rows)
+    state.audit = listed.rows
+    state.total = listed.total
+  }
 
   if (needs.has('security')) {
     const factor = await deps.secondFactor.state()
@@ -461,6 +477,17 @@ async function renderSection(section, res, notice, deps) {
     unread = undefined
 
     state.security = { ...factor, qr, secret: enrolling, freshCodes }
+  }
+
+  // A page past the end is answered with the last one there is, rather than
+  // with an empty table and a control offering to go back to page 98. Asking
+  // for it is a hand-edited URL or a bookmark to a list that has since been
+  // trimmed; either way the honest answer is the end of the list.
+  if (state.total !== undefined && page > 1 && (page - 1) * PAGE_SIZE >= state.total) {
+    const last = Math.max(1, Math.ceil(state.total / PAGE_SIZE))
+    res.writeHead(303, { Location: `${section.path}?page=${String(last)}` })
+    res.end()
+    return
   }
 
   const drawn = section.render(state)

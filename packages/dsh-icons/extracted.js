@@ -161,6 +161,15 @@ export const extracted = Object.freeze({
     ],
     stroke: { width: 2, linecap: 'round', linejoin: 'round' },
   },
+  'panel': {
+    from: 'panel-left',
+    viewBox: '0 0 24 24',
+    paths: [
+      'M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2z',
+      'M9 3v18',
+    ],
+    stroke: { width: 2, linecap: 'round', linejoin: 'round' },
+  },
   'code': {
     from: 'file-code',
     viewBox: '0 0 24 24',

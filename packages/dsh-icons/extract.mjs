@@ -73,6 +73,10 @@ const WANTED = {
   ticket: 'ticket',
   history: 'history',
   settings: 'settings',
+  // The control that opens and closes the rail. Named for the thing it acts
+  // on rather than for a direction: a chevron has to be turned around when the
+  // rail is shut, and a panel is the same picture either way.
+  panel: 'panel-left',
 
   // The file tree's kinds. All but `data` are the same sheet `file` is, marked
   // — so a column of them reads as one shape with differences in it rather

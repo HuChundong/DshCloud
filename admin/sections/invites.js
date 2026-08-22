@@ -7,6 +7,7 @@
 import { escapeHtml } from '../../gateway/src/page-chrome.js'
 import { when } from '../console-shell.js'
 import { action } from './parts.js'
+import { PAGING_STRINGS, onePage, pager } from './paging.js'
 
 export const icon = 'ticket'
 export const label = { zh: '邀请码', en: 'Invite codes' }
@@ -16,6 +17,7 @@ export const lede = {
 }
 
 export const strings = {
+  ...PAGING_STRINGS,
   'invites.count': { zh: '生成数量', en: 'How many' },
   'invites.mint': { zh: '生成', en: 'Generate' },
   'th.code': { zh: '邀请码', en: 'Code' },
@@ -71,16 +73,21 @@ function inviteRow(invite) {
  * @returns {{html: string}} the markup.
  */
 export function render(state) {
-  const rows = state.invites.length === 0
+  const shown = onePage(state.invites)
+  const rows = shown.length === 0
     ? '<tr><td colspan="4" class="empty" data-t="empty.invites">还没有邀请码。</td></tr>'
-    : state.invites.map(inviteRow).join('\n')
+    : shown.map(inviteRow).join('\n')
+
+  const steps = pager({ path: '/invites', page: state.page, total: state.total, shown: shown.length })
 
   return {
-    html: `  <section class="card">
+    table: steps.table,
+    html: `  <section class="card list">
     <form method="post" action="/invites" class="mint">
       <input type="number" name="count" value="5" min="1" max="200" data-ta="invites.count" aria-label="生成数量">
       <button type="submit" data-t="invites.mint">生成</button>
     </form>
+    <div class="rows">
     <table>
       <thead>
         <tr>
@@ -94,6 +101,8 @@ export function render(state) {
 ${rows}
       </tbody>
     </table>
+    </div>
+${steps.html}
   </section>`,
   }
 }

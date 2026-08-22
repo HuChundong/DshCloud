@@ -39,6 +39,7 @@ async function pages() {
   const { profilePage } = await import('../gateway/src/profile-page.js')
   const { consolePage } = await import('../admin/console-shell.js')
   const { SECTIONS } = await import('../admin/sections/index.js')
+  const { PAGE_SIZE } = await import('../admin/sections/paging.js')
 
   const rendered = []
   for (const slug of POLICY_SLUGS) {
@@ -68,7 +69,7 @@ async function pages() {
     // Every section, in two states each: with rows and without. A section is
     // a file now, so the way this check goes stale is a new file nobody added
     // here — which is why it walks `SECTIONS` rather than naming them.
-    ...consoleStates(SECTIONS).map(({ name, section, state }) => {
+    ...consoleStates(SECTIONS, PAGE_SIZE).map(({ name, section, state }) => {
       const drawn = section.render(state)
       return {
         name: `console/${section.id} (${name})`,
@@ -247,18 +248,31 @@ console.log("check-pages: every string on the gateway's pages carries both langu
  * page does not render.
  *
  * @param {Array<object>} SECTIONS - the console's sections, imported where the pages are built.
+ * @param {number} PAGE_SIZE - how many rows a page holds.
  * @returns {Array<{name: string, section: object, state: object}>} the cases.
  */
-function consoleStates(SECTIONS) {
-  const accounts = [
-    { email: 'someone@example.com', id: 'a1', createdAt: 0, lastSeenAt: 0, disabled: false, admin: false, plan: 'free' },
-    { email: 'off@example.com', id: 'a2', createdAt: 0, lastSeenAt: 0, disabled: true, admin: false, plan: 'pro' },
-    { email: 'root@example.com', id: 'a3', createdAt: 0, lastSeenAt: 0, disabled: false, admin: true, plan: 'team' },
+function consoleStates(SECTIONS, PAGE_SIZE) {
+  // A page's worth, which is what a section is handed. The store pages in SQL;
+  // what is checked here is that the section renders what it was given and
+  // draws the control that reaches the rest.
+  const tenants = Array.from({ length: PAGE_SIZE }, (unused, index) => ({
+    email: `tenant${String(index)}@example.com`,
+    id: `a${String(index)}`,
+    createdAt: 0,
+    lastSeenAt: 0,
+    disabled: index % 5 === 0,
+    admin: false,
+    plan: ['free', 'pro', 'team'][index % 3],
+  }))
+  const admins = [
+    { email: 'root@example.com', id: 'r1', createdAt: 0, lastSeenAt: 0, disabled: false, admin: true, plan: 'team' },
   ]
-  const invites = [
-    { code: 'ABCDE-FGHJK', createdAt: 0, redeemedAt: undefined, redeemedBy: undefined },
-    { code: 'KMNPQ-RSTUV', createdAt: 0, redeemedAt: 1, redeemedBy: 'someone@example.com' },
-  ]
+  const invites = Array.from({ length: PAGE_SIZE }, (unused, index) => ({
+    code: `ABCDE-FGHJ${String(index).padStart(1, '0')}`,
+    createdAt: 0,
+    redeemedAt: index % 2 === 0 ? undefined : 1,
+    redeemedBy: index % 2 === 0 ? undefined : 'someone@example.com',
+  }))
   const audit = [
     { at: new Date(0), actor: 'admin', action: 'account.suspended', subject: 'someone@example.com', detail: {} },
     { at: new Date(0), actor: 'admin', action: 'something.newer', subject: null, detail: { count: 3 } },
@@ -266,10 +280,10 @@ function consoleStates(SECTIONS) {
   const by = (id) => SECTIONS.find((section) => section.id === id)
 
   return [
-    { name: 'populated', section: by('tenants'), state: { accounts } },
-    { name: 'empty', section: by('tenants'), state: { accounts: [] } },
-    { name: 'populated', section: by('invites'), state: { invites } },
-    { name: 'empty', section: by('invites'), state: { invites: [] } },
+    { name: 'a full page', section: by('tenants'), state: { admins, tenants, page: 2, total: 137 } },
+    { name: 'empty', section: by('tenants'), state: { admins: [], tenants: [], page: 1, total: 0 } },
+    { name: 'a full page', section: by('invites'), state: { invites, page: 2, total: 137 } },
+    { name: 'empty', section: by('invites'), state: { invites: [], page: 1, total: 0 } },
     {
       name: 'from the console',
       section: by('settings'),
@@ -318,7 +332,7 @@ function consoleStates(SECTIONS) {
         },
       },
     },
-    { name: 'populated', section: by('audit'), state: { audit } },
-    { name: 'empty', section: by('audit'), state: { audit: [] } },
+    { name: 'populated', section: by('audit'), state: { audit, page: 1, total: 2 } },
+    { name: 'empty', section: by('audit'), state: { audit: [], page: 1, total: 0 } },
   ]
 }

@@ -487,16 +487,23 @@ export const THEME_TOGGLE = `<style>
   }
   .theme:hover { color: var(--fg); border-color: var(--line-strong); }
   /* One button, two icons: which one shows is a question about the theme in
-     force, which only CSS knows — the button itself never has to be told. */
-  .theme .moon { display: none; }
+     force, which only CSS knows — the button itself never has to be told.
+
+     It shows the theme it SWITCHES TO, not the one already on. Both readings
+     exist and this one is what a control means: a button is named by what it
+     does. Drawn the other way round, the dark page showed a moon — an
+     illustration of where you already are, on the one control whose whole job
+     is to take you somewhere else, and the way to get back to light was to
+     press the picture of night. */
+  .theme .sun { display: none; }
   @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) .theme .sun { display: none; }
-    :root:not([data-theme="light"]) .theme .moon { display: block; }
+    :root:not([data-theme="light"]) .theme .moon { display: none; }
+    :root:not([data-theme="light"]) .theme .sun { display: block; }
   }
-  :root[data-theme="dark"] .theme .sun { display: none; }
-  :root[data-theme="dark"] .theme .moon { display: block; }
-  :root[data-theme="light"] .theme .sun { display: block; }
-  :root[data-theme="light"] .theme .moon { display: none; }
+  :root[data-theme="dark"] .theme .moon { display: none; }
+  :root[data-theme="dark"] .theme .sun { display: block; }
+  :root[data-theme="light"] .theme .moon { display: block; }
+  :root[data-theme="light"] .theme .sun { display: none; }
 </style>
 <script>
   (function () {

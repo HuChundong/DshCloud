@@ -24,6 +24,7 @@
 
 import { escapeHtml } from '../../gateway/src/page-chrome.js'
 import { when } from '../console-shell.js'
+import { PAGING_STRINGS, onePage, pager } from './paging.js'
 
 export const icon = 'history'
 export const label = { zh: '审计', en: 'Audit' }
@@ -54,14 +55,15 @@ const ACTIONS = {
 }
 
 export const strings = {
+  ...PAGING_STRINGS,
   'th.at': { zh: '时间', en: 'When' },
   'th.action': { zh: '动作', en: 'Action' },
   'th.subject': { zh: '对象', en: 'Subject' },
   'th.detail': { zh: '详情', en: 'Detail' },
   'empty.audit': { zh: '还没有记录。', en: 'Nothing recorded yet.' },
   'audit.note': {
-    zh: '只显示最近 100 条。这里记的是"改了什么"，不是"谁改的"——这套部署只有一个运营账号。密钥本身从不入库，连末四位也不记。',
-    en: 'The last 100. This records what changed rather than who changed it — the deployment has one operator credential. No credential is ever written here, not even its last four characters.',
+    zh: '这里记的是"改了什么"，不是"谁改的"——这套部署只有一个运营账号。密钥本身从不入库，连末四位也不记。',
+    en: 'This records what changed rather than who changed it — the deployment has one operator credential. No credential is ever written here, not even its last four characters.',
   },
 }
 
@@ -99,9 +101,10 @@ function auditRow(entry) {
  * @returns {{html: string}} the markup.
  */
 export function render(state) {
-  const rows = state.audit.length === 0
+  const shown = onePage(state.audit)
+  const rows = shown.length === 0
     ? '<tr><td colspan="4" class="empty" data-t="empty.audit">还没有记录。</td></tr>'
-    : state.audit.map(auditRow).join('\n')
+    : shown.map(auditRow).join('\n')
 
   // Only the names on this page. Shipping every action's wording on every
   // visit would send the browser a dictionary for rows it is not showing, and
@@ -113,9 +116,12 @@ export function render(state) {
       .map((name) => [`do.${name}`, ACTIONS[name]]),
   )
 
+  const steps = pager({ path: '/audit', page: state.page, total: state.total, shown: shown.length })
+
   return {
-    table,
-    html: `  <section class="card">
+    table: { ...table, ...steps.table },
+    html: `  <section class="card list">
+    <div class="rows">
     <table>
       <thead>
         <tr>
@@ -129,7 +135,9 @@ export function render(state) {
 ${rows}
       </tbody>
     </table>
-    <p class="note" data-t="audit.note">只显示最近 100 条。这里记的是"改了什么"，不是"谁改的"——这套部署只有一个运营账号。密钥本身从不入库，连末四位也不记。</p>
+    </div>
+${steps.html}
+    <p class="note" data-t="audit.note">这里记的是"改了什么"，不是"谁改的"——这套部署只有一个运营账号。密钥本身从不入库，连末四位也不记。</p>
   </section>`,
   }
 }

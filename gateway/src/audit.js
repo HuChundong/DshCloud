@@ -57,16 +57,20 @@ export async function record(db, { actor, action, subject, detail }) {
 }
 
 /**
- * The most recent entries, newest first.
+ * One page of entries, newest first.
  *
  * @param {import('pg').Pool} db - the deployment's database.
- * @param {number} [limit] - how many.
- * @returns {Promise<Array<object>>} the entries.
+ * @param {{limit: number, offset: number}} window - the page to read.
+ * @returns {Promise<{rows: Array<object>, total: number}>} the page, and how many there are.
  */
-export async function recent(db, limit = 100) {
+export async function recent(db, { limit, offset }) {
   const { rows } = await db.query(
-    'SELECT at, actor, action, subject, detail FROM audit ORDER BY at DESC, id DESC LIMIT $1',
-    [Math.min(Math.max(1, Math.trunc(limit)), 500)],
+    `SELECT at, actor, action, subject, detail, count(*) OVER () AS total
+       FROM audit ORDER BY at DESC, id DESC LIMIT $1 OFFSET $2`,
+    [Math.min(Math.max(1, Math.trunc(limit)), 500), Math.max(0, Math.trunc(offset))],
   )
-  return rows
+  const total = rows.length === 0
+    ? Number((await db.query('SELECT count(*) AS total FROM audit')).rows[0].total)
+    : Number(rows[0].total)
+  return { rows, total }
 }

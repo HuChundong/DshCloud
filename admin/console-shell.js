@@ -55,8 +55,7 @@ export function when(at) {
 /** What the frame itself says, in both languages the console speaks. */
 const SHELL = {
   back: { zh: '退出', en: 'Sign out' },
-  'rail.collapse': { zh: '收起侧栏', en: 'Collapse the sidebar' },
-  footer: { zh: 'HamsterHQ · 自建部署', en: 'HamsterHQ · self-hosted' },
+  'rail.toggle': { zh: '收起 / 展开侧栏（⌘B）', en: 'Toggle the sidebar (⌘B)' },
   'confirm.title': { zh: '确认', en: 'Are you sure?' },
   'confirm.go': { zh: '确认删除', en: 'Delete' },
   cancel: { zh: '取消', en: 'Cancel' },
@@ -77,7 +76,6 @@ const SHELL = {
  */
 export function consolePage(state) {
   const { section, sections, body, table: sectionTable = {}, viewer, notice, version } = state
-  const release = version === undefined || version === '' ? '' : ` · v${escapeHtml(version)}`
 
   // A toast rather than a block in the page. It reports an action that has
   // already happened, so it dismisses itself — and being out of the layout, it
@@ -214,29 +212,29 @@ ${TOAST_CSS}
   }
 ${icons}
 
-  /* The fold. Its own row above the operator rather than a chevron floating on
-     the rail's edge: an edge control is invisible until you know it is there,
-     and this rail is read by one person who should not have to discover it. */
-  .rail .fold {
-    margin: auto .5rem .25rem;
-    padding: .4rem;
+  /* The trigger, above the page's own heading. Every dashboard people already
+     use puts it here rather than on the rail, and the reason is mechanical: a
+     control on the rail has to survive the rail closing. */
+  .fold {
+    margin: 0 0 .75rem;
+    padding: .35rem;
     display: flex;
+    align-items: center;
     justify-content: center;
+    width: 1.9rem;
+    height: 1.9rem;
     border: 0;
     border-radius: 8px;
     background: none;
-    color: var(--faint);
+    color: var(--muted);
   }
-  .rail .fold:hover { background: var(--bg); color: var(--fg); border-color: transparent; }
-  .rail .fold i {
-    width: 16px;
-    height: 16px;
+  .fold:hover { background: var(--surface); color: var(--fg); border-color: transparent; }
+  .fold i {
+    width: 17px;
+    height: 17px;
     background: currentColor;
-    mask: ${cssUrl('chevron-down', '#000', 16)} center/16px no-repeat;
-    -webkit-mask: ${cssUrl('chevron-down', '#000', 16)} center/16px no-repeat;
-    /* The chevron points down in the set; a rail folds sideways. */
-    transform: rotate(90deg);
-    transition: transform .16s;
+    mask: ${cssUrl('panel', '#000', 17)} center/17px no-repeat;
+    -webkit-mask: ${cssUrl('panel', '#000', 17)} center/17px no-repeat;
   }
 
   /* Folded: the glyphs stay, everything that needs width goes. Written against
@@ -247,39 +245,74 @@ ${icons}
   :root[data-rail="folded"] .rail .brand .word,
   :root[data-rail="folded"] .rail .brand .badge,
   :root[data-rail="folded"] .rail nav a span,
-  :root[data-rail="folded"] .rail .who strong,
-  :root[data-rail="folded"] .rail .who a span,
-  :root[data-rail="folded"] .rail .who .build { display: none; }
-  /* The way out stays. Folded, it is the glyph alone — a rail with no sign-out
-     is a session left open on whatever machine opened it, and hiding the only
-     control that ends one is not a saving. */
-  :root[data-rail="folded"] .rail .who a { justify-content: center; }
-  :root[data-rail="folded"] .rail .who a i { display: block; }
+  :root[data-rail="folded"] .rail .who .name { display: none; }
   :root[data-rail="folded"] .rail nav a { justify-content: center; padding-left: 0; padding-right: 0; }
-  :root[data-rail="folded"] .rail .fold i { transform: rotate(-90deg); }
-  :root[data-rail="folded"] .rail .who { padding: .875rem 0 1.15rem; text-align: center; }
+  /* Folded, the name goes and the two controls stack. The way out stays: a
+     rail with no sign-out is a session left open on whatever machine opened
+     it, and 60px is wide enough for one glyph above another. */
+  :root[data-rail="folded"] .rail .who {
+    flex-direction: column;
+    gap: .4rem;
+    justify-content: center;
+    padding: .6rem 0;
+  }
+  :root[data-rail="folded"] .rail .who .out { margin-left: 0; }
 
+  /* One row: who is signed in, what is running, and the way out. A block of
+     stacked lines read as three unrelated facts stacked in a corner. */
   .rail .who {
-    margin-top: 0;
-    padding: .875rem 1.25rem 1.15rem;
-    border-top: 1px solid var(--line);
-    color: var(--muted);
+    margin-top: auto;
+    display: flex;
+    align-items: center;
+    gap: .55rem;
+    padding: .75rem;
+    margin: auto .5rem .5rem;
+    border-radius: 10px;
+    border: 1px solid transparent;
+  }
+  .rail .who:hover { border-color: var(--line); background: var(--bg); }
+  .rail .who .face {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 8px;
+    background: var(--ink);
+    color: var(--on-ink);
     font-size: .75rem;
-    line-height: 1.5;
+    font-weight: 600;
   }
-  .rail .who strong { display: block; font-weight: 500; color: var(--fg); overflow-wrap: anywhere; }
-  .rail .who a { display: flex; align-items: center; gap: .4rem; color: var(--muted); text-decoration: none; }
-  .rail .who a:hover { color: var(--fg); }
-  .rail .who a span { border-bottom: 1px solid var(--line); }
-  .rail .who a i {
-    display: none;
-    width: 16px;
-    height: 16px;
+  .rail .who .name { min-width: 0; display: grid; line-height: 1.35; }
+  .rail .who strong {
+    font-weight: 500;
+    font-size: .8125rem;
+    color: var(--fg);
+    /* One line, cut rather than wrapped: a long name is not worth a rail that
+       is two lines taller than it was. */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .rail .who .build { font-family: var(--mono); font-size: .6875rem; color: var(--faint); }
+  .rail .who .out {
+    flex: none;
+    margin-left: auto;
+    display: grid;
+    place-items: center;
+    width: 1.6rem;
+    height: 1.6rem;
+    border-radius: 8px;
+    color: var(--muted);
+  }
+  .rail .who .out:hover { background: var(--surface); color: var(--fg); }
+  .rail .who .out i {
+    width: 15px;
+    height: 15px;
     background: currentColor;
-    mask: ${cssUrl('signout', '#000', 16)} center/16px no-repeat;
-    -webkit-mask: ${cssUrl('signout', '#000', 16)} center/16px no-repeat;
+    mask: ${cssUrl('signout', '#000', 15)} center/15px no-repeat;
+    -webkit-mask: ${cssUrl('signout', '#000', 15)} center/15px no-repeat;
   }
-  .rail .who .build { display: block; margin-top: .5rem; font-family: var(--mono); font-size: .6875rem; color: var(--faint); overflow-wrap: anywhere; }
 
   /* ---- the page --------------------------------------------------------- */
 
@@ -291,11 +324,37 @@ ${icons}
     /* Clears the two controls fixed in the corner. */
     padding-right: max(clamp(1.25rem, 4vw, 2.5rem), 7.5rem);
   }
-  /* A table wider than the pane scrolls inside its own card rather than
-     widening the page. Nothing here is wide today; a section added later will
-     be, and finding out then means finding out from a sideways-scrolling
-     layout. */
-  .card { overflow-x: auto; }
+  /* A section holding a list does not scroll: the rows do, inside their card,
+     with the pager underneath them where it can be reached without scrolling
+     past the thing it pages.
+     
+     A page of twenty rows is about 1200px of table. It was rendered into an
+     800px pane and the pager sat 700px below the fold — a paged list that had
+     to be scrolled to find out it was paged. */
+  main:has(.card.list) { overflow: hidden; padding-bottom: 1.5rem; }
+  main:has(.card.list) .page { display: flex; flex-direction: column; min-height: 0; height: 100%; }
+
+  .card { flex: none; overflow-x: auto; }
+  .card.list {
+    display: flex;
+    flex-direction: column;
+    min-height: 9rem;
+    flex: 1 1 auto;
+    padding-bottom: 0;
+    overflow: hidden;
+  }
+  /* The rows, and only the rows. A zero min-height is what lets a flex child
+     shrink below its content — without it the card grows to fit the table and
+     the page scrolls after all. */
+  .card.list .rows { flex: 1 1 auto; min-height: 0; overflow: auto; }
+  /* The header stays while its rows move under it. Opaque, or the rows show
+     through it as they pass. */
+  .card.list .rows thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--bg);
+  }
   .page { max-width: 60rem; }
   h1 { margin: 0 0 .35rem; font-size: 1.25rem; font-weight: 600; letter-spacing: -.01em; }
   .lede { margin: 0 0 1.75rem; color: var(--muted); font-size: .875rem; }
@@ -309,7 +368,7 @@ ${icons}
     font-size: .8125rem;
     border-bottom: 1px solid var(--line);
   }
-  td { padding: .85rem .75rem; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  td { padding: .65rem .75rem; border-bottom: 1px solid var(--line); vertical-align: middle; }
   td.empty { padding: 2.5rem; text-align: center; color: var(--muted); }
   .email { font-weight: 500; color: var(--ink); }
   .sub { color: var(--muted); font-size: .8125rem; }
@@ -359,6 +418,35 @@ ${icons}
   .card table { margin-bottom: .75rem; }
   .card table tr:last-child td { border-bottom: 0; }
   .card .note { margin: 0 0 1rem; color: var(--muted); font-size: .8125rem; line-height: 1.6; }
+
+  /* The pager, under the rows it moves through. Always present, even on the
+     only page — the count is the useful half, and a control that appears once
+     a list gets long moves the rows under the pointer the first time it does. */
+  .pager {
+    flex: none;
+    border-top: 1px solid var(--line);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: .75rem .75rem 1rem;
+    font-size: .8125rem;
+    color: var(--muted);
+  }
+  .pager .range { font-variant-numeric: tabular-nums; }
+  .pager .steps { display: flex; gap: .375rem; }
+  .pager .step {
+    padding: .3rem .65rem;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    color: var(--fg);
+    text-decoration: none;
+  }
+  .pager a.step:hover { border-color: var(--muted); }
+  /* The end of the list, said by a control that stays where it is rather than
+     disappearing: a pager whose buttons come and go changes width, and the
+     other button moves out from under the pointer on the last page. */
+  .pager .step.off { color: var(--faint); border-color: var(--line-soft); cursor: default; }
 
   .creds { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-bottom: 1rem; }
   .creds input {
@@ -480,7 +568,7 @@ ${icons}
     .rail { width: 100%; height: auto; border-right: 0; border-bottom: 1px solid var(--line); }
     .rail .brand { padding-bottom: .5rem; }
     .rail nav { flex-direction: row; overflow-x: auto; padding: 0 .75rem .6rem; }
-    .rail .who, .rail .fold { display: none; }
+    .rail .who { display: none; }
     /* Nothing to fold when the rail is already a strip, and a folded width
        would take the strip down to 60px of horizontal scroll. */
     :root[data-rail="folded"] .rail { width: 100%; }
@@ -510,20 +598,28 @@ ${langToggle(table)}
   <nav>
 ${rail}
   </nav>
-  <button type="button" class="fold" data-ta="rail.collapse" aria-label="收起侧栏"><i aria-hidden="true"></i></button>
   <div class="who">
-    <strong>${escapeHtml(viewer)}</strong>
-    <a href="/sign-out" data-ta="back" aria-label="退出"><i aria-hidden="true"></i><span data-t="back">退出</span></a>
-    <!-- The release, beside the deployment it belongs to rather than under the
-         table. It answers "what is running here", which is a fact about this
-         installation and not about the section being read — and at the foot of
-         a scrolling column it was a line nobody arrived at. -->
-    <span class="build"><span data-t="footer">HamsterHQ · 自建部署</span>${release}</span>
+    <!-- The initial, not a photograph: there is one operator and no profile to
+         carry a picture. It is here because a row with a mark at its head reads
+         as somebody, and a line of text reads as a setting. -->
+    <span class="face" aria-hidden="true">${escapeHtml(viewer.slice(0, 1).toUpperCase())}</span>
+    <span class="name">
+      <strong>${escapeHtml(viewer)}</strong>
+      <!-- The release, and only the release. "HamsterHQ · 自建部署" said the
+           name of the product to the one person who cannot be in any doubt
+           about which product this is. -->
+      <span class="build">${escapeHtml(version === undefined || version === '' ? '—' : `v${version}`)}</span>
+    </span>
+    <a href="/sign-out" class="out" data-ta="back" aria-label="退出"><i aria-hidden="true"></i></a>
   </div>
 </aside>
 
 <main>
   <div class="page">
+    <!-- The trigger sits with the page it opens onto, not on the rail it
+         closes: it has to be reachable when the rail is shut, and every
+         dashboard people already use puts it here. -->
+    <button type="button" class="fold" data-ta="rail.toggle" aria-label="收起 / 展开侧栏"><i aria-hidden="true"></i></button>
     <h1 data-t="nav.${section.id}">${escapeHtml(section.label.zh)}</h1>
     <p class="lede" data-t="lede.${section.id}">${escapeHtml(section.lede.zh)}</p>
 ${body}
@@ -547,15 +643,30 @@ ${body}
     // The fold, remembered. A preference about how this console is read, like
     // the theme and the language beside it — and kept in the same place, so a
     // browser that forgets one forgets all three.
-    var fold = document.querySelector('.rail .fold')
-    if (fold) {
-      fold.addEventListener('click', function () {
-        var folded = document.documentElement.dataset.rail === 'folded'
-        if (folded) delete document.documentElement.dataset.rail
-        else document.documentElement.dataset.rail = 'folded'
-        try { localStorage.setItem('hq-rail', folded ? 'open' : 'folded') } catch (error) { /* as above */ }
-      })
+    function toggleRail() {
+      var folded = document.documentElement.dataset.rail === 'folded'
+      if (folded) delete document.documentElement.dataset.rail
+      else document.documentElement.dataset.rail = 'folded'
+      try { localStorage.setItem('hq-rail', folded ? 'open' : 'folded') } catch (error) { /* as above */ }
     }
+
+    // Delegated, because the trigger lives inside the part of the page every
+    // action replaces — bound to the button, it would stop working after the
+    // first suspend.
+    document.addEventListener('click', function (event) {
+      if (event.target.closest && event.target.closest('.fold')) toggleRail()
+    })
+
+    // The shortcut every dashboard with a rail uses. Ignored while something is
+    // being typed into, or it would swallow a ⌘B somebody meant for a field.
+    document.addEventListener('keydown', function (event) {
+      if (event.key !== 'b' && event.key !== 'B') return
+      if (!event.metaKey && !event.ctrlKey) return
+      var into = event.target.tagName
+      if (into === 'INPUT' || into === 'TEXTAREA' || into === 'SELECT') return
+      event.preventDefault()
+      toggleRail()
+    })
 
     var dialog = document.getElementById('confirm')
     var text = document.getElementById('confirm-text')

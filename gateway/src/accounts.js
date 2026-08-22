@@ -280,18 +280,70 @@ export class Accounts {
   }
 
   /**
-   * Every account, newest registration first.
-   * @returns {Promise<Account[]>} the accounts.
+   * The addresses this deployment names, as accounts.
+   *
+   * Bounded by `GATEWAY_ADMINS` rather than by the table, so it is never
+   * paged: a deployment naming enough administrators to need a second page has
+   * a different problem than a long list.
+   *
+   * @returns {Promise<Account[]>} the accounts, for the names that have signed in.
    */
-  async list() {
+  async admins() {
+    const named = [...ADMIN_EMAILS]
+    if (named.length === 0) return []
+    const { rows } = await this.pool.query(
+      `SELECT id, email, disabled, created_at, last_seen_at, display_name, plan
+         FROM accounts WHERE email = ANY($1) ORDER BY created_at DESC`,
+      [named],
+    )
+    return rows.map(toAccount)
+  }
+
+  /**
+   * One page of the accounts this deployment does NOT name, newest first.
+   *
+   * Paged in SQL rather than sliced after the fact. A console that reads every
+   * row to show twenty is a console that gets slower the better the deployment
+   * does, and finds out on the day it has the most to lose.
+   *
+   * The administrators are excluded here rather than filtered out afterwards,
+   * or a page of twenty would be however many are left once they were removed.
+   *
+   * @param {{limit: number, offset: number}} window - the page to read.
+   * @returns {Promise<{rows: Account[], total: number}>} the page, and how many there are.
+   */
+  async tenants({ limit, offset }) {
+    const named = [...ADMIN_EMAILS]
     // Every column but the avatar, which is the only large one here and which
     // the console does not show: `SELECT *` would pull every tenant's image
     // into memory to render a table of addresses.
     const { rows } = await this.pool.query(
-      `SELECT id, email, disabled, created_at, last_seen_at, display_name, plan
-         FROM accounts ORDER BY created_at DESC`,
+      `SELECT id, email, disabled, created_at, last_seen_at, display_name, plan,
+              count(*) OVER () AS total
+         FROM accounts
+        WHERE NOT (email = ANY($1))
+        ORDER BY created_at DESC
+        LIMIT $2 OFFSET $3`,
+      [named, limit, offset],
     )
-    return rows.map(toAccount)
+    // The count rides on the rows, so the page and its total cannot disagree
+    // about a table that changed between two queries.
+    const total = rows.length === 0 ? await this.countTenants(named) : Number(rows[0].total)
+    return { rows: rows.map(toAccount), total }
+  }
+
+  /**
+   * How many accounts there are, for a page that came back empty.
+   *
+   * @param {string[]} named - the addresses to exclude.
+   * @returns {Promise<number>} the count.
+   */
+  async countTenants(named) {
+    const { rows } = await this.pool.query(
+      'SELECT count(*) AS total FROM accounts WHERE NOT (email = ANY($1))',
+      [named],
+    )
+    return Number(rows[0].total)
   }
 
   /**

@@ -131,16 +131,29 @@ export class Invites {
    * Every invite, unredeemed first and newest first within each group.
    * @returns {Promise<Array<{code: string, createdAt: number, redeemedAt: number | undefined, redeemedBy: string | undefined}>>} the invites.
    */
-  async list() {
+  async list({ limit, offset }) {
+    // Paged in SQL. Minting is a button that makes as many as it is asked for,
+    // so this is the table most likely to be long, and reading all of it to
+    // show twenty is how a console gets slower the more it is used.
     const { rows } = await this.pool.query(
-      'SELECT * FROM invites ORDER BY redeemed_at NULLS FIRST, created_at DESC',
+      `SELECT *, count(*) OVER () AS total
+         FROM invites
+        ORDER BY redeemed_at NULLS FIRST, created_at DESC
+        LIMIT $1 OFFSET $2`,
+      [limit, offset],
     )
-    return rows.map((row) => ({
-      code: row.code,
-      createdAt: row.created_at.getTime(),
-      redeemedAt: row.redeemed_at === null ? undefined : row.redeemed_at.getTime(),
-      redeemedBy: row.redeemed_by ?? undefined,
-    }))
+    const total = rows.length === 0
+      ? Number((await this.pool.query('SELECT count(*) AS total FROM invites')).rows[0].total)
+      : Number(rows[0].total)
+    return {
+      total,
+      rows: rows.map((row) => ({
+        code: row.code,
+        createdAt: row.created_at.getTime(),
+        redeemedAt: row.redeemed_at === null ? undefined : row.redeemed_at.getTime(),
+        redeemedBy: row.redeemed_by ?? undefined,
+      })),
+    }
   }
 
   /**

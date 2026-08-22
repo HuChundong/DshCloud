@@ -13,6 +13,7 @@ import { escapeHtml } from '../../gateway/src/page-chrome.js'
 import { PLANS } from '../../gateway/src/plans.js'
 import { when } from '../console-shell.js'
 import { action } from './parts.js'
+import { PAGING_STRINGS, onePage, pager } from './paging.js'
 
 export const icon = 'people'
 export const label = { zh: '租户', en: 'Tenants' }
@@ -22,6 +23,7 @@ export const lede = {
 }
 
 export const strings = {
+  ...PAGING_STRINGS,
   'admins.h': { zh: '管理员', en: 'Administrators' },
   'users.h': { zh: '用户', en: 'Tenants' },
   save: { zh: '保存', en: 'Save' },
@@ -141,23 +143,29 @@ function tenantRow(account) {
 /**
  * Draw the section.
  *
- * @param {{accounts: Array<import('../../gateway/src/accounts.js').Account>}} state - what to show.
+ * @param {object} state - what to show.
+ * @param {Array<import('../../gateway/src/accounts.js').Account>} state.admins - the addresses the deployment names.
+ * @param {Array<import('../../gateway/src/accounts.js').Account>} state.tenants - one page of everybody else.
+ * @param {number} state.page - which page that is.
+ * @param {number} state.total - how many tenants there are in all.
  * @returns {{html: string}} the markup.
  */
 export function render(state) {
-  const admins = state.accounts.filter((account) => account.admin)
-  const tenants = state.accounts.filter((account) => !account.admin)
-
-  const adminRows = admins.length === 0
+  const adminRows = state.admins.length === 0
     ? '<tr><td colspan="3" class="empty" data-t="empty.admins">GATEWAY_ADMINS 里的地址还没有登录过。</td></tr>'
-    : admins.map((account) => adminRow(account)).join('\n')
-  const rows = tenants.length === 0
+    : state.admins.map((account) => adminRow(account)).join('\n')
+  const shown = onePage(state.tenants)
+  const rows = shown.length === 0
     ? '<tr><td colspan="5" class="empty" data-t="empty.tenants">还没有人注册。</td></tr>'
-    : tenants.map((account) => tenantRow(account)).join('\n')
+    : shown.map((account) => tenantRow(account)).join('\n')
+
+  const steps = pager({ path: '/', page: state.page, total: state.total, shown: shown.length })
 
   return {
-    html: `  <section class="card">
+    table: steps.table,
+    html: `  <section class="card list">
     <h2 data-t="users.h">用户</h2>
+    <div class="rows">
     <table>
       <thead>
         <tr>
@@ -172,6 +180,8 @@ export function render(state) {
 ${rows}
       </tbody>
     </table>
+    </div>
+${steps.html}
   </section>
 
   <section class="card">
