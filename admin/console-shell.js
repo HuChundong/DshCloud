@@ -37,6 +37,78 @@ import {
 } from '../gateway/src/page-chrome.js'
 import { asset } from '../gateway/src/page-assets.js'
 
+/** The same neutrals in the dark scheme; see {@link CONSOLE_NEUTRALS_CSS}. */
+const CONSOLE_DARK_NEUTRALS = `
+    --fg: #f9fafb;
+    --ink: #f9fafb;
+    --on-ink: #101113;
+    --muted: #cfd3d6;
+    --faint: #adb2b8;
+    --line: rgb(255 255 255 / 12%);
+    --line-soft: rgb(255 255 255 / 6%);
+    --surface: #1b1b1c;
+    --panel: #232324;
+    --sunken: #1b1b1c;
+    --bg: #151517;`
+
+/**
+ * The neutrals this console wears, which are the application's and not the
+ * front door's.
+ *
+ * Everything else on this page comes from `page-chrome.js`, and should: the
+ * mark, the type, the accent green, the radii and the two toggles are what
+ * make a HamsterHQ page a HamsterHQ page, and the sign-in form in front of
+ * this console is drawn with exactly them.
+ *
+ * The greys are the one part that cannot be shared. The front door's are a
+ * marketing page's — #0a0a0a under near-white text, a near-black chosen to
+ * make one screenful of copy and a screenshot look like a product shot. The
+ * console is not read that way. It is a working surface someone keeps open
+ * beside the application, on the same monitor, often side by side with it —
+ * and next to the application's #151517 window and #1b1b1c rail, that
+ * near-black read as a different piece of software.
+ *
+ * So the neutrals are restated here as the application's own ramp, taken from
+ * a running deployment token by token. Only the neutrals: an override that
+ * reached the accent or the type would be a second design rather than the same
+ * one in the room it is standing in.
+ *
+ * They are literals rather than a var() reference to the application's tokens,
+ * because those tokens are declared by the shell's own stylesheet on `body` at
+ * runtime — there is no shell on this page, and a var() with no declaration
+ * behind it is a colour that silently falls back to whatever was there. The
+ * cost is that a change to the application's ramp has to be copied here; the
+ * alternative is a console that renders half-themed the first time upstream
+ * moves a token name.
+ *
+ * The RELATIONSHIPS are the page's own and are untouched: the rail is a step
+ * lighter than the page in both schemes, exactly as the application's is, so
+ * only the values move.
+ */
+const CONSOLE_NEUTRALS_CSS = `
+  :root {
+    --fg: #101113;
+    --ink: #101113;
+    --on-ink: #ffffff;
+    --muted: #656565;
+    --faint: #868584;
+    --line: rgb(0 0 0 / 10%);
+    --line-soft: rgb(0 0 0 / 4%);
+    /* The application's sidebar fill, stated opaquely rather than as a tint of
+       the page: a tint of a warm off-white comes out a different warmth. */
+    --surface: #f4f4f2;
+    --panel: #fbfbfa;
+    --sunken: #f4f4f2;
+    --bg: #fbfbfa;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {${CONSOLE_DARK_NEUTRALS}
+    }
+  }
+  :root[data-theme="dark"] {${CONSOLE_DARK_NEUTRALS}
+  }
+`
+
 /**
  * One moment, rendered.
  *
@@ -128,6 +200,7 @@ ${FONT_PRELOAD}
 </script>
 <style>
 ${PALETTE_CSS}
+${CONSOLE_NEUTRALS_CSS}
 ${BRAND_CSS}
 ${TOAST_CSS}
   * { box-sizing: border-box; }
