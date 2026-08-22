@@ -43,7 +43,7 @@
 
 import process from 'node:process'
 
-import { NEVER_TIMEOUT, Sandbox as CubeSandbox } from '@cubesandbox/sdk'
+import { Sandbox as CubeSandbox } from '@cubesandbox/sdk'
 import { Sandbox as E2bSandbox } from 'e2b'
 
 /** The port envd listens on inside every sandbox. */
@@ -158,7 +158,13 @@ async function cubeSandbox(handle) {
       makeDir: async (path) => await sandbox.files.makeDir(path),
     },
     run: async (command, envs) => {
-      const result = await sandbox.commands.run(command, { user: ENVD_USER, envs, timeoutMs: NEVER_TIMEOUT })
+      // No `timeoutMs` at all. This client forwards the number to envd as
+      // `Connect-Timeout-Ms`, and envd answers nothing for a deadline it reads
+      // as already past: `0` — the other client's way of saying "no deadline"
+      // — hung every command, and so does `NEVER_TIMEOUT`, which is this
+      // client's own constant for it. Measured both ways against a real
+      // sandbox. Omitted, a command answers in about twenty milliseconds.
+      const result = await sandbox.commands.run(command, { user: ENVD_USER, envs })
       return { exitCode: result.exitCode ?? 0, stdout: result.stdout ?? '', stderr: result.stderr ?? '' }
     },
     pty: {
@@ -167,14 +173,6 @@ async function cubeSandbox(handle) {
           user: ENVD_USER,
           cwd,
           envs,
-          // No deadline, said the way THIS client says it. `0` is how the
-          // other one spells it, and passing it here sent envd a
-          // `Connect-Timeout-Ms` of zero — a deadline that had already
-          // expired, so the response never came and every command in every
-          // sandbox timed out waiting for a header. The two clients do not
-          // read the same number the same way, which is the whole reason this
-          // adapter exists and was the first thing it got wrong.
-          timeoutMs: NEVER_TIMEOUT,
         })
         // Output arrives through `wait`, which settles on exit. Both halves of
         // that are this one call.
