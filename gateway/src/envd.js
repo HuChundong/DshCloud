@@ -43,8 +43,7 @@
 
 import process from 'node:process'
 
-import { Sandbox as CubeSandbox } from '@cubesandbox/sdk'
-import { Sandbox as E2bSandbox } from 'e2b'
+import { Sandbox } from 'e2b'
 
 /** The port envd listens on inside every sandbox. */
 const ENVD_PORT = 49983
@@ -70,172 +69,46 @@ const RUNTIME = process.env.SANDBOX_RUNTIME === 'cube' ? 'cube' : 'docker'
 const ENVD_USER = 'root'
 
 /**
- * One sandbox, in the vocabulary the rest of this file speaks.
+ * The base URL one sandbox's envd is reached at.
  *
- * Two clients sit behind this, one per runtime, and both are the client whose
- * protocol they speak: `@cubesandbox/sdk` for the platform this deployment
- * runs on, and the official `e2b` one for the docker simulation, which is an
- * envd addressed by hand and is exactly what that client's explicit-URL
- * connect is for.
+ * The argument is the RUNTIME's own handle — what `runtime.create` returned —
+ * and never the gateway's `sandboxId`. The two are not the same thing and only
+ * one of them is an address:
  *
- * They are not the same client with the same names. Both offer `files`,
- * `commands` and `pty`, and then:
+ *   docker   handle = `hamsterhq-sandbox-<first 12 of SANDBOX_ID>`, the container name
+ *   cube     handle = the platform's own sandbox id, which the proxy routes by
  *
- *   - a file's info is `stat` in one and `getInfo` in the other
- *   - a pty takes its size as its own argument in one and in the options bag
- *     in the other, and reports output through `wait(onData)` rather than
- *     through an `onData` given at creation
- *   - one hands back entries as envd wrote them; the other normalises
- *     `FILE_TYPE_DIRECTORY` to `dir` on the way past
- *
- * This is where those differences stop. Everything below reads one shape, and
- * the last of them is why `panel.js` reads both spellings — an SDK swap turned
- * every folder in the tree into a file once, and nothing failed while it did.
- *
- * @param {string} handle - the runtime's handle.
- * @returns {Promise<object>} the sandbox, in this module's vocabulary.
+ * @param {string} handle - the runtime's handle for the sandbox to reach.
+ * @returns {string} the base URL, with no trailing slash.
  */
-async function client(handle) {
-  const held = live.get(handle)
-  if (held !== undefined && held.until > Date.now()) return held.sandbox
-
-  const sandbox = RUNTIME === 'cube' ? await cubeSandbox(handle) : await dockerSandbox(handle)
-  live.set(handle, { sandbox, until: Date.now() + CLIENT_TTL_MS })
-  return sandbox
-}
-
-/**
- * Clients already built, by handle.
- *
- * Held because connecting is a request under `cube` — `POST
- * /sandboxes/:id/connect` — and the panel asks for a directory, then a file,
- * then another: one round trip per operation to be told again where a sandbox
- * this deployment started already is.
- *
- * An earlier version of this file argued against holding one, on the grounds
- * that it would mean deciding when a sandbox has gone. It does, and the answer
- * is here rather than guessed at: anything that throws drops its client, and a
- * short life bounds the rest.
- *
- * @type {Map<string, {sandbox: object, until: number}>}
- */
-const live = new Map()
-
-/** How long a built client is reused before being built again. */
-const CLIENT_TTL_MS = 60_000
-
-/**
- * The sandbox behind one handle on CubeSandbox.
- *
- * @param {string} handle - the platform's sandbox id.
- * @returns {Promise<object>} the sandbox, in this module's vocabulary.
- */
-async function cubeSandbox(handle) {
+function envdUrl(handle) {
+  if (RUNTIME === 'docker') return `http://${handle}:${String(ENVD_PORT)}`
   if (PROXY_NODE_IP === undefined) {
     throw new Error('envd: CUBE_PROXY_NODE_IP is required to reach a sandbox')
   }
-  const sandbox = await CubeSandbox.connect(handle, {
-    config: {
-      apiUrl: process.env.CUBE_API_URL ?? 'http://127.0.0.1:3000',
-      apiKey: process.env.CUBE_API_KEY ?? 'e2b_000000',
-      // The proxy is reached by address and the sandbox by name, which is what
-      // the client's dispatcher is for: it dials the address and still sends
-      // the name, where a hand-built request cannot — `Host` is a header
-      // `fetch` refuses to set.
-      proxyNodeIp: PROXY_NODE_IP,
-      proxyPort: PROXY_PORT,
-    },
-  })
-
-  return {
-    files: {
-      list: async (path) => await sandbox.files.list(path),
-      stat: async (path) => await sandbox.files.stat(path),
-      read: async (path) => await sandbox.files.read(path, { format: 'bytes', user: ENVD_USER }),
-      write: async (path, content) => await sandbox.files.write(path, content, { user: ENVD_USER }),
-      rename: async (from, to) => await sandbox.files.rename(from, to),
-      remove: async (path) => { await sandbox.files.remove(path) },
-      makeDir: async (path) => await sandbox.files.makeDir(path),
-    },
-    run: async (command, envs) => {
-      const result = await sandbox.commands.run(command, { user: ENVD_USER, envs, timeoutMs: 0 })
-      return { exitCode: result.exitCode ?? 0, stdout: result.stdout ?? '', stderr: result.stderr ?? '' }
-    },
-    pty: {
-      open: async ({ cols, rows, cwd, envs }, sink) => {
-        const terminal = await sandbox.pty.create({ rows, cols }, {
-          user: ENVD_USER,
-          cwd,
-          envs,
-          // No deadline. A terminal ends when the person closes it or the
-          // shell exits, and a timeout here would close a window somebody
-          // left open.
-          timeoutMs: 0,
-        })
-        // Output arrives through `wait`, which settles on exit. Both halves of
-        // that are this one call.
-        terminal.wait((chunk) => { sink.onData(Buffer.from(chunk.data ?? chunk)) }).then(
-          (code) => { sink.onEnd(Number(code ?? 0)) },
-          (error) => { sink.onError(error instanceof Error ? error : new Error(String(error))) },
-        )
-        return { pid: Number(terminal.pid), close: () => { void terminal.kill().catch(() => {}) } }
-      },
-      write: async (pid, bytes) => { await sandbox.pty.sendStdin(pid, new Uint8Array(bytes)) },
-      resize: async (pid, cols, rows) => { await sandbox.pty.resize(pid, { cols, rows }) },
-    },
-  }
+  return `http://${PROXY_NODE_IP}:${String(PROXY_PORT)}/sandbox/${handle}/${String(ENVD_PORT)}`
 }
 
 /**
- * The sandbox behind one handle in the docker simulation.
+ * A client for one sandbox.
  *
- * A container name and a port, which is an envd nobody has to be asked about
- * — so the client is told the URL and never looks for an API, because under
- * this runtime there is not one.
+ * Not cached. A client holds no connection of its own — it is a base URL and a
+ * few generated stubs — and caching it would mean deciding when a sandbox has
+ * gone, which is a question this module is in no position to answer and the
+ * manager already answers elsewhere.
  *
- * @param {string} handle - the container name.
- * @returns {Promise<object>} the sandbox, in this module's vocabulary.
+ * `debug` keeps the client from asking an API where the sandbox is: this
+ * deployment already knows, and under `docker` there is no such API at all.
+ *
+ * @param {string} handle - the runtime's handle.
+ * @returns {Promise<import('e2b').Sandbox>} the client.
  */
-async function dockerSandbox(handle) {
-  const sandbox = await E2bSandbox.connect(handle, {
+async function client(handle) {
+  return await Sandbox.connect(handle, {
     apiKey: process.env.CUBE_API_KEY ?? 'e2b_000000',
-    sandboxUrl: `http://${handle}:${String(ENVD_PORT)}`,
+    sandboxUrl: envdUrl(handle),
     debug: true,
   })
-
-  return {
-    files: {
-      list: async (path) => await sandbox.files.list(path, { user: ENVD_USER }),
-      stat: async (path) => await sandbox.files.getInfo(path, { user: ENVD_USER }),
-      read: async (path) => await sandbox.files.read(path, { user: ENVD_USER, format: 'bytes' }),
-      write: async (path, content) => await sandbox.files.write(path, content, { user: ENVD_USER }),
-      rename: async (from, to) => await sandbox.files.rename(from, to, { user: ENVD_USER }),
-      remove: async (path) => { await sandbox.files.remove(path, { user: ENVD_USER }) },
-      makeDir: async (path) => {
-        await sandbox.files.makeDir(path, { user: ENVD_USER })
-        return await sandbox.files.getInfo(path, { user: ENVD_USER })
-      },
-    },
-    run: async (command, envs) => {
-      const result = await sandbox.commands.run(command, { user: ENVD_USER, envs, timeoutMs: 0 })
-      return { exitCode: result.exitCode ?? 0, stdout: result.stdout ?? '', stderr: result.stderr ?? '' }
-    },
-    pty: {
-      open: async ({ cols, rows, cwd, envs }, sink) => {
-        const terminal = await sandbox.pty.create({
-          cols, rows, cwd, envs, user: ENVD_USER, timeoutMs: 0,
-          onData: (bytes) => { sink.onData(Buffer.from(bytes)) },
-        })
-        terminal.wait().then(
-          (result) => { sink.onEnd(Number(result?.exitCode ?? 0)) },
-          (error) => { sink.onError(error instanceof Error ? error : new Error(String(error))) },
-        )
-        return { pid: Number(terminal.pid), close: () => { void sandbox.pty.kill(terminal.pid).catch(() => {}) } }
-      },
-      write: async (pid, bytes) => { await sandbox.pty.sendInput(pid, new Uint8Array(bytes)) },
-      resize: async (pid, cols, rows) => { await sandbox.pty.resize(pid, { cols, rows }) },
-    },
-  }
 }
 
 /**
@@ -274,10 +147,6 @@ async function call(handle, what, body) {
   try {
     return await body(await client(handle))
   } catch (error) {
-    // Whatever went wrong, the next call should not inherit it. A sandbox that
-    // was killed, a proxy that moved, a token that expired — all of them look
-    // like a client that has to be built again.
-    live.delete(handle)
     throw restate(error, what, handle)
   }
 }
@@ -298,7 +167,8 @@ const BACKEND_LOG_PATH = '/var/log/dsh.log'
  */
 async function runCommand(handle, command, envs) {
   return await call(handle, `running a command`, async (sandbox) => {
-    return await sandbox.run(command, envs)
+    const result = await sandbox.commands.run(command, { user: ENVD_USER, envs, timeoutMs: 0 })
+    return { exitCode: result.exitCode ?? 0, stdout: result.stdout ?? '', stderr: result.stderr ?? '' }
   })
 }
 
@@ -381,9 +251,28 @@ export async function newestFile(handle, root, pattern) {
  */
 export async function startPty(handle, options, sink) {
   const sandbox = await client(handle)
-  const terminal = await sandbox.pty.open(options, sink)
-  sink.onStart(terminal.pid)
-  return { close: terminal.close }
+  const terminal = await sandbox.pty.create({
+    cols: options.cols,
+    rows: options.rows,
+    cwd: options.cwd,
+    envs: options.envs,
+    user: ENVD_USER,
+    // No deadline. A terminal ends when the person closes it or the shell
+    // exits, and a timeout here would close a window somebody left open.
+    timeoutMs: 0,
+    onData: (bytes) => { sink.onData(Buffer.from(bytes)) },
+  })
+
+  sink.onStart(Number(terminal.pid))
+  // `wait` settles when the shell exits. Its rejection is how a terminal that
+  // died reports itself, and it is not an error in this call — which has
+  // already resolved.
+  terminal.wait().then(
+    (result) => { sink.onEnd(Number(result?.exitCode ?? 0)) },
+    (error) => { sink.onError(error instanceof Error ? error : new Error(String(error))) },
+  )
+
+  return { close: () => { void sandbox.pty.kill(terminal.pid).catch(() => {}) } }
 }
 
 /**
@@ -396,7 +285,7 @@ export async function startPty(handle, options, sink) {
  */
 export async function sendPtyInput(handle, pid, bytes) {
   await call(handle, `typing into ${String(pid)}`, async (sandbox) => {
-    await sandbox.pty.write(pid, bytes)
+    await sandbox.pty.sendInput(pid, new Uint8Array(bytes))
   })
 }
 
@@ -414,7 +303,7 @@ export async function sendPtyInput(handle, pid, bytes) {
  */
 export async function resizePty(handle, pid, cols, rows) {
   await call(handle, `resizing ${String(pid)}`, async (sandbox) => {
-    await sandbox.pty.resize(pid, cols, rows)
+    await sandbox.pty.resize(pid, { cols, rows })
   })
 }
 
@@ -429,7 +318,7 @@ export async function resizePty(handle, pid, cols, rows) {
  * @returns {Promise<Array<object>>} the entries.
  */
 export async function listDir(handle, path) {
-  return await call(handle, `listing ${path}`, async (sandbox) => await sandbox.files.list(path))
+  return await call(handle, `listing ${path}`, async (sandbox) => await sandbox.files.list(path, { user: ENVD_USER }))
 }
 
 /**
@@ -440,7 +329,7 @@ export async function listDir(handle, path) {
  * @returns {Promise<object>} the entry.
  */
 export async function stat(handle, path) {
-  return await call(handle, `stat ${path}`, async (sandbox) => await sandbox.files.stat(path))
+  return await call(handle, `stat ${path}`, async (sandbox) => await sandbox.files.getInfo(path, { user: ENVD_USER }))
 }
 
 /**
@@ -459,7 +348,7 @@ export async function stat(handle, path) {
 export async function readFile(handle, path) {
   try {
     const sandbox = await client(handle)
-    const bytes = await sandbox.files.read(path)
+    const bytes = await sandbox.files.read(path, { user: ENVD_USER, format: 'bytes' })
     return { status: 200, body: Buffer.from(bytes) }
   } catch (error) {
     const failure = restate(error, `reading ${path}`, handle)
@@ -479,7 +368,7 @@ export async function readFile(handle, path) {
  * @returns {Promise<object>} the entry as it now is.
  */
 export async function move(handle, source, destination) {
-  return await call(handle, `moving ${source}`, async (sandbox) => await sandbox.files.rename(source, destination))
+  return await call(handle, `moving ${source}`, async (sandbox) => await sandbox.files.rename(source, destination, { user: ENVD_USER }))
 }
 
 /**
@@ -494,7 +383,7 @@ export async function move(handle, source, destination) {
  * @returns {Promise<void>} resolves once it is gone.
  */
 export async function remove(handle, path) {
-  await call(handle, `removing ${path}`, async (sandbox) => { await sandbox.files.remove(path) })
+  await call(handle, `removing ${path}`, async (sandbox) => { await sandbox.files.remove(path, { user: ENVD_USER }) })
 }
 
 /**
@@ -505,7 +394,10 @@ export async function remove(handle, path) {
  * @returns {Promise<object>} the entry.
  */
 export async function makeDir(handle, path) {
-  return await call(handle, `making ${path}`, async (sandbox) => await sandbox.files.makeDir(path))
+  return await call(handle, `making ${path}`, async (sandbox) => {
+    await sandbox.files.makeDir(path, { user: ENVD_USER })
+    return await sandbox.files.getInfo(path, { user: ENVD_USER })
+  })
 }
 
 /**
@@ -517,5 +409,5 @@ export async function makeDir(handle, path) {
  * @returns {Promise<object>} the entry as written.
  */
 export async function writeFile(handle, path, content) {
-  return await call(handle, `writing ${path}`, async (sandbox) => await sandbox.files.write(path, content))
+  return await call(handle, `writing ${path}`, async (sandbox) => await sandbox.files.write(path, content, { user: ENVD_USER }))
 }
