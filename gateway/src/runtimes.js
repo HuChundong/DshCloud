@@ -51,6 +51,7 @@ const cube = {
       { [OWNER_KEY]: owner.username },
       protectedRun.network,
       await volumeMountsFor(request, owner.accountId),
+      owner.machine,
     )
     try {
       await startBackend(sandboxId, protectedRun.env)

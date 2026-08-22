@@ -63,12 +63,17 @@ export async function request(method, path, body) {
  * @param {Record<string, string>} metadata - labels kept on the sandbox, so an operator can tell whose it is.
  * @param {{allowOut: string[], rules: object[]}} network - what this sandbox may reach and what is rewritten on the way out; see `egress.js`.
  * @param {Array<{name: string, path: string}>} volumeMounts - volumes to attach and where; see `volumes.js`.
+ * @param {string} [template] - the template to build from, when this tenant is entitled to one other than the deployment's; see `entitlements.js`.
  * @returns {Promise<string>} the CubeSandbox sandbox id.
  * @throws {Error} when the API refuses the creation.
  */
-export async function createSandbox(metadata, network, volumeMounts) {
+export async function createSandbox(metadata, network, volumeMounts, template) {
   const { status, body } = await request('POST', '/sandboxes', {
-    templateID: TEMPLATE,
+    // The deployment's own unless the caller named another. A template carries
+    // its machine's size, so this is where a tier would get a bigger one —
+    // which is why it is an argument rather than a constant, even while every
+    // tier resolves to the same name.
+    templateID: template ?? TEMPLATE,
     metadata,
     network,
     volumeMounts,

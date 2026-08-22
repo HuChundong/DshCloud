@@ -31,6 +31,7 @@ import { fileURLToPath } from 'node:url'
 import { WebSocketServer } from 'ws'
 import { Accounts, hasProfile } from './accounts.js'
 import { authenticate, isSecureRequest } from './auth.js'
+import { entitlementsOf } from './entitlements.js'
 import { handleConsole } from './console.js'
 import { request as cubeRequest } from './cubesandbox.js'
 import { connect } from './db.js'
@@ -160,6 +161,17 @@ const verification = new Verification(db)
 const sandboxes = new SandboxManager({
   db,
   gatewayTunnelUrl: GATEWAY_TUNNEL_URL,
+  // What this tenant is allowed, resolved here because this is the one place
+  // that knows both an account and a sandbox. The manager stays ignorant of
+  // plans, the way it is already ignorant of credentials.
+  //
+  // This is the seam the deployment will be split along: today the answer
+  // comes from a table compiled into the process, and when a commerce plane
+  // exists it comes from there instead, with nothing else changing. An account
+  // that cannot be read resolves to the default tier rather than to nothing —
+  // a tenant whose row is briefly unreadable gets the deployment's own
+  // behaviour, not a sandbox with no entitlements at all.
+  entitlementsFor: async (username) => entitlementsOf(await accounts.read(username).catch(() => undefined)),
   // Model credentials belong to the deployment, not to the tenant, so they are
   // handed to the sandbox rather than to the browser. Resolved per creation:
   // an administrator who rotates the key in the console has it reach the next

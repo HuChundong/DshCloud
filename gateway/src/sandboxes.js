@@ -88,6 +88,7 @@ export class SandboxManager {
    * @param {() => Promise<Record<string, string>>} options.env - extra environment for a sandbox about to start (model credentials and endpoint), resolved per creation so a credential changed in the console reaches the next sandbox.
    * @param {(username: string) => Promise<Record<string, string>>} options.secrets - the tenant's own environment, applied beneath everything the deployment sets.
    * @param {(sandboxId: string) => number | undefined} options.lastActiveAt - when traffic last crossed that sandbox's tunnel, for the idle sweep to weigh against the last request.
+   * @param {(username: string) => Promise<object>} [options.entitlementsFor] - what that tenant is allowed, resolved when a sandbox is started or adopted. Absent, every sandbox takes the deployment's own defaults, which is what a composition with no commerce plane does.
    */
   constructor(options) {
     this.options = options
@@ -109,7 +110,7 @@ export class SandboxManager {
    * Put one row into the cache.
    * @param {object} row - a `sandboxes` row.
    */
-  #remember(row) {
+  #remember(row, entitlements = {}) {
     this.byUser.set(row.username, {
       sandboxId: row.sandbox_id,
       token: row.token,
@@ -117,6 +118,12 @@ export class SandboxManager {
       accountId: row.account_id,
       lastUsedAt: new Date(row.last_used_at).getTime(),
       flushedAt: Date.now(),
+      // Resolved once and carried, rather than looked up on every sweep. That
+      // is a read per sandbox per minute saved, and it is also the shape the
+      // split needs: when entitlements arrive from somewhere else, the last
+      // ones seen are what a running sandbox keeps obeying while that
+      // somewhere else is unreachable.
+      entitlements,
     })
     this.tokenBySandbox.set(row.sandbox_id, row.token)
   }
@@ -210,7 +217,13 @@ export class SandboxManager {
     // `SANDBOX_TOKEN` is another sandbox's session, `GATEWAY_TUNNEL_URL` is
     // somewhere else to dial, `DEEPSEEK_BASE_URL` is somewhere else to send the
     // deployment's key.
-    const handle = await runtime.create({ username, accountId }, {
+    // Before the machine, because it decides which machine. Resolved once per
+    // creation for the same reason the model credential is: a tier changed in
+    // the console reaches the next sandbox started rather than the next
+    // restart.
+    const entitlements = await this.options.entitlementsFor?.(username) ?? {}
+
+    const handle = await runtime.create({ username, accountId, machine: entitlements.machine }, {
       ...await this.options.secrets(username),
       SANDBOX_ID: sandboxId,
       SANDBOX_TOKEN: token,
@@ -238,12 +251,12 @@ export class SandboxManager {
         throw new Error(`gateway: lost the race for ${username}'s sandbox and found no winner`)
       }
       console.log(`gateway: discarded a second sandbox for ${username}; another gateway had one`)
-      this.#remember(existing.rows[0])
+      this.#remember(existing.rows[0], entitlements)
       const won = this.byUser.get(username)
       return { sandboxId: won.sandboxId, token: won.token, handle: won.handle }
     }
 
-    this.#remember(rows[0])
+    this.#remember(rows[0], entitlements)
     console.log(`gateway: started sandbox ${sandboxId} for ${username}`)
     return { sandboxId, token, handle }
   }
@@ -377,7 +390,10 @@ export class SandboxManager {
       // A sandbox with no tunnel reports nothing and protects nothing, so it is
       // judged on traffic alone — which is what one that never dialled in is.
       if (presence?.busy === true) continue
-      const ttl = presence?.attached === true ? IDLE_TTL_MS : DEPARTED_TTL_MS
+      // The tenant's own, falling back to the deployment's. `undefined` here
+      // means nobody decided, which is not the same as zero.
+      const attachedTtl = record.entitlements?.idleTtlMs ?? IDLE_TTL_MS
+      const ttl = presence?.attached === true ? attachedTtl : DEPARTED_TTL_MS
       const active = this.options.lastActiveAt(record.sandboxId) ?? 0
       if (Math.max(record.lastUsedAt, active) > now - ttl) continue
       await this.release(username).catch((error) => {
@@ -421,7 +437,9 @@ export class SandboxManager {
     let lost = 0
     for (const row of rows) {
       if (live.has(row.handle)) {
-        this.#remember(row)
+        // Re-resolved rather than restored: a restart is the one moment this
+        // process can pick up a tier that changed while it was down.
+        this.#remember(row, await this.options.entitlementsFor?.(row.username) ?? {})
         kept += 1
         continue
       }
