@@ -88,14 +88,22 @@ export async function signIn(gateway, email) {
     .match(/name="agree" value="([^"]*)"/)?.[1]
   if (agree === undefined) throw new Error('the sign-in form no longer asks for consent')
 
+  // The invite rides on BOTH posts, not only the one that spends it. A
+  // deployment with registration closed opens no challenge for an address that
+  // may not receive one — the form answers with the same neutral notice it
+  // shows everyone, and the suite then reads a code that was never minted and
+  // fails with "no sign-in code is pending". Which is what the acceptance run
+  // did against the first deployment that closed its door.
+  const invite = await mintInvite()
+
   // A cooldown answer is not a failure here: it means a code is already
   // outstanding for this address, which is the code the next step reads.
-  await fetch(`${gateway}/login`, form({ email, agree }))
+  await fetch(`${gateway}/login`, form({ email, invite, agree }))
 
   const response = await fetch(`${gateway}/login`, form({
     email,
     code: await pendingCode(email),
-    invite: await mintInvite(),
+    invite,
     agree,
   }))
   const setCookie = response.headers.getSetCookie?.() ?? []

@@ -22,7 +22,7 @@
  * @module model-accounts
  */
 
-import { randomBytes, randomUUID } from 'node:crypto'
+import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import process from 'node:process'
 
 /**
@@ -90,19 +90,28 @@ async function call(path, init = {}) {
 }
 
 /**
- * The name a tenant's model account carries on the gateway.
+ * The name a tenant's model account carries on the gateway, and the label
+ * beside it.
  *
- * Derived from the address rather than random, so an operator looking at the
- * gateway's user list can tell whose account is whose — that list is the place
- * a spend is investigated from. Sanitised because the field is a username on a
- * system with its own rules, and truncated because it has a length limit.
+ * Both are bounded by what that system accepts, and the bounds are tighter than
+ * an address: a username is at most 20 characters and a display name the same.
+ * An address does not fit — `hq-somebody-example-com` is 23 before the domain
+ * is interesting — so the name is a digest and the label is what a person would
+ * recognise, truncated.
+ *
+ * Derived rather than random, so the same tenant asked for twice is the same
+ * account, and so this deployment's own table is not the only thing that can
+ * connect a row on that gateway to a tenant here.
  *
  * @param {string} email - the tenant's address.
- * @returns {string} the username to register.
+ * @returns {{username: string, displayName: string}} what to register with.
  */
-function usernameFor(email) {
-  const stem = email.toLowerCase().replaceAll(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40)
-  return `hq-${stem}`
+function identityFor(email) {
+  const digest = createHash('sha256').update(email.toLowerCase()).digest('hex')
+  // 16 hex characters of a digest, which is 64 bits: the gateway's list is a
+  // handful of rows per deployment, and a collision there would hand one
+  // tenant another's allowance.
+  return { username: `hq${digest.slice(0, 16)}`, displayName: email.slice(0, 20) }
 }
 
 /**
@@ -153,8 +162,11 @@ export class ModelAccounts {
    * @returns {Promise<{apiKey: string, gatewayUserId: number}>} what was minted.
    */
   async provision(email) {
-    const username = usernameFor(email)
-    const password = randomBytes(18).toString('base64url')
+    const { username, displayName } = identityFor(email)
+    // 16 characters, because the field takes between 8 and 20 and a generator
+    // that ignored the ceiling produced a password the gateway refused with a
+    // validation error naming three fields at once.
+    const password = randomBytes(12).toString('base64url').slice(0, 16)
 
     // The allowance is a property of registering, not something done to an
     // account afterwards. `PUT /api/user/` looks like it would carry it and
@@ -165,7 +177,7 @@ export class ModelAccounts {
     // and every account minted here arrives funded.
     await this.ensureDefaults()
 
-    await call('/api/user/', { method: 'POST', body: { username, password, display_name: email } })
+    await call('/api/user/', { method: 'POST', body: { username, password, display_name: displayName } })
 
     // Found by search rather than returned by the creation, which answers with
     // no body: the gateway's own list is the only place the id exists.
