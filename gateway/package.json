@@ -8,6 +8,7 @@
   "dependencies": {
     "dsh-icons": "file:../packages/dsh-icons",
     "dsh-tunnel-protocol": "file:../packages/tunnel-protocol",
+    "e2b": "^2.45.0",
     "jose": "^6.1.0",
     "pg": "^8.16.0",
     "ws": "^8.21.0"

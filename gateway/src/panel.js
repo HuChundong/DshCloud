@@ -96,13 +96,20 @@ function json(res, status, payload) {
  * @returns {{name: string, path: string, directory: boolean, size: number, modified: string|undefined, link: boolean}} the entry as the panel sees it.
  */
 function entryOf(entry) {
+  // Two spellings, because two things produce these. The client normalises
+  // envd's `FILE_TYPE_DIRECTORY` to `dir`, and the raw enum is what arrives
+  // from anything speaking to envd directly. Reading only the raw one is what
+  // made every folder in the tree draw as a file the moment the client
+  // changed — a whole-tree regression from one string comparison, and one
+  // nothing failed on: entries kept arriving, they were just all the wrong
+  // kind.
   const type = entry.type ?? entry.fileType
   return {
     name: entry.name ?? '',
     path: entry.path ?? '',
-    directory: type === 'FILE_TYPE_DIRECTORY',
+    directory: type === 'dir' || type === 'FILE_TYPE_DIRECTORY',
     size: Number(entry.size ?? 0),
-    modified: entry.modifiedTime ?? entry.modified_time,
+    modified: entry.modifiedTime ?? entry.modified_time ?? entry.modifiedAt,
     // Shown, not judged. A link is a thing the tree draws differently; where
     // it points is the tenant's business, and following it is what they meant.
     link: (entry.symlinkTarget ?? entry.symlink_target ?? '') !== '',

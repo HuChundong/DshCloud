@@ -1,41 +1,157 @@
 /**
- * envd's process API — how the gateway starts a tenant's backend inside their
- * sandbox.
+ * Reaching into one tenant's sandbox: files, processes, terminals.
  *
- * This is CubeSandbox's data plane, and it is a separate address from the
- * management API in `cubesandbox.js`: management calls go to CubeAPI, while
- * everything addressed *into* a sandbox goes through CubeProxy, which routes on
- * a virtual hostname of the form `<port>-<sandboxID>.<domain>`. That name is not
- * in DNS for a local deployment, so the connection is dialled straight at the
- * CubeProxy node with the virtual name kept in the `Host` header — the same
- * thing `curl --resolve` does, and what the CubeSandbox SDKs do with a custom
- * dispatcher.
+ * Everything here goes through envd, the daemon every sandbox platform in this
+ * family embeds, and it is spoken by the official E2B client rather than by
+ * this file. That is the whole point of the module now: it used to carry a
+ * hand-written implementation of envd's Connect protocol — worked out by
+ * experiment, including which calls frame themselves in envelopes and which
+ * are plain JSON — and every one of those details was ours to keep right
+ * against a daemon somebody else versions.
  *
- * Starting the backend from out here, rather than from the image's CMD, is
- * forced by what a template is: a snapshot of the image *running*. A CMD would
- * be captured in that snapshot — started before any tenant existed, and restored
- * identically into every sandbox — so it could never carry the identity that
- * makes a sandbox one tenant's. Starting it per sandbox is also what a later
- * restore-from-pause needs, since the backend can be started again against a
- * sandbox that already exists.
+ * What is left is the part nobody else can know: WHERE this deployment's
+ * sandboxes are, and what its callers expect back.
  *
- * Two services are used. `process.Process` starts a tenant's backend, and now
- * also resolves one path on their behalf; `filesystem.Filesystem` answers what
- * the right-hand panel asks about their workspace, alongside envd's own HTTP
- * reader for a file's bytes.
+ * ## Where a sandbox is
  *
- * Everything the panel calls is bounded by `gateway/src/panel-path.js` before
- * it arrives here. Nothing in this file judges a path — envd runs as root and
- * will read whatever it is given, so a caller that skipped the fence would get
- * exactly what it asked for.
+ * A sandbox has no address this host can route to, so the connection goes to
+ * the proxy, which routes by PATH: `/sandbox/<id>/<port>/…`, prefix stripped
+ * before forwarding. That is one of two routings the proxy offers, and it is
+ * deliberately not the other one.
+ *
+ * The other is a virtual host — `<port>-<id>.<domain>` in a `Host` header —
+ * which is what this file used to do, and which is exactly what a standard
+ * client cannot do: `Host` is a forbidden header in fetch, silently dropped,
+ * so the proxy answers for itself instead of for the sandbox. Hand-written
+ * code could set it because it used Node's own http client. Choosing the path
+ * routing is what lets the client be somebody else's.
+ *
+ * Under `docker` there is no proxy and no routing to do: the container name is
+ * an address on the network the gateway shares with it.
+ *
+ * ## What callers expect
+ *
+ * The signatures here are unchanged, and so is the way failure is reported:
+ * `error.code === 'not_found'` is how a caller tells "there is no such file"
+ * from "the sandbox is not answering", and `readFile` answers with a status
+ * rather than throwing, because the panel turns it into an HTTP response. The
+ * client's own errors are translated back into that vocabulary rather than
+ * leaking outward — a change of client is not a change of contract.
+ *
+ * @module envd
  */
 
-import { randomUUID } from 'node:crypto'
 import http from 'node:http'
 import process from 'node:process'
 
+import { Sandbox } from 'e2b'
+
 /** The port envd listens on inside every sandbox. */
 const ENVD_PORT = 49983
+
+/**
+ * The proxy connections into a sandbox are dialled at.
+ *
+ * Required rather than defaulted under `cube`: a gateway pointed at the wrong
+ * proxy fails on every sandbox it starts, and the failure looks like a sandbox
+ * that never dialled in.
+ */
+const PROXY_NODE_IP = process.env.CUBE_PROXY_NODE_IP
+const PROXY_PORT = Number(process.env.CUBE_PROXY_PORT_HTTP ?? 30080)
+
+/**
+ * Which runtime provides the sandboxes, read the same way `runtimes.js` reads
+ * it. Read here rather than imported to keep the two files from depending on
+ * each other — `runtimes.js` already imports this one.
+ */
+const RUNTIME = process.env.SANDBOX_RUNTIME === 'cube' ? 'cube' : 'docker'
+
+/** The sandbox user commands run as. The backend owns the whole machine. */
+const ENVD_USER = 'root'
+
+/**
+ * The base URL one sandbox's envd is reached at.
+ *
+ * The argument is the RUNTIME's own handle — what `runtime.create` returned —
+ * and never the gateway's `sandboxId`. The two are not the same thing and only
+ * one of them is an address:
+ *
+ *   docker   handle = `hamsterhq-sandbox-<first 12 of SANDBOX_ID>`, the container name
+ *   cube     handle = the platform's own sandbox id, which the proxy routes by
+ *
+ * @param {string} handle - the runtime's handle for the sandbox to reach.
+ * @returns {string} the base URL, with no trailing slash.
+ */
+function envdUrl(handle) {
+  if (RUNTIME === 'docker') return `http://${handle}:${String(ENVD_PORT)}`
+  if (PROXY_NODE_IP === undefined) {
+    throw new Error('envd: CUBE_PROXY_NODE_IP is required to reach a sandbox')
+  }
+  return `http://${PROXY_NODE_IP}:${String(PROXY_PORT)}/sandbox/${handle}/${String(ENVD_PORT)}`
+}
+
+/**
+ * A client for one sandbox.
+ *
+ * Not cached. A client holds no connection of its own — it is a base URL and a
+ * few generated stubs — and caching it would mean deciding when a sandbox has
+ * gone, which is a question this module is in no position to answer and the
+ * manager already answers elsewhere.
+ *
+ * `debug` keeps the client from asking an API where the sandbox is: this
+ * deployment already knows, and under `docker` there is no such API at all.
+ *
+ * @param {string} handle - the runtime's handle.
+ * @returns {Promise<import('e2b').Sandbox>} the client.
+ */
+async function client(handle) {
+  return await Sandbox.connect(handle, {
+    apiKey: process.env.CUBE_API_KEY ?? 'e2b_000000',
+    sandboxUrl: envdUrl(handle),
+    debug: true,
+  })
+}
+
+/**
+ * Restate one of the client's failures in the vocabulary callers already
+ * speak.
+ *
+ * `not_found` is the only code anything matches on, and it is the difference
+ * between a 404 and a 502 on the panel's routes — between "you asked for a
+ * file that is not there" and "this deployment could not reach your sandbox".
+ * The client raises its own error types; what they have in common is a message
+ * and, on the ones that matter, a name that says which kind it is.
+ *
+ * @param {unknown} error - whatever the client threw.
+ * @param {string} what - the operation, for the message.
+ * @param {string} handle - the sandbox, for the message.
+ * @returns {Error} the error to throw onward.
+ */
+function restate(error, what, handle) {
+  const name = String(error?.constructor?.name ?? '')
+  const message = String(error?.message ?? error)
+  const failure = new Error(`envd: ${what} in ${handle} failed: ${message}`)
+  if (name === 'NotFoundError' || /not found|no such file|does not exist/i.test(message)) {
+    failure.code = 'not_found'
+  }
+  return failure
+}
+
+/**
+ * Run one call against a sandbox, restating whatever it throws.
+ * @param {string} handle - the sandbox.
+ * @param {string} what - the operation, for the message.
+ * @param {(sandbox: import('e2b').Sandbox) => Promise<any>} body - the call.
+ * @returns {Promise<any>} whatever it answered.
+ */
+async function call(handle, what, body) {
+  try {
+    return await body(await client(handle))
+  } catch (error) {
+    throw restate(error, what, handle)
+  }
+}
+
 
 /**
  * The CubeProxy node connections into a sandbox are dialled at, and the port its
@@ -43,8 +159,6 @@ const ENVD_PORT = 49983
  * at the wrong proxy fails on every sandbox it starts, and the failure looks
  * like a sandbox that never dials in.
  */
-const PROXY_NODE_IP = process.env.CUBE_PROXY_NODE_IP
-const PROXY_PORT = Number(process.env.CUBE_PROXY_PORT_HTTP ?? 30080)
 
 /** The suffix CubeProxy routes sandbox hostnames under. */
 const SANDBOX_DOMAIN = process.env.CUBE_SANDBOX_DOMAIN ?? 'cube.app'
@@ -54,7 +168,6 @@ const SANDBOX_DOMAIN = process.env.CUBE_SANDBOX_DOMAIN ?? 'cube.app'
  * it. Read here rather than imported to keep the two files from depending on
  * each other — `runtimes.js` already imports this one.
  */
-const RUNTIME = process.env.SANDBOX_RUNTIME === 'cube' ? 'cube' : 'docker'
 
 /**
  * Where to dial to reach one sandbox's envd, and what to call it on arrival.
@@ -97,7 +210,6 @@ function endpointOf(handle) {
 }
 
 /** The sandbox user commands run as. The backend owns the whole machine. */
-const ENVD_USER = 'root'
 
 /** Connect protocol framing: `[flags:1][length:4 big-endian][payload]`. */
 const ENVELOPE_HEADER_BYTES = 5
@@ -260,8 +372,6 @@ export async function startBackend(handle, env) {
   }
 }
 
-/** envd's Connect services, as they are addressed on the wire. */
-const FILESYSTEM = '/filesystem.Filesystem'
 const PROCESS = '/process.Process'
 
 /** The headers every Connect unary call to envd carries. */
@@ -318,93 +428,11 @@ async function unary(handle, method, payload) {
   }
 }
 
-/**
- * What one directory holds.
- *
- * Depth 1: the panel's tree loads a level at a time as it is opened, so asking
- * for more would read a tenant's whole workspace to draw one row of it.
- *
- * @param {string} handle - the sandbox to read in.
- * @param {string} path - an absolute path, already through the fence.
- * @returns {Promise<Array<object>>} the entries, in envd's own order.
- */
-export async function listDir(handle, path) {
-  const message = await unary(handle, `${FILESYSTEM}/ListDir`, { path, depth: 1, username: ENVD_USER })
-  return message.entries ?? []
-}
 
-/**
- * What one path is.
- *
- * @param {string} handle - the sandbox to read in.
- * @param {string} path - an absolute path, already through the fence.
- * @returns {Promise<object>} the entry.
- */
-export async function stat(handle, path) {
-  const message = await unary(handle, `${FILESYSTEM}/Stat`, { path, username: ENVD_USER })
-  return message.entry ?? message
-}
 
-/**
- * One file's bytes.
- *
- * envd's own HTTP reader rather than a Connect method, because there is no
- * Connect method for it — and because a file arrives as bytes rather than as
- * base64 inside an envelope.
- *
- * @param {string} handle - the sandbox to read in.
- * @param {string} path - an absolute path, already through the fence.
- * @returns {Promise<{status: number, body: Buffer}>} the status envd answered with, and the bytes.
- */
-export async function readFile(handle, path) {
-  const query = new URLSearchParams({ path, username: ENVD_USER })
-  return await envdRequest(handle, `/files?${query.toString()}`, undefined, {
-    Authorization: CONNECT_HEADERS.Authorization,
-  }, 'GET')
-}
 
-/**
- * Move or rename one path.
- *
- * envd calls both the same thing, which is what the filesystem calls them
- * both: a rename is a move within one directory.
- *
- * @param {string} handle - the sandbox to act in.
- * @param {string} source - an absolute path, already through the scope check.
- * @param {string} destination - an absolute path, likewise.
- * @returns {Promise<object>} the entry as it now is.
- */
-export async function move(handle, source, destination) {
-  const message = await unary(handle, `${FILESYSTEM}/Move`, { source, destination, username: ENVD_USER })
-  return message.entry ?? message
-}
 
-/**
- * Remove one path.
- *
- * envd removes a directory with its contents. That is the behaviour a file
- * manager needs and the behaviour a person expects from a delete, so the
- * warning belongs in the interface asking for it, not in a second call here.
- *
- * @param {string} handle - the sandbox to act in.
- * @param {string} path - an absolute path, already through the scope check.
- * @returns {Promise<void>} resolves once it is gone.
- */
-export async function remove(handle, path) {
-  await unary(handle, `${FILESYSTEM}/Remove`, { path, username: ENVD_USER })
-}
 
-/**
- * Create one directory.
- *
- * @param {string} handle - the sandbox to act in.
- * @param {string} path - an absolute path, already through the scope check.
- * @returns {Promise<object>} the entry.
- */
-export async function makeDir(handle, path) {
-  const message = await unary(handle, `${FILESYSTEM}/MakeDir`, { path, username: ENVD_USER })
-  return message.entry ?? message
-}
 
 /**
  * The most recently written file of one kind under a directory.
@@ -463,44 +491,6 @@ export async function newestFile(handle, root, pattern) {
   return best
 }
 
-/**
- * Write one file.
- *
- * envd's HTTP uploader rather than a Connect method, because the filesystem
- * service has no write: it can move, remove and make a directory, and that is
- * all. The uploader takes a multipart body, which is built by hand here for
- * the same reason the rest of this file is — the whole client is three
- * functions and a boundary string, against a dependency that would arrive with
- * its own.
- *
- * @param {string} handle - the sandbox to write in.
- * @param {string} path - an absolute path, already through the scope check.
- * @param {Buffer} content - the bytes to write.
- * @returns {Promise<void>} resolves once envd has taken it.
- * @throws {Error} when envd refuses.
- */
-export async function writeFile(handle, path, content) {
-  const boundary = `----dsh${randomUUID().replaceAll('-', '')}`
-  const name = path.slice(path.lastIndexOf('/') + 1)
-  const body = Buffer.concat([
-    Buffer.from(
-      `--${boundary}\r\n`
-      + `Content-Disposition: form-data; name="file"; filename="${name}"\r\n`
-      + 'Content-Type: application/octet-stream\r\n\r\n',
-      'utf8',
-    ),
-    content,
-    Buffer.from(`\r\n--${boundary}--\r\n`, 'utf8'),
-  ])
-  const query = new URLSearchParams({ path, username: ENVD_USER })
-  const { status, body: answer } = await envdRequest(handle, `/files?${query.toString()}`, body, {
-    'Content-Type': `multipart/form-data; boundary=${boundary}`,
-    Authorization: CONNECT_HEADERS.Authorization,
-  })
-  if (status >= 400) {
-    throw new Error(`envd: writing ${path} in ${handle} failed (${String(status)}): ${answer.toString('utf8').trim()}`)
-  }
-}
 
 /**
  * Read one Connect stream, frame by frame, as it arrives.
@@ -733,3 +723,108 @@ export async function metrics(handle) {
  */
 
 
+
+/**
+ * What is directly inside one directory.
+ *
+ * One level. The tree asks for a directory when it opens it, so anything
+ * deeper would read a tenant's whole workspace to draw one row of it.
+ *
+ * @param {string} handle - the sandbox to read in.
+ * @param {string} path - an absolute path, already through the fence.
+ * @returns {Promise<Array<object>>} the entries.
+ */
+export async function listDir(handle, path) {
+  return await call(handle, `listing ${path}`, async (sandbox) => await sandbox.files.list(path, { user: ENVD_USER }))
+}
+
+/**
+ * What one path is.
+ *
+ * @param {string} handle - the sandbox to read in.
+ * @param {string} path - an absolute path, already through the fence.
+ * @returns {Promise<object>} the entry.
+ */
+export async function stat(handle, path) {
+  return await call(handle, `stat ${path}`, async (sandbox) => await sandbox.files.getInfo(path, { user: ENVD_USER }))
+}
+
+/**
+ * One file's bytes.
+ *
+ * Answers with a status rather than throwing, because its caller is turning
+ * the answer into an HTTP response and the difference between "no such file"
+ * and "the sandbox is unreachable" is the difference between the two statuses
+ * it sends. Keeping that here means the panel's route did not have to learn a
+ * new client's error types.
+ *
+ * @param {string} handle - the sandbox to read in.
+ * @param {string} path - an absolute path, already through the fence.
+ * @returns {Promise<{status: number, body: Buffer}>} the status, and the bytes.
+ */
+export async function readFile(handle, path) {
+  try {
+    const sandbox = await client(handle)
+    const bytes = await sandbox.files.read(path, { user: ENVD_USER, format: 'bytes' })
+    return { status: 200, body: Buffer.from(bytes) }
+  } catch (error) {
+    const failure = restate(error, `reading ${path}`, handle)
+    return { status: failure.code === 'not_found' ? 404 : 502, body: Buffer.from(failure.message, 'utf8') }
+  }
+}
+
+/**
+ * Move or rename one path.
+ *
+ * The filesystem calls both the same thing: a rename is a move within one
+ * directory.
+ *
+ * @param {string} handle - the sandbox to act in.
+ * @param {string} source - an absolute path, already through the scope check.
+ * @param {string} destination - an absolute path, likewise.
+ * @returns {Promise<object>} the entry as it now is.
+ */
+export async function move(handle, source, destination) {
+  return await call(handle, `moving ${source}`, async (sandbox) => await sandbox.files.rename(source, destination, { user: ENVD_USER }))
+}
+
+/**
+ * Remove one path.
+ *
+ * A directory goes with its contents. That is what a file manager needs and
+ * what a person expects from a delete, so the warning belongs in the interface
+ * asking for it, not in a second call here.
+ *
+ * @param {string} handle - the sandbox to act in.
+ * @param {string} path - an absolute path, already through the scope check.
+ * @returns {Promise<void>} resolves once it is gone.
+ */
+export async function remove(handle, path) {
+  await call(handle, `removing ${path}`, async (sandbox) => { await sandbox.files.remove(path, { user: ENVD_USER }) })
+}
+
+/**
+ * Create one directory.
+ *
+ * @param {string} handle - the sandbox to act in.
+ * @param {string} path - an absolute path, already through the scope check.
+ * @returns {Promise<object>} the entry.
+ */
+export async function makeDir(handle, path) {
+  return await call(handle, `making ${path}`, async (sandbox) => {
+    await sandbox.files.makeDir(path, { user: ENVD_USER })
+    return await sandbox.files.getInfo(path, { user: ENVD_USER })
+  })
+}
+
+/**
+ * Write one file, creating the directories above it.
+ *
+ * @param {string} handle - the sandbox to act in.
+ * @param {string} path - an absolute path, already through the scope check.
+ * @param {Buffer|string} content - the bytes to write.
+ * @returns {Promise<object>} the entry as written.
+ */
+export async function writeFile(handle, path, content) {
+  return await call(handle, `writing ${path}`, async (sandbox) => await sandbox.files.write(path, content, { user: ENVD_USER }))
+}
