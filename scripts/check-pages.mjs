@@ -37,7 +37,8 @@ async function pages() {
   const { policyPage, POLICY_SLUGS } = await import('../gateway/src/policy-page.js')
   const { loginPage } = await import('../gateway/src/login-page.js')
   const { profilePage } = await import('../gateway/src/profile-page.js')
-  const { adminPage } = await import('../admin/admin-page.js')
+  const { consolePage } = await import('../admin/console-shell.js')
+  const { SECTIONS } = await import('../admin/sections/index.js')
 
   const rendered = []
   for (const slug of POLICY_SLUGS) {
@@ -64,72 +65,25 @@ async function pages() {
         avatarLimit: 64_000, nameLimit: 40, version: '1.2.3',
       }),
     },
-    {
-      name: 'admin (populated)',
-      group: 'admin',
-      html: adminPage({
-        accounts: [
-          { email: 'someone@example.com', name: 'Someone', createdAt: 0, lastSeenAt: 0, disabled: false, admin: false, sandbox: 'running' },
-          { email: 'off@example.com', name: 'Off', createdAt: 0, lastSeenAt: 0, disabled: true, admin: false, sandbox: 'idle' },
-        ],
-        invites: [
-          { code: 'ABCDE-FGHJK', createdAt: 0, redeemedAt: undefined, redeemedBy: undefined },
-          { code: 'KMNPQ-RSTUV', createdAt: 0, redeemedAt: 1, redeemedBy: 'someone@example.com' },
-        ],
-        credential: { baseUrl: 'https://api.example.com', apiKey: 'set', source: 'database', updatedAt: 0, updatedBy: 'root@example.com' },
-        access: { inviteRequired: true, sandboxLimit: 10, source: 'database', updatedAt: 0, updatedBy: 'root@example.com' },
-        security: { enabled: true, source: 'console', recoveryLeft: 7, updatedAt: 0, updatedBy: 'root@example.com', qr: undefined, secret: undefined, freshCodes: undefined },
-        viewer: 'root@example.com', notice: undefined, version: '1.2.3',
-      }),
-    },
-    {
-      name: 'admin (empty, and the other row states)',
-      group: 'admin',
-      html: adminPage({
-        accounts: [
-          { email: 'root@example.com', name: 'Root', createdAt: 0, lastSeenAt: 0, disabled: false, admin: true, sandbox: 'running' },
-        ],
-        invites: [],
-        credential: { baseUrl: '', apiKey: '', source: 'environment', updatedAt: undefined, updatedBy: undefined },
-        access: { inviteRequired: false, sandboxLimit: 0, source: 'environment', updatedAt: undefined, updatedBy: undefined },
-        security: { enabled: false, source: 'none', recoveryLeft: 0, updatedAt: undefined, updatedBy: undefined, qr: undefined, secret: undefined, freshCodes: undefined },
-        viewer: 'root@example.com', notice: 'code.wrong', version: '1.2.3',
-      }),
-    },
-    // The two states the console only reaches mid-enrolment. Rendered here
-    // because they are the states nobody looks at until they are enrolling,
-    // which is the worst moment to find out the page does not render.
-    {
-      name: 'admin (enrolling a second factor)',
-      group: 'admin',
-      html: adminPage({
-        accounts: [], invites: [],
-        credential: { baseUrl: '', apiKey: '', source: 'environment', updatedAt: undefined, updatedBy: undefined },
-        access: { inviteRequired: false, sandboxLimit: 0, source: 'environment', updatedAt: undefined, updatedBy: undefined },
-        security: {
-          enabled: false, source: 'none', recoveryLeft: 0, updatedAt: undefined, updatedBy: undefined,
-          qr: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"></svg>',
-          secret: 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ',
-          freshCodes: undefined,
-        },
-        viewer: 'root@example.com', notice: undefined, version: '1.2.3',
-      }),
-    },
-    {
-      name: 'admin (recovery codes, shown once)',
-      group: 'admin',
-      html: adminPage({
-        accounts: [], invites: [],
-        credential: { baseUrl: '', apiKey: '', source: 'environment', updatedAt: undefined, updatedBy: undefined },
-        access: { inviteRequired: false, sandboxLimit: 0, source: 'environment', updatedAt: undefined, updatedBy: undefined },
-        security: {
-          enabled: true, source: 'console', recoveryLeft: 10, updatedAt: 0, updatedBy: 'root@example.com',
-          qr: undefined, secret: undefined,
-          freshCodes: ['abcde-fghjk', 'mnpqr-stuvw', 'xyz23-45678'],
-        },
-        viewer: 'root@example.com', notice: 'tfa.on', version: '1.2.3',
-      }),
-    },
+    // Every section, in two states each: with rows and without. A section is
+    // a file now, so the way this check goes stale is a new file nobody added
+    // here — which is why it walks `SECTIONS` rather than naming them.
+    ...consoleStates(SECTIONS).map(({ name, section, state }) => {
+      const drawn = section.render(state)
+      return {
+        name: `console/${section.id} (${name})`,
+        group: `console/${section.id}`,
+        html: consolePage({
+          section,
+          sections: SECTIONS,
+          body: drawn.html,
+          table: drawn.table,
+          viewer: 'admin',
+          notice: undefined,
+          version: '1.2.3',
+        }),
+      }
+    }),
   )
   return rendered
 }
@@ -265,7 +219,7 @@ const BY_CODE = new Set(Object.keys(CONSOLE_NOTICES))
 for (const [group, { named, keys }] of reachable) {
   for (const key of keys) {
     if (key === 'doc.title' || key === 'theme.label') continue
-    if (group === 'admin' && BY_CODE.has(key)) continue
+    if (group.startsWith('console/') && BY_CODE.has(key)) continue
     if (!named.has(key)) problems.push(`${group}: ${key} is in the table and nothing names it`)
   }
 }
@@ -284,3 +238,87 @@ if (problems.length > 0) {
 }
 
 console.log("check-pages: every string on the gateway's pages carries both languages")
+
+/**
+ * Every state of every console section that is worth rendering.
+ *
+ * Two per section at least — populated and empty — plus the three the security
+ * card only reaches mid-enrolment, which is the worst moment to discover a
+ * page does not render.
+ *
+ * @param {Array<object>} SECTIONS - the console's sections, imported where the pages are built.
+ * @returns {Array<{name: string, section: object, state: object}>} the cases.
+ */
+function consoleStates(SECTIONS) {
+  const accounts = [
+    { email: 'someone@example.com', id: 'a1', createdAt: 0, lastSeenAt: 0, disabled: false, admin: false, plan: 'free' },
+    { email: 'off@example.com', id: 'a2', createdAt: 0, lastSeenAt: 0, disabled: true, admin: false, plan: 'pro' },
+    { email: 'root@example.com', id: 'a3', createdAt: 0, lastSeenAt: 0, disabled: false, admin: true, plan: 'team' },
+  ]
+  const invites = [
+    { code: 'ABCDE-FGHJK', createdAt: 0, redeemedAt: undefined, redeemedBy: undefined },
+    { code: 'KMNPQ-RSTUV', createdAt: 0, redeemedAt: 1, redeemedBy: 'someone@example.com' },
+  ]
+  const audit = [
+    { at: new Date(0), actor: 'admin', action: 'account.suspended', subject: 'someone@example.com', detail: {} },
+    { at: new Date(0), actor: 'admin', action: 'something.newer', subject: null, detail: { count: 3 } },
+  ]
+  const by = (id) => SECTIONS.find((section) => section.id === id)
+
+  return [
+    { name: 'populated', section: by('tenants'), state: { accounts } },
+    { name: 'empty', section: by('tenants'), state: { accounts: [] } },
+    { name: 'populated', section: by('invites'), state: { invites } },
+    { name: 'empty', section: by('invites'), state: { invites: [] } },
+    {
+      name: 'from the console',
+      section: by('settings'),
+      state: {
+        access: { inviteRequired: true, sandboxLimit: 10, source: 'console', updatedAt: 0, updatedBy: 'admin' },
+        credential: { baseUrl: 'https://api.example.com', apiKey: 'sk-abcd1234', source: 'console', updatedAt: 0, updatedBy: 'admin' },
+      },
+    },
+    {
+      name: 'from the environment',
+      section: by('settings'),
+      state: {
+        access: { inviteRequired: false, sandboxLimit: 0, source: 'environment', updatedAt: undefined, updatedBy: undefined },
+        credential: { baseUrl: '', apiKey: '', source: 'environment', updatedAt: undefined, updatedBy: undefined },
+      },
+    },
+    {
+      name: 'off',
+      section: by('security'),
+      state: { security: { enabled: false, source: 'none', recoveryLeft: 0, updatedAt: undefined, qr: undefined, secret: undefined, freshCodes: undefined } },
+    },
+    {
+      name: 'on',
+      section: by('security'),
+      state: { security: { enabled: true, source: 'console', recoveryLeft: 7, updatedAt: 0, qr: undefined, secret: undefined, freshCodes: undefined } },
+    },
+    {
+      name: 'enrolling',
+      section: by('security'),
+      state: {
+        security: {
+          enabled: false, source: 'none', recoveryLeft: 0, updatedAt: undefined,
+          qr: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"></svg>',
+          secret: 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ',
+          freshCodes: undefined,
+        },
+      },
+    },
+    {
+      name: 'recovery codes, shown once',
+      section: by('security'),
+      state: {
+        security: {
+          enabled: true, source: 'console', recoveryLeft: 10, updatedAt: 0,
+          qr: undefined, secret: undefined, freshCodes: ['abcde-fghjk', 'mnpqr-stuvw'],
+        },
+      },
+    },
+    { name: 'populated', section: by('audit'), state: { audit } },
+    { name: 'empty', section: by('audit'), state: { audit: [] } },
+  ]
+}

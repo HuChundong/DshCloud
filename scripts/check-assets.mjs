@@ -76,7 +76,12 @@ for (const page of [
   'gateway/src/login-page.js',
   'gateway/src/profile-page.js',
   'gateway/src/policy-page.js',
-  'admin/admin-page.js',
+  'admin/console-shell.js',
+  'admin/sections/tenants.js',
+  'admin/sections/invites.js',
+  'admin/sections/settings.js',
+  'admin/sections/security.js',
+  'admin/sections/audit.js',
 ]) {
   const text = readFileSync(join(root, page), 'utf8')
   for (const match of text.matchAll(/["']\/login-assets\/[^"']+["']/g)) {

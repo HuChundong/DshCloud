@@ -131,6 +131,36 @@ export const extracted = Object.freeze({
     ],
     stroke: { width: 2, linecap: 'round', linejoin: 'round' },
   },
+  'ticket': {
+    from: 'ticket',
+    viewBox: '0 0 24 24',
+    paths: [
+      'M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z',
+      'M13 5v2',
+      'M13 17v2',
+      'M13 11v2',
+    ],
+    stroke: { width: 2, linecap: 'round', linejoin: 'round' },
+  },
+  'history': {
+    from: 'history',
+    viewBox: '0 0 24 24',
+    paths: [
+      'M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8',
+      'M3 3v5h5',
+      'M12 7v5l4 2',
+    ],
+    stroke: { width: 2, linecap: 'round', linejoin: 'round' },
+  },
+  'settings': {
+    from: 'settings',
+    viewBox: '0 0 24 24',
+    paths: [
+      'M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915',
+      'M9 12a3 3 0 1 0 6 0a3 3 0 1 0 -6 0',
+    ],
+    stroke: { width: 2, linecap: 'round', linejoin: 'round' },
+  },
   'code': {
     from: 'file-code',
     viewBox: '0 0 24 24',

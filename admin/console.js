@@ -20,7 +20,9 @@
 import { USERNAME as OPERATOR, verify } from './auth.js'
 import { toString as qrSvg } from 'qrcode'
 import { enrolmentUri } from './totp.js'
-import { adminPage } from './admin-page.js'
+import { consolePage } from './console-shell.js'
+import { SECTIONS, sectionFor } from './sections/index.js'
+import { record, recent } from '../gateway/src/audit.js'
 import { normalizeEmail } from '../gateway/src/accounts.js'
 import { normalizeInvite } from '../gateway/src/invites.js'
 import { revokeAllFor } from '../gateway/src/revoke.js'
@@ -84,9 +86,10 @@ export async function handleConsole(path, req, res, deps) {
   // from having to be a tenant, and stopped a tenant from being one path
   // traversal away from being an operator.
 
-  if (path === '/' && req.method === 'GET') {
-    const done = new URL(req.url ?? '/', 'http://gateway').searchParams.get('done') ?? undefined
-    await renderConsole(res, readNotice(done), deps)
+  const section = req.method === 'GET' ? sectionFor(path) : undefined
+  if (section !== undefined) {
+    const done = new URL(req.url ?? '/', 'http://console').searchParams.get('done') ?? undefined
+    await renderSection(section, res, readNotice(done), deps)
     return
   }
 
@@ -103,7 +106,8 @@ export async function handleConsole(path, req, res, deps) {
   if (path === '/invites') {
     const minted = await deps.invites.mint(Number(form.get('count') ?? 1), OPERATOR)
     console.log(`admin: ${OPERATOR} minted ${minted.length} invite(s)`)
-    backToConsole(res, { code: 'invites.minted', params: { count: minted.length } }, req)
+    await record(deps.db, { actor: OPERATOR, action: 'invites.minted', detail: { count: minted.length } })
+    backToConsole(res, { code: 'invites.minted', params: { count: minted.length } }, req, path)
     return
   }
   if (path === '/model') {
@@ -115,12 +119,15 @@ export async function handleConsole(path, req, res, deps) {
     // corrected the endpoint beside it.
     const apiKey = (form.get('apiKey') ?? '').trim() === '' ? current.apiKey : form.get('apiKey').trim()
     if (baseUrl === '' || apiKey === '') {
-      backToConsole(res, 'model.incomplete', req)
+      backToConsole(res, 'model.incomplete', req, path)
       return
     }
     await deps.settings.setModelCredential(baseUrl, apiKey, OPERATOR)
     console.log(`admin: ${OPERATOR} updated the model credential`)
-    backToConsole(res, 'model.saved', req)
+    // The endpoint, and never the key — not even its last four. This table
+    // outlives the credential and is read by whoever can read the database.
+    await record(deps.db, { actor: OPERATOR, action: 'model.saved', detail: { endpoint: baseUrl } })
+    backToConsole(res, 'model.saved', req, path)
     return
   }
   // ---- the second factor ------------------------------------------------
@@ -136,20 +143,20 @@ export async function handleConsole(path, req, res, deps) {
       : await verify(OPERATOR, form.get('password') ?? '')
     if (!reauthorised) {
       console.warn(`admin: ${OPERATOR} failed to confirm the password for ${path}`)
-      backToConsole(res, 'tfa.badpassword', req)
+      backToConsole(res, 'tfa.badpassword', req, path)
       return
     }
 
     if (path === '/security/begin') {
       deps.secondFactor.begin(OPERATOR, 'HamsterHQ')
       console.log(`admin: ${OPERATOR} started enrolling a second factor`)
-      backToConsole(res, undefined, req)
+      backToConsole(res, undefined, req, path)
       return
     }
 
     if (path === '/security/cancel') {
       deps.secondFactor.abandon()
-      backToConsole(res, undefined, req)
+      backToConsole(res, undefined, req, path)
       return
     }
 
@@ -159,37 +166,40 @@ export async function handleConsole(path, req, res, deps) {
         // Wrong code, or the enrolment timed out while the phone was being
         // found. Either way nothing was turned on, which is the entire reason
         // this step exists.
-        backToConsole(res, 'tfa.badcode', req)
+        backToConsole(res, 'tfa.badcode', req, path)
         return
       }
       showCodes(codes)
       console.log(`admin: ${OPERATOR} turned on a second factor`)
-      backToConsole(res, 'tfa.on', req)
+      await record(deps.db, { actor: OPERATOR, action: 'tfa.enabled' })
+      backToConsole(res, 'tfa.on', req, path)
       return
     }
 
     if (path === '/security/recovery') {
       const codes = await deps.secondFactor.remintRecovery(OPERATOR)
       if (codes === undefined) {
-        backToConsole(res, 'tfa.notenrolled', req)
+        backToConsole(res, 'tfa.notenrolled', req, path)
         return
       }
       showCodes(codes)
       console.log(`admin: ${OPERATOR} replaced the recovery codes`)
-      backToConsole(res, 'tfa.reminted', req)
+      await record(deps.db, { actor: OPERATOR, action: 'tfa.recovery', detail: { codes: codes.length } })
+      backToConsole(res, 'tfa.reminted', req, path)
       return
     }
 
     if (path === '/security/dismiss') {
       showCodes(undefined)
-      backToConsole(res, undefined, req)
+      backToConsole(res, undefined, req, path)
       return
     }
 
     if (path === '/security/disable') {
       await deps.secondFactor.forget()
       console.warn(`admin: ${OPERATOR} turned the second factor off`)
-      backToConsole(res, 'tfa.off', req)
+      await record(deps.db, { actor: OPERATOR, action: 'tfa.disabled' })
+      backToConsole(res, 'tfa.off', req, path)
       return
     }
   }
@@ -201,25 +211,31 @@ export async function handleConsole(path, req, res, deps) {
     const wantsInvite = form.get('inviteRequired') !== null
     const typed = Number.parseInt(form.get('sandboxLimit') ?? '', 10)
     if (form.get('sandboxLimit') !== null && form.get('sandboxLimit').trim() !== '' && (!Number.isInteger(typed) || typed < 0)) {
-      backToConsole(res, 'access.bad.limit', req)
+      backToConsole(res, 'access.bad.limit', req, path)
       return
     }
     const limit = Number.isInteger(typed) && typed > 0 ? typed : 0
     await deps.settings.setAccess(wantsInvite, limit, OPERATOR)
     console.log(`admin: ${OPERATOR} set registration to ${wantsInvite ? 'invite-only' : 'open'}, sandbox limit ${limit === 0 ? 'unlimited' : limit}`)
+    await record(deps.db, {
+      actor: OPERATOR,
+      action: 'access.saved',
+      detail: { registration: wantsInvite ? 'invite' : 'open', ceiling: limit },
+    })
     // Four codes rather than one sentence with two holes: both of the parts
     // that vary are words, and a word chosen here would be a word in whichever
     // language this process picked rather than the one the reader is in.
     backToConsole(res, {
       code: `access.${wantsInvite ? 'invite' : 'open'}.${limit === 0 ? 'uncapped' : 'capped'}`,
       params: { limit },
-    }, req)
+    }, req, path)
     return
   }
   if (path === '/invites/discard') {
     const code = normalizeInvite(form.get('code') ?? '')
     const discarded = await deps.invites.discard(code)
-    backToConsole(res, discarded ? { code: 'invite.discarded', params: { code } } : 'invite.unknown', req)
+    if (discarded) await record(deps.db, { actor: OPERATOR, action: 'invite.discarded', subject: code })
+    backToConsole(res, discarded ? { code: 'invite.discarded', params: { code } } : 'invite.unknown', req, path)
     return
   }
 
@@ -227,7 +243,7 @@ export async function handleConsole(path, req, res, deps) {
   // An administrator acting on their own account can lock the deployment out of
   // its own console, so the page does not offer it and this refuses it.
   if (email === OPERATOR) {
-    backToConsole(res, 'self.refused', req)
+    backToConsole(res, 'self.refused', req, path)
     return
   }
 
@@ -249,7 +265,9 @@ export async function handleConsole(path, req, res, deps) {
         // sweep takes it.
         await deps.tellGateway('suspended', email)
       }
-      notice = { code: updated?.disabled === true ? 'account.suspended' : 'account.restored', params: { email } }
+      const state = updated?.disabled === true ? 'account.suspended' : 'account.restored'
+      await record(deps.db, { actor: OPERATOR, action: state, subject: email })
+      notice = { code: state, params: { email } }
       break
     }
     case '/plan': {
@@ -260,11 +278,12 @@ export async function handleConsole(path, req, res, deps) {
       // them a different one is the failure mode that makes an administrator
       // trust a console they should not.
       if (!isPlan(wanted)) {
-        backToConsole(res, 'plan.unknown', req)
+        backToConsole(res, 'plan.unknown', req, path)
         return
       }
       const moved = await deps.accounts.setPlan(email, wanted)
       if (moved === undefined) break
+      await record(deps.db, { actor: OPERATOR, action: 'plan.moved', subject: email, detail: { to: wanted } })
       // The tier is not named in the sentence. Its id is not a word in either
       // language, and the picker in the row the reader is looking at already
       // shows the new one — the page is re-read after every action.
@@ -289,6 +308,7 @@ export async function handleConsole(path, req, res, deps) {
         notice = 'account.erase.stuck'
         break
       }
+      await record(deps.db, { actor: OPERATOR, action: 'account.erased', subject: email })
       notice = { code: 'account.erased', params: { email } }
       break
     }
@@ -305,7 +325,7 @@ export async function handleConsole(path, req, res, deps) {
   // the only ones worth reading a log for.
   const said = notice === undefined ? `no such account ${email}` : `${typeof notice === 'string' ? notice : notice.code} ${email}`
   console.log(`admin: ${OPERATOR} — ${said}`)
-  backToConsole(res, notice, req)
+  backToConsole(res, notice, req, path)
 }
 
 /**
@@ -350,7 +370,35 @@ function readNotice(done) {
  * @param {import('node:http').ServerResponse} res - the response.
  * @param {string | {code: string, params?: object}} [notice] - what happened, to show once on arrival.
  */
-function backToConsole(res, notice, req) {
+/**
+ * Which section an action belongs to.
+ *
+ * Only a browser with no scripting reads this: everything else posts in place
+ * and re-reads the path it is already on. But that browser has to land
+ * somewhere, and landing on the tenants page after minting an invite would be
+ * answering a question with a different page.
+ */
+const HOME = {
+  '/invites': '/invites',
+  '/invites/discard': '/invites',
+  '/access': '/settings',
+  '/model': '/settings',
+  '/toggle': '/',
+  '/plan': '/',
+  '/delete': '/',
+}
+
+/**
+ * Where an action's outcome is shown.
+ *
+ * @param {string} path - the action's path.
+ * @returns {string} the section to return to.
+ */
+function homeFor(path) {
+  return path.startsWith('/security/') ? '/security' : HOME[path] ?? '/'
+}
+
+function backToConsole(res, notice, req, path) {
   // Answered in place when the page asked in place. An action is a request,
   // not a destination, so navigating to one puts its outcome in the address
   // bar — where a refresh replays the notice for something that happened once
@@ -365,7 +413,7 @@ function backToConsole(res, notice, req) {
   }
   const said = typeof notice === 'object' ? JSON.stringify(notice) : notice
   const query = said === undefined ? '' : `?done=${encodeURIComponent(said)}`
-  res.writeHead(303, { Location: `/${query}` })
+  res.writeHead(303, { Location: `${homeFor(path)}${query}` })
   res.end()
 }
 
@@ -376,42 +424,51 @@ function backToConsole(res, notice, req) {
  * @param {string} [notice] - the outcome of the action that led here.
  * @returns {Promise<void>} resolves once the response is complete.
  */
-async function renderConsole(res, notice, deps) {
-  const [listed, invited, credential, access, factor] = await Promise.all([
-    deps.accounts.list(),
-    deps.invites.list(),
-    deps.settings.modelCredential(),
-    deps.settings.access(),
-    deps.secondFactor.state(),
-  ])
+async function renderSection(section, res, notice, deps) {
+  // Only what this section asks for. The console used to read every store on
+  // every render because everything was on one page; a section that shows
+  // invite codes has no reason to list accounts, and reading them anyway is a
+  // query per visit that nothing looks at.
+  const state = {}
+  const needs = new Set(section.needs)
 
-  // An enrolment in progress becomes a square to scan. Drawn here rather than
-  // fetched: the CSP on this service allows nothing from anywhere else, and
-  // handing a TOTP secret to a public QR service to be drawn would be giving
-  // away the very thing being enrolled.
-  const enrolling = deps.secondFactor.inProgress()
-  const uri = enrolling === undefined
-    ? undefined
-    : enrolmentUri(enrolling, OPERATOR, 'HamsterHQ')
-  const qr = uri === undefined
-    ? undefined
-    : await qrSvg(uri, { type: 'svg', margin: 0, errorCorrectionLevel: 'M' })
+  if (needs.has('accounts')) {
+    // No sandbox state. Whether a tenant's machine is up is the platform's to
+    // answer and the gateway's to ask — this service holds a connection to
+    // neither, and a column showing what it learned from a third party some
+    // seconds ago is worse than a column that is not there.
+    state.accounts = await deps.accounts.list()
+  }
+  if (needs.has('invites')) state.invites = await deps.invites.list()
+  if (needs.has('access')) state.access = await deps.settings.access()
+  if (needs.has('credential')) state.credential = await deps.settings.modelCredential()
+  if (needs.has('audit')) state.audit = await recent(deps.db)
 
-  // Read once. The next render of this page has nothing to show.
-  const freshCodes = unread
-  unread = undefined
-  // No sandbox state. Whether a tenant's machine is up, and how many are, is
-  // the platform's to answer and the gateway's to ask — this service does not
-  // hold a connection to either, and a column here showing a state it learned
-  // some seconds ago from a third party is worse than a column that is not
-  // there. The page renders the accounts; the machines are looked at where
-  // machines are managed.
-  const html = adminPage({
-    accounts: listed,
-    invites: invited,
-    credential,
-    access,
-    security: { ...factor, qr, secret: enrolling, freshCodes },
+  if (needs.has('security')) {
+    const factor = await deps.secondFactor.state()
+
+    // An enrolment in progress becomes a square to scan. Drawn here rather
+    // than fetched: this service's CSP allows nothing from anywhere else, and
+    // handing a TOTP secret to a public QR service to be drawn would be giving
+    // away the very thing being enrolled.
+    const enrolling = deps.secondFactor.inProgress()
+    const qr = enrolling === undefined
+      ? undefined
+      : await qrSvg(enrolmentUri(enrolling, OPERATOR, 'HamsterHQ'), { type: 'svg', margin: 0, errorCorrectionLevel: 'M' })
+
+    // Read once. The next render of this page has nothing to show.
+    const freshCodes = unread
+    unread = undefined
+
+    state.security = { ...factor, qr, secret: enrolling, freshCodes }
+  }
+
+  const drawn = section.render(state)
+  const html = consolePage({
+    section,
+    sections: SECTIONS,
+    body: drawn.html,
+    table: drawn.table,
     viewer: OPERATOR,
     notice,
     version: deps.version,

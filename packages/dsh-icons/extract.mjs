@@ -65,6 +65,15 @@ const WANTED = {
   // invite codes: everyone who has an account, not one being configured.
   people: 'users',
 
+  // The console's sidebar. One per section, and each is the section's subject
+  // rather than a decoration for its name: a code that admits somebody is a
+  // ticket, a trail of what was done is a history, and the settings are the
+  // one thing here that is a machine being adjusted rather than a person being
+  // managed.
+  ticket: 'ticket',
+  history: 'history',
+  settings: 'settings',
+
   // The file tree's kinds. All but `data` are the same sheet `file` is, marked
   // — so a column of them reads as one shape with differences in it rather
   // than as a row of unrelated pictures, which is what a mixed tree has to

@@ -122,6 +122,12 @@ export const svg = (name, options = {}) => {
  * and `currentColor` inside it resolves against nothing. That is the one place
  * this package emits ink, and the caller supplies it.
  *
+ * A glyph is drawn the way it is constructed, which is what `stroke` on it
+ * says. This filled every glyph regardless, which was invisible for as long as
+ * the only caller passed the one filled glyph in the set — the first stroked
+ * one asked for came back as a solid silhouette of itself, a shield with no
+ * outline and a clock with no hands.
+ *
  * @param {string} name - a key of `icons`.
  * @param {string} colour - a CSS colour the SVG will carry literally.
  * @param {number} [size] - the square edge, defaulting to the glyph's own.
@@ -131,9 +137,14 @@ export const cssUrl = (name, colour, size) => {
   const glyph = icons[name]
   if (glyph === undefined) throw new Error(`no icon named ${name}`)
   const edge = size ?? Number(glyph.viewBox.split(' ')[2])
-  const paths = glyph.paths.map((d) => `<path d='${d}' fill='${colour}' fill-rule='evenodd'/>`).join('')
+  const paths = glyph.paths.map((d) => `<path d='${d}'/>`).join('')
+  // On the root, so every path inherits it and the markup stays short.
+  const ink = glyph.stroke === undefined
+    ? `fill='${colour}' fill-rule='evenodd'`
+    : `fill='none' stroke='${colour}' stroke-width='${String(glyph.stroke.width)}'`
+      + ` stroke-linecap='${glyph.stroke.linecap}' stroke-linejoin='${glyph.stroke.linejoin}'`
   const markup = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='${glyph.viewBox}'`
-    + ` width='${edge}' height='${edge}' fill='none'>${paths}</svg>`
+    + ` width='${edge}' height='${edge}' ${ink}>${paths}</svg>`
   // Only what a `url("…")` cannot carry literally. Encoding the spaces and the
   // slashes as well would be valid and three times as long, and the stylesheet
   // is read by people.

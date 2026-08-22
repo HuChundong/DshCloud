@@ -37,7 +37,7 @@ import process from 'node:process'
 const root = resolve(import.meta.dirname, '..')
 const read = (path) => readFileSync(join(root, path), 'utf8')
 
-const { icons, origin } = await import(`file://${join(root, 'packages/dsh-icons/index.js')}`)
+const { cssUrl, icons, origin } = await import(`file://${join(root, 'packages/dsh-icons/index.js')}`)
 const { MIRRORED_FROM, mirrored } = await import(`file://${join(root, 'packages/dsh-icons/mirrored.js')}`)
 const { EXTRACTED_FROM, EXTRACTED_SET, extracted } = await import(`file://${join(root, 'packages/dsh-icons/extracted.js')}`)
 
@@ -185,11 +185,30 @@ for (const page of [
   'gateway/src/profile-page.js',
   'gateway/src/policy-page.js',
   'gateway/src/panel.js',
-  'admin/admin-page.js',
+  'admin/console-shell.js',
+  'admin/sections/tenants.js',
+  'admin/sections/invites.js',
+  'admin/sections/settings.js',
+  'admin/sections/security.js',
+  'admin/sections/audit.js',
 ]) {
   check(
     !/stroke-width/.test(read(page)),
     `${page} has a stroked <svg> again — icons come from \`dsh-icons\``,
+  )
+}
+
+// -- and CSS draws them the way they are built -------------------------------
+//
+// `cssUrl` filled every glyph regardless of how it is constructed, which was
+// invisible while the only caller passed the one filled glyph in the set. The
+// first stroked one asked for came back as a solid silhouette: a shield with
+// no outline, a clock with no hands, and nothing to say so.
+for (const [name, glyph] of Object.entries(icons)) {
+  const drawn = cssUrl(name, '#000000', 16)
+  check(
+    glyph.stroke === undefined ? drawn.includes('fill=') : drawn.includes('stroke='),
+    `cssUrl draws \`${name}\` as a ${glyph.stroke === undefined ? 'stroke' : 'fill'}, and it is built as the other`,
   )
 }
 
