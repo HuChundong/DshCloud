@@ -82,6 +82,37 @@ Four rules, each of which has broken:
 None of these fail the build. All of them fail on the first `import`, which is
 what `scripts/check-images.sh` exists to catch.
 
+## Do not implement somebody else's protocol
+
+**If an official client exists for a wire protocol, use it.** envd — the
+daemon every sandbox platform in this family embeds — was spoken here by a
+hand-written Connect implementation worked out by experiment: which calls frame
+themselves in envelopes, which are plain JSON, what a failure looks like. 735
+lines of it, every one ours to keep right against a daemon somebody else
+releases. The official client already knew all of it.
+
+The reason it took so long to adopt was not the protocol. It was one line of
+addressing: a sandbox was reached through the proxy's virtual-host routing, a
+`Host` header the standard client cannot send because `Host` is forbidden in
+fetch. The proxy also routes by path. **A workaround that only hand-written
+code can perform is a workaround that locks you out of every standard tool** —
+which is worth noticing before it costs a rewrite, not after.
+
+Three things are deliberately NOT taken from that client, and each has a
+reason that outlives whoever reads this:
+
+- `files.watchDir` — envd cannot watch a network filesystem, and a tenant's
+  workspace is one. The sandbox's own Rust watcher exists for that.
+- `getMetrics` — polling per sandbox is what the push model replaced. Two
+  thousand sandboxes make a poll a load problem.
+- `pause`/`resume` — persistence is external, so destroying a sandbox loses
+  the working set and not the files. Pausing is a later decision, not a
+  missing migration.
+
+`check-e2b-conformance.mjs` measures what the configured platform actually
+does, rather than what it says it does, and names the divergences already
+adapted to. A new one fails it.
+
 ## Icons come from the harness
 
 **Do not draw an icon that `@deepseek-ai/dsh-client-ui-primitives` already
