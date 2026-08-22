@@ -1608,7 +1608,10 @@ window.__ModuleLoader__.load({
       .${NS}-row {
         display: flex;
         align-items: center;
-        gap: 6px;
+        /* A little more air than the 6px this was: a mark and the name it
+           belongs to should read as two things, and at 6px an icon and a
+           lowercase letter of the same weight ran together into one shape. */
+        gap: 8px;
         height: 28px;
         margin: 0 6px;
         padding-right: 6px;
@@ -2107,7 +2110,7 @@ window.__ModuleLoader__.load({
     const TOOLS = [
       { id: 'files', icon: 'files' },
       { id: 'terminal', icon: 'terminal' },
-      { id: 'canvas', icon: 'browser' },
+      { id: 'canvas', icon: 'brush' },
     ]
 
     /**
@@ -2687,13 +2690,38 @@ window.__ModuleLoader__.load({
               // state, and the turn reads as the thing opening.
               style: { transform: expanded ? 'rotate(90deg)' : 'none' },
             }, icon('chevron', 12))
-            : h('span', { className: `${NS}-row-twisty` }),
-          // The same call the tab makes, so a file wears one icon in this
-          // deployment rather than one here and another on the tab it opens.
-          // Every file was `file` before, which is the icon for "nothing is
-          // known about this" shown for everything that was known.
-          h('span', { className: `${NS}-row-icon` },
-            icon(entry.directory ? 'files' : iconFor(entry.path), 14)),
+            // Nothing at all for a file, rather than an empty box the width of
+            // the control it does not have.
+            //
+            // The column was there so that every name in a listing began on
+            // one vertical line, which is the usual argument for it — and it
+            // is an argument that holds where directories are most of what is
+            // listed. A workspace is the other case: a tenant's tree is files
+            // with the odd folder in it, so the reserved column mostly held
+            // nothing, and it held nothing at the very left edge, where it
+            // read as the whole tree having been nudged off its own margin.
+            //
+            // What it costs is that a folder's name sits 18px right of a
+            // file's at the same depth. That is the folder wearing a control,
+            // which is a true thing about it — and the indent that says which
+            // folder a file is IN is the depth padding, which is untouched.
+            : null,
+          // A file wears its kind; a directory wears its chevron and nothing
+          // else.
+          //
+          // The folder glyph was beside that chevron and said the same thing
+          // twice — a mark that means "this contains things" next to a control
+          // that only exists on things that contain things. Two marks for one
+          // fact is also two marks the eye has to skip before the name, on the
+          // rows where the name matters most.
+          //
+          // For a file the call is the same one the tab makes, so a file wears
+          // one icon in this deployment rather than one here and another on
+          // the tab it opens. Every file was `file` before, which is the icon
+          // for "nothing is known about this" shown for everything that was
+          // known.
+          entry.directory ? null : h('span', { className: `${NS}-row-icon` },
+            icon(iconFor(entry.path), 14)),
           h('span', { className: `${NS}-row-name` }, entry.name),
           h(RowMenu, { entry })),
           expanded ? h(Branch, { path: entry.path, depth: depth + 1, onOpen, activePath, at }) : null)
