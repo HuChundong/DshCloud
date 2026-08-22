@@ -238,12 +238,8 @@ let lang = 'en'
  * page and the sign-in form behind it are one deployment to the person reading
  * them, and they were keeping the answer in two different places — so choosing
  * 中文 here and pressing the button turned the next page back to English.
- *
- * `FORMER_KEY` is read once, for the visitors who chose before the two agreed.
- * They get their choice back and it is written where both sides look.
  */
 const LANG_KEY = 'dsh-lang'
-const FORMER_KEY = 'dshcloud.lang'
 
 function apply(next) {
   lang = next
@@ -274,7 +270,7 @@ function apply(next) {
 }
 
 let stored = null
-try { stored = localStorage.getItem(LANG_KEY) ?? localStorage.getItem(FORMER_KEY) } catch { /* private mode */ }
+try { stored = localStorage.getItem(LANG_KEY) } catch { /* private mode */ }
 apply(stored === 'zh' || stored === 'en' ? stored : (navigator.language || '').startsWith('zh') ? 'zh' : 'en')
 
 for (const button of document.querySelectorAll('.lang button')) {
